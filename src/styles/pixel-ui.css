@@ -431,7 +431,73 @@
   outline: none;
 }
 
-/* ──────────────  Cutscenes ────────────── */
+/* ──────────────  Cinematic short (film-style) ────────────── */
+.cinematic-chapter {
+  position: absolute;
+  z-index: 5;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  color: var(--gold-1);
+  text-shadow: 0 0 8px rgba(244, 210, 122, 0.4);
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+.cinematic-subtitle-band {
+  position: absolute;
+  z-index: 5;
+  left: 0; right: 0;
+  bottom: calc(80px + var(--safe-bottom));
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+  padding: 0 24px;
+}
+.cinematic-subtitle {
+  display: inline-block;
+  font-family: 'Iowan Old Style', 'Georgia', serif;
+  font-size: clamp(16px, 2.4vw, 22px);
+  font-style: italic;
+  letter-spacing: 0.02em;
+  color: var(--bone);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 8px 16px;
+  text-shadow: 0 1px 4px #000;
+  max-width: 90vw;
+  border-left: 2px solid var(--gold-2);
+  border-right: 2px solid var(--gold-2);
+}
+.cinematic-source {
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--gold-1);
+  opacity: 0.85;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px #000;
+}
+.cinematic-controls-hint {
+  position: absolute;
+  z-index: 5;
+  bottom: 18px;
+  right: 18px;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: rgba(231, 227, 215, 0.5);
+  pointer-events: none;
+  text-transform: uppercase;
+}
+.cinematic-tap-target {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* ──────────────  Cutscenes (text-card style — older Prologue/Epilogue) ────────────── */
 .cutscene-chapter {
   position: absolute;
   top: calc(20px + var(--safe-top));

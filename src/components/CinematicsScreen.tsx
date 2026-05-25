@@ -3,10 +3,12 @@
 
 import { useState } from 'react';
 import { Beat, Cutscene } from './Cutscene';
+import { CinematicShort, Shot } from './CinematicShort';
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
 import { useMenuNav } from './useMenuNav';
-import { PRE_MENU_CUTSCENE, bossIntroBeats } from '../game/data/cutscenes';
+import { bossIntroBeats } from '../game/data/cutscenes';
+import { TABULA_CINEMATIC } from '../game/data/cinematicTabula';
 import { SPHERES, SphereId } from '../game/data/spheres';
 
 interface Props { onBack: () => void; }
@@ -15,28 +17,35 @@ interface CinematicItem {
   id: string;
   title: string;
   subtitle: string;
-  beats: Beat[];
+  /** Film-style — full-screen shots, subtitles at the bottom. */
+  shots?: Shot[];
+  /** Card-style — text panel with animated backdrop. */
+  beats?: Beat[];
   accent: string;
   chapter: string;
+  format: 'film' | 'card';
 }
 
 const ITEMS: CinematicItem[] = [
   {
     id: 'pre-menu',
     title: 'Tabula Smaragdina',
-    subtitle: 'Pre-menu opening',
-    beats: PRE_MENU_CUTSCENE,
+    subtitle: 'Opening film — 5 shots, ~25s',
+    shots: TABULA_CINEMATIC,
     accent: '#f4d27a',
     chapter: 'I — OPENING',
+    format: 'film',
   },
-  // One boss-intro per planetary sphere, ogdoad excluded (no Warden).
+  // Boss intros — currently card-style. Will be converted to film as
+  // the cinematic vocabulary expands.
   ...SPHERES.filter((s) => s.id !== 'ogdoad').map((s) => ({
     id: `boss-${s.id}`,
     title: `Warden of the ${s.name.replace('Sphere of the ', '').replace('Sphere of ', '')}`,
-    subtitle: `Boss intro — ${s.godName}`,
+    subtitle: `Boss intro — ${s.godName} (card)`,
     beats: bossIntroBeats(s.id as SphereId),
     accent: s.colour,
     chapter: `${s.numeral} — ${s.name.toUpperCase()}`,
+    format: 'card' as const,
   })),
 ];
 
@@ -50,14 +59,26 @@ export function CinematicsScreen({ onBack }: Props): JSX.Element {
   const focus = useMenuNav(items, { onCancel: onBack, enabled: !playing });
 
   if (playing) {
-    return (
-      <Cutscene
-        beats={playing.beats}
-        accent={playing.accent}
-        chapterLabel={playing.chapter}
-        onDone={() => setPlaying(null)}
-      />
-    );
+    if (playing.format === 'film' && playing.shots) {
+      return (
+        <CinematicShort
+          shots={playing.shots}
+          title={playing.chapter}
+          onDone={() => setPlaying(null)}
+        />
+      );
+    }
+    if (playing.beats) {
+      return (
+        <Cutscene
+          beats={playing.beats}
+          accent={playing.accent}
+          chapterLabel={playing.chapter}
+          onDone={() => setPlaying(null)}
+        />
+      );
+    }
+    return <></>;
   }
 
   return (
@@ -77,7 +98,11 @@ export function CinematicsScreen({ onBack }: Props): JSX.Element {
                 <div className="cinematics-row-title">{it.title}</div>
                 <div className="cinematics-row-sub">{it.subtitle}</div>
               </div>
-              <div className="cinematics-row-meta">{it.beats.length} beats · ▶</div>
+              <div className="cinematics-row-meta">
+                {it.format === 'film'
+                  ? `${it.shots?.length ?? 0} shots · ▶`
+                  : `${it.beats?.length ?? 0} beats · ▶`}
+              </div>
             </button>
           ))}
         </div>
