@@ -86,7 +86,8 @@ export function App(): JSX.Element {
   // --- Orientation detection ---
   useEffect(() => {
     const update = (): void => {
-      const portrait = window.matchMedia('(orientation: portrait)').matches && Math.min(window.innerWidth, window.innerHeight) < 900;
+      const portrait = window.matchMedia('(orientation: portrait)').matches
+        && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
       setIsPortrait(portrait);
     };
     update();

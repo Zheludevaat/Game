@@ -1,11 +1,13 @@
 # Project Status — Abyss of the Seven Lamps
 
 ## Overall
-Playable vertical slice. `npm run build` succeeds, app boots, controller/keyboard/touch input work, dungeons generate, combat/loot/shrines/bosses/floor descent all functional.
+Playable vertical slice. `npm run build` succeeds, app boots, controller/keyboard/touch input work, dungeons generate, combat/loot/shrines/bosses/floor descent all functional. Auto-deploys to GitHub Pages on every push (see `.github/workflows/deploy.yml`). Touch UI + HUD scale responsively from iPad down to iPhone landscape.
 
 ## What is complete
 - Vite + React + TypeScript scaffold, strict mode, `npm run build` and `npm run typecheck` pass with zero errors.
-- PWA: web app manifest, icons (192/512/180), service worker with offline shell cache, Apple meta tags, safe-area insets, full-screen landscape, rotate overlay.
+- PWA: web app manifest, icons (192/512/180), service worker with offline shell cache, Apple meta tags, safe-area insets, full-screen landscape, rotate overlay (device-agnostic copy).
+- **GitHub Actions deploy**: `.github/workflows/deploy.yml` builds `dist/` and publishes to GitHub Pages on every push to the working branch. User just needs to flip Pages → Source = GitHub Actions in repo settings.
+- **iPhone landscape playability**: HUD bars, pixel buttons, touch joystick + buttons, relic strip, and archetype-select grid all responsive via `clamp()` / `vw` / `vh` + a `max-width: 880px` media query. Same iPad layout shrinks cleanly to small landscape phones.
 - Audio: WebAudio system with mobile unlock on first input, menu hum, dungeon ambience, ~12 procedural SFX, music/SFX volume sliders.
 - Save system (localStorage): settings, controller mapping, best floor, total essence, meta upgrades, last archetype, resume state.
 - Loading screen, animated main menu (parallax starfield + 7 lamps), archetype select with stat panels, pause menu, settings (volume / touch / particles / pixel scale / live controller remap / reset save), controller test screen, how-to-play, game over summary, meta progression shop, in-game minimap, fullscreen map overlay.

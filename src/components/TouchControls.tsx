@@ -11,8 +11,9 @@ export function TouchControls({ input }: Props): JSX.Element {
   useEffect(() => {
     const el = joyRef.current!;
     const stick = stickRef.current!;
-    const radius = 64;
+    const getRadius = (): number => el.getBoundingClientRect().width / 2;
     const setStick = (dx: number, dy: number): void => {
+      const radius = getRadius();
       const len = Math.hypot(dx, dy);
       const clamped = Math.min(1, len / radius);
       const ux = len > 0 ? dx / len : 0;

@@ -16,11 +16,28 @@ npm run build
 npm run preview  # serves dist/ on http://localhost:4173
 ```
 
-## Install as an iPad PWA
+## Install as an iPad or iPhone PWA
 
-1. Open the deployed URL in Safari on iPad.
-2. Tap the Share icon → **Add to Home Screen**.
-3. Launch from the Home Screen for full-screen, landscape, offline play.
+The app is deployed automatically to GitHub Pages on every push via `.github/workflows/deploy.yml`. The live URL (once Pages is enabled in repo settings) is:
+
+```
+https://zheludevaat.github.io/Game/
+```
+
+**One-time setup (from any device, including iPad):**
+
+1. In **Safari** on iPad/iPhone, open `https://github.com/Zheludevaat/Game/settings/pages`.
+2. Under **Build and deployment → Source**, choose **GitHub Actions**.
+3. Wait ~1 minute for the workflow under the **Actions** tab to finish (green check).
+
+**Add to Home Screen:**
+
+1. Open `https://zheludevaat.github.io/Game/` in **Safari** (not Chrome/Firefox — only Safari can install PWAs on iOS).
+2. Tap the **Share** icon (square with up-arrow).
+3. Scroll → **Add to Home Screen** → **Add**.
+4. Launch from the Home Screen for full-screen, landscape, offline play. The app caches itself on first load and works offline thereafter.
+
+Recommended: landscape orientation. Bluetooth controllers paired in iOS Settings → Bluetooth are auto-detected.
 
 ## Controls
 

@@ -15,8 +15,8 @@ export function HowToPlay({ onBack }: { onBack: () => void }): JSX.Element {
           <p><span className="gold-text">Shrines</span> offer a boon and a cost. Choose carefully.</p>
           <p><span className="gold-text">Bosses</span> wait on floors 10, 20, 30… expect radial bursts, summons, and burning sigils.</p>
           <div className="pixel-divider" />
-          <p><span className="violet-text">PWA Install (iPad):</span> Open this page in Safari, tap the Share icon, choose <em>Add to Home Screen</em>, then launch from the Home Screen for full-screen play. The app caches itself for offline use after the first load.</p>
-          <p style={{ opacity: 0.7 }}>Recommended: landscape orientation, Bluetooth controller paired in iPad Settings.</p>
+          <p><span className="violet-text">PWA Install (iPad or iPhone):</span> Open this page in <em>Safari</em>, tap the Share icon, choose <em>Add to Home Screen</em>, then launch from the Home Screen for full-screen play. The app caches itself for offline use after the first load.</p>
+          <p style={{ opacity: 0.7 }}>Recommended: landscape orientation, Bluetooth controller paired in iOS Settings.</p>
         </div>
         <div style={{ marginTop: 14, textAlign: 'center' }}>
           <PixelButton onClick={onBack}>Back</PixelButton>
