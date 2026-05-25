@@ -18,5 +18,36 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // One-shot self-heal for users stranded by an older, broken
+      // service-worker cache. If the app shell never mounts (no children in
+      // #root) after 4 seconds, nuke every cache, unregister every SW, and
+      // reload once. The ?reset=1 marker prevents an infinite reload loop.
+      (function () {
+        if (location.search.indexOf('reset=1') !== -1) return;
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount > 0) return;
+          try {
+            var done = function () {
+              var url = location.pathname + (location.search ? location.search + '&' : '?') + 'reset=1';
+              location.replace(url);
+            };
+            var jobs = [];
+            if (window.caches && caches.keys) {
+              jobs.push(caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+              }));
+            }
+            if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+              jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                return Promise.all(rs.map(function (r) { return r.unregister(); }));
+              }));
+            }
+            Promise.all(jobs).then(done, done);
+          } catch (e) { location.reload(); }
+        }, 4000);
+      })();
+    </script>
   </body>
 </html>
