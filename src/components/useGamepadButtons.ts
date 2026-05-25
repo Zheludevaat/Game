@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { getActiveLayout } from '../game/input/activeLayout';
 
 /**
  * Lightweight gamepad button hook. Fires the matching callback on the
@@ -87,11 +88,17 @@ export function useGamepadButtons(handlers: GamepadButtonHandlers): void {
         if (dEdge(13, dpadDown)  || aEdge('down',  stickDown))  h.onDown?.();
         if (dEdge(14, dpadLeft)  || aEdge('left',  stickLeft))  h.onLeft?.();
         if (dEdge(15, dpadRight) || aEdge('right', stickRight)) h.onRight?.();
-        // face / shoulder / start / select
-        if (dEdge(0, !!pad.buttons[0]?.pressed)) h.onA?.();
-        if (dEdge(1, !!pad.buttons[1]?.pressed)) h.onB?.();
-        if (dEdge(2, !!pad.buttons[2]?.pressed)) h.onX?.();
-        if (dEdge(3, !!pad.buttons[3]?.pressed)) h.onY?.();
+        // face buttons — A/B/X/Y are SEMANTIC. On Switch we swap 0↔1 and
+        // 2↔3 so the labelled "A" button (right) fires onA, etc.
+        const layout = getActiveLayout();
+        const aIdx = layout === 'switch' ? 1 : 0;
+        const bIdx = layout === 'switch' ? 0 : 1;
+        const xIdx = layout === 'switch' ? 3 : 2;
+        const yIdx = layout === 'switch' ? 2 : 3;
+        if (dEdge(aIdx, !!pad.buttons[aIdx]?.pressed)) h.onA?.();
+        if (dEdge(bIdx, !!pad.buttons[bIdx]?.pressed)) h.onB?.();
+        if (dEdge(xIdx, !!pad.buttons[xIdx]?.pressed)) h.onX?.();
+        if (dEdge(yIdx, !!pad.buttons[yIdx]?.pressed)) h.onY?.();
         if (dEdge(4, !!pad.buttons[4]?.pressed)) h.onLB?.();
         if (dEdge(5, !!pad.buttons[5]?.pressed)) h.onRB?.();
         if (dEdge(8, !!pad.buttons[8]?.pressed)) h.onSelect?.();

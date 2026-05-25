@@ -23,13 +23,26 @@
   box-sizing: border-box;
 }
 
+/* iOS Safari has historically ignored overflow:hidden on <body>. The
+ * combination that actually pins the viewport across iOS Safari, the
+ * standalone PWA shell, Chrome iOS, and rotation events is:
+ *   - position: fixed on <html> and <body>
+ *   - height: 100dvh (dynamic VH; falls back to 100vh on older Safari)
+ *   - overscroll-behavior: none to kill rubber-band
+ *   - touch-action: none so the page can't be panned with touches
+ * We also add an explicit JS touchmove guard in main.tsx for older iOS.
+ */
 html,
 body,
 #root {
   margin: 0;
   padding: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  width: 100dvw;
+  height: 100vh;
+  height: 100dvh;
+  /* Old Safari fallback — only kicks in when 100dvh isn't supported. */
+  min-height: -webkit-fill-available;
   background: #000;
   color: var(--ink);
   font-family: 'Iowan Old Style', 'Cambria', 'Georgia', serif;
@@ -40,7 +53,10 @@ body,
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  position: fixed;
+  inset: 0;
 }
 
 body {
@@ -54,6 +70,16 @@ body {
   display: flex;
   position: fixed;
   inset: 0;
+}
+
+/* Scrollable inner panes (codex, settings) are still allowed, but they
+ * use overscroll-behavior: contain so swipe-past doesn't bubble up. */
+.scroll-area,
+.codex-entries,
+.codex-preview,
+.codex-chapters {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 canvas {

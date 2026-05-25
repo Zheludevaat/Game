@@ -1769,15 +1769,21 @@ export class GameEngine {
     const canvas = this.canvas;
     ctx.imageSmoothingEnabled = false;
 
-    // Pixel-perfect: virtual W/H scaled to canvas
+    // Aspect-fill ("cover") instead of aspect-fit. The game always fills
+    // the entire viewport — no black letterbox bars. Off-axis virtual
+    // pixels get cropped by the canvas, but the player is camera-centred
+    // so the cropped edges are far from the action. Reads more
+    // "fullscreen" on iPhone landscape where 16:9 would leave thick
+    // side bars.
     const sx = canvas.width / VIRTUAL_W;
     const sy = canvas.height / VIRTUAL_H;
-    const scale = Math.max(1, Math.min(sx, sy));
+    const scale = Math.max(1, Math.max(sx, sy));
     const offX = Math.floor((canvas.width - VIRTUAL_W * scale) / 2);
     const offY = Math.floor((canvas.height - VIRTUAL_H * scale) / 2);
 
-    // Clear letterbox
-    ctx.fillStyle = '#000';
+    // No letterbox — but clear the canvas to abyss-dark in case a future
+    // change reintroduces gaps. Bars would no longer be a problem.
+    ctx.fillStyle = '#02010a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();

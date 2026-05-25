@@ -1,4 +1,7 @@
-import { DEFAULT_GAMEPAD_MAP, GamepadMap, InputMethod } from './controlMappings';
+import {
+  DEFAULT_GAMEPAD_MAP, GamepadMap, InputMethod,
+  detectLayoutFromPadId, presetForLayout,
+} from './controlMappings';
 import { STORAGE_KEYS } from '../constants';
 
 export interface InputState {
@@ -49,6 +52,7 @@ export class InputManager {
     connected: false, id: '', index: -1, axes: [], buttons: [], pressed: [],
   };
   private mapping: GamepadMap = { ...DEFAULT_GAMEPAD_MAP };
+  private mappingIsCustom = false;
 
   private method: InputMethod = 'keyboard';
   private onMethodChange?: (m: InputMethod) => void;
@@ -87,6 +91,7 @@ export class InputManager {
 
   setMapping(m: GamepadMap): void {
     this.mapping = { ...m };
+    this.mappingIsCustom = true;
     try { localStorage.setItem(STORAGE_KEYS.gamepadMap, JSON.stringify(m)); } catch { /* */ }
   }
 
@@ -95,8 +100,28 @@ export class InputManager {
   private loadMapping(): void {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.gamepadMap);
-      if (raw) this.mapping = { ...DEFAULT_GAMEPAD_MAP, ...JSON.parse(raw) };
+      if (raw) {
+        this.mapping = { ...DEFAULT_GAMEPAD_MAP, ...JSON.parse(raw) };
+        this.mappingIsCustom = true;
+      }
     } catch { /* */ }
+  }
+
+  /**
+   * Auto-apply Switch or Xbox face-button preset when a new pad connects.
+   * Skipped when the user has explicitly customised the map (persisted to
+   * localStorage by setMapping). The detection is by pad.id substring.
+   */
+  private maybeApplyControllerPreset(padId: string): void {
+    if (this.mappingIsCustom) return;
+    const layout = detectLayoutFromPadId(padId);
+    const preset = presetForLayout(layout);
+    // Compare and only mutate if different — avoid pointless re-renders.
+    let differs = false;
+    for (const k of Object.keys(preset) as (keyof GamepadMap)[]) {
+      if (this.mapping[k] !== preset[k]) { differs = true; break; }
+    }
+    if (differs) this.mapping = preset;
   }
 
   // --- Touch input bridge ---
@@ -276,6 +301,11 @@ export class InputManager {
     // Detect interaction => switch method
     if (!this.gamepadInfo.connected) {
       this.prevPadButtons = pressed.map(() => false);
+    }
+    // When a new (or different) pad first connects, auto-apply the
+    // matching preset — but only if the user hasn't customised the map.
+    if (this.gamepadInfo.id !== active.id) {
+      this.maybeApplyControllerPreset(active.id);
     }
     let anyEdge = false;
     for (let i = 0; i < pressed.length; i++) {

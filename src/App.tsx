@@ -121,9 +121,15 @@ export function App(): JSX.Element {
     onResize();
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
+    // iOS Safari fires this when the URL bar slides — without it the
+    // canvas keeps its old dimensions and the game shrinks/clips.
+    window.visualViewport?.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('scroll', onResize);
     return () => {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('orientationchange', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('scroll', onResize);
     };
   }, [screen]);
 

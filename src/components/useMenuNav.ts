@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getConfirmButton, getCancelButton } from '../game/input/activeLayout';
 
 export interface MenuItem {
   onActivate: () => void;
@@ -107,18 +108,19 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
             });
           }
         }
-        // confirm — A button (idx 0)
-        const aBtn = pad.buttons[0]?.pressed ?? false;
-        const aWas = prevPressed[0] ?? false;
-        prevPressed[0] = aBtn;
-        if (aBtn && !aWas) {
+        // confirm / cancel — index depends on controller layout
+        const confirmIdx = getConfirmButton();
+        const cancelIdx = getCancelButton();
+        const confirmBtn = pad.buttons[confirmIdx]?.pressed ?? false;
+        const confirmWas = prevPressed[confirmIdx] ?? false;
+        prevPressed[confirmIdx] = confirmBtn;
+        if (confirmBtn && !confirmWas) {
           itemsRef.current[focusedRef.current]?.onActivate();
         }
-        // cancel — B (idx 1)
-        const bBtn = pad.buttons[1]?.pressed ?? false;
-        const bWas = prevPressed[1] ?? false;
-        prevPressed[1] = bBtn;
-        if (bBtn && !bWas) {
+        const cancelBtn = pad.buttons[cancelIdx]?.pressed ?? false;
+        const cancelWas = prevPressed[cancelIdx] ?? false;
+        prevPressed[cancelIdx] = cancelBtn;
+        if (cancelBtn && !cancelWas) {
           optsRef.current?.onCancel?.();
         }
       }
