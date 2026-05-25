@@ -604,16 +604,58 @@ export class GameEngine {
       room.enemiesSpawned = true;
       return;
     }
-    if (room.type === 'enemy' || room.type === 'locked') {
-      const count = 2 + Math.floor(this.floor.number / 2) + rng.int(0, 3);
-      for (let i = 0; i < count; i++) {
-        const type = this.pickEnemyType(rng);
-        const x = ROOM_W * 0.2 + rng.next() * ROOM_W * 0.6;
-        const y = ROOM_H * 0.25 + rng.next() * ROOM_H * 0.5;
-        this.spawnEnemy(type, { x, y }, this.floor.number);
-      }
-      room.enemiesSpawned = true;
+    // Most chambers have occupants, but a few stay peaceful by design.
+    // Door-locking only applies to enemy/miniBoss/boss rooms; the rest
+    // let the player choose to fight or flee.
+    const floor = this.floor.number;
+    let count = 0;
+    let scattered = true;
+    switch (room.type) {
+      case 'enemy':
+      case 'locked':
+        count = 2 + Math.floor(floor / 2) + rng.int(0, 3);
+        break;
+      case 'treasure':
+        // 70 % chance of 1-2 guardians clustered around the chest.
+        if (rng.chance(0.7)) {
+          count = 1 + rng.int(0, 2);
+          scattered = false;
+        }
+        break;
+      case 'shrine':
+        // 50 % chance of a single shrine warden — the rest stay quiet
+        // so the player has a clean moment to choose the boon/cost.
+        if (rng.chance(0.5)) {
+          count = 1;
+          scattered = false;
+        }
+        break;
+      case 'exit':
+        // Stair-keepers — always defend the descent.
+        count = 2 + Math.floor(floor / 4);
+        break;
+      case 'start':
+        // The threshold is calm — no enemies spawn in the start room.
+        count = 0;
+        break;
+      default:
+        count = 0;
     }
+    for (let i = 0; i < count; i++) {
+      const type = this.pickEnemyType(rng);
+      let x: number, y: number;
+      if (scattered) {
+        x = ROOM_W * 0.2 + rng.next() * ROOM_W * 0.6;
+        y = ROOM_H * 0.25 + rng.next() * ROOM_H * 0.5;
+      } else {
+        // Flank pattern — left/right of room centre, slightly above
+        const side = i % 2 === 0 ? -1 : 1;
+        x = ROOM_W / 2 + side * (40 + rng.next() * 30);
+        y = ROOM_H / 2 - 10 + (rng.next() - 0.5) * 30;
+      }
+      this.spawnEnemy(type, { x, y }, floor);
+    }
+    if (count > 0) room.enemiesSpawned = true;
   }
 
   private pickEnemyType(rng: RNG): Enemy['type'] {

@@ -2,10 +2,14 @@ import { HudSnapshot } from '../game/GameEngine';
 import { RELICS } from '../game/data/relics';
 import { WEAPONS } from '../game/data/weapons';
 import { SPELLS } from '../game/data/spells';
+import { InputManager } from '../game/input/InputManager';
 
-interface Props { hud: HudSnapshot; }
+interface Props { hud: HudSnapshot; input?: InputManager | null }
 
-export function HUD({ hud }: Props): JSX.Element {
+export function HUD({ hud, input }: Props): JSX.Element {
+  // Always-visible "pause" affordance — so a player whose Bluetooth
+  // controller has a non-firing Start button can still reach the menu.
+  const onPauseTap = (): void => { input?.setTouchButton('pause', true); setTimeout(() => input?.setTouchButton('pause', false), 30); };
   const hpFrac = hud.maxHp > 0 ? hud.hp / hud.maxHp : 0;
   const mpFrac = hud.maxMp > 0 ? hud.mp / hud.maxMp : 0;
   const bossFrac = hud.bossMaxHp ? Math.max(0, (hud.bossHp ?? 0) / hud.bossMaxHp) : 0;
@@ -30,8 +34,18 @@ export function HUD({ hud }: Props): JSX.Element {
       </div>
 
       <div className="hud-top-right">
-        <div style={{ letterSpacing: '0.3em', color: 'var(--gold-1)' }}>
-          {hud.sphereGlyph} Floor {hud.floor}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            type="button"
+            className="hud-pause-btn"
+            aria-label="Pause"
+            title="Pause"
+            onClick={onPauseTap}
+            onTouchStart={(e) => { e.preventDefault(); onPauseTap(); }}
+          >☰</button>
+          <div style={{ letterSpacing: '0.3em', color: 'var(--gold-1)' }}>
+            {hud.sphereGlyph} Floor {hud.floor}
+          </div>
         </div>
         <div className="violet-text" style={{ fontSize: 10, letterSpacing: '0.2em', marginTop: 2 }}>
           {hud.sphereName}

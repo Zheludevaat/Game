@@ -296,7 +296,7 @@ export function App(): JSX.Element {
       )}
 
       {showCanvas && hud && (
-        <HUD hud={hud} />
+        <HUD hud={hud} input={inputRef.current} />
       )}
 
       {screen === 'game' && settings.touchControls && inputRef.current && hud &&

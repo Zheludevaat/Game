@@ -36,7 +36,11 @@ export type GamepadInfo = {
   pressed: boolean[];
 };
 
-const DEADZONE = 0.22;
+// Radial deadzone applied to the analog stick magnitude (not per-axis).
+// Joy-Cons and worn Pro Controllers commonly drift past 0.22 on a single
+// axis — going radial + raising the threshold to 0.30 kills the drift
+// without making intentional small movements feel sluggish.
+const DEADZONE = 0.30;
 
 export class InputManager {
   private keysDown = new Set<string>();
@@ -208,9 +212,18 @@ export class InputManager {
 
     // Gamepad
     if (this.gamepadInfo.connected) {
-      const ax = this.applyDead(this.gamepadInfo.axes[0] ?? 0);
-      const ay = this.applyDead(this.gamepadInfo.axes[1] ?? 0);
-      if (Math.abs(ax) > 0 || Math.abs(ay) > 0) {
+      // Radial deadzone — kill drift regardless of axis. Then rescale so
+      // values past the deadzone span [0..1] smoothly.
+      const rawX = this.gamepadInfo.axes[0] ?? 0;
+      const rawY = this.gamepadInfo.axes[1] ?? 0;
+      const mag = Math.hypot(rawX, rawY);
+      let ax = 0, ay = 0;
+      if (mag > DEADZONE) {
+        const scale = Math.min(1, (mag - DEADZONE) / (1 - DEADZONE)) / mag;
+        ax = rawX * scale;
+        ay = rawY * scale;
+      }
+      if (ax !== 0 || ay !== 0) {
         s.moveX = ax; s.moveY = ay;
       }
       const m = this.mapping;
@@ -311,7 +324,10 @@ export class InputManager {
     for (let i = 0; i < pressed.length; i++) {
       if (pressed[i] && !this.prevPadButtons[i]) anyEdge = true;
     }
-    if (anyEdge || Math.abs(newPad.axes[0] ?? 0) > DEADZONE || Math.abs(newPad.axes[1] ?? 0) > DEADZONE) {
+    // Use radial magnitude to decide "the player intentionally moved the
+    // stick" so drift can't flip the input method to controller.
+    const stickMag = Math.hypot(newPad.axes[0] ?? 0, newPad.axes[1] ?? 0);
+    if (anyEdge || stickMag > DEADZONE) {
       this.setMethod('controller');
     }
 

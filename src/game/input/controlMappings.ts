@@ -75,14 +75,23 @@ export const SWITCH_GAMEPAD_MAP: GamepadMap = {
 
 export type ControllerLayout = 'xbox' | 'switch';
 
-/** Identify a Nintendo controller by its Gamepad API id string. */
+/** Identify a Nintendo controller by its Gamepad API id string.
+ *
+ * Conservative on purpose — generic / third-party controllers must keep
+ * the Xbox-style default. Only specific Nintendo identifiers count:
+ *   - "Joy-Con" or "Pro Controller" in the human-readable id, OR
+ *   - Nintendo's USB vendor id 057e (formatted as "Vendor: 057e" by
+ *     Chromium and "057e-xxxx" or "057exxxx" by older WebKit).
+ * The bare words "switch" and "nintendo" are NOT matched because they
+ * collide with generic third-party controllers that use those terms in
+ * marketing strings.
+ */
 export function detectLayoutFromPadId(id: string | undefined | null): ControllerLayout {
   if (!id) return 'xbox';
   const lower = id.toLowerCase();
-  if (lower.includes('joy-con') || lower.includes('pro controller')) return 'switch';
-  // Nintendo USB vendor id is 057e
-  if (lower.includes('057e') || lower.includes('vendor: 057e')) return 'switch';
-  if (lower.includes('nintendo') || lower.includes('switch')) return 'switch';
+  if (lower.includes('joy-con') || lower.includes('joycon')) return 'switch';
+  if (lower.includes('pro controller')) return 'switch';
+  if (lower.includes('057e')) return 'switch';
   return 'xbox';
 }
 
