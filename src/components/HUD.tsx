@@ -1,5 +1,7 @@
 import { HudSnapshot } from '../game/GameEngine';
 import { RELICS } from '../game/data/relics';
+import { WEAPONS } from '../game/data/weapons';
+import { SPELLS } from '../game/data/spells';
 
 interface Props { hud: HudSnapshot; }
 
@@ -24,6 +26,7 @@ export function HUD({ hud }: Props): JSX.Element {
           <span className="gold-text">$ {hud.coins}</span> &nbsp;·&nbsp;
           <span className="gold-text">⚷ {hud.keys}</span>
         </div>
+        <LoadoutStrip hud={hud} />
       </div>
 
       <div className="hud-top-right">
@@ -130,6 +133,37 @@ function colourForRoom(type: HudSnapshot['rooms'][number]['type'], current: bool
     case 'boss': return '#ff3a4a';
     default: return '#3b265c';
   }
+}
+
+function LoadoutStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
+  const w = WEAPONS[hud.currentWeapon];
+  const s = SPELLS[hud.currentSpell];
+  return (
+    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="loadout-icon" title={w?.name} style={{ borderColor: w?.swingColour }}>
+          <span style={{ color: w?.swingColour }}>{w?.glyph ?? '?'}</span>
+        </div>
+        <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--bone)' }}>
+          <div className="gold-text" style={{ fontSize: 10 }}>{w?.name ?? 'No weapon'}</div>
+          {hud.weapons.length > 1 && (
+            <div style={{ opacity: 0.7 }}>[Q] cycle ({hud.weapons.indexOf(hud.currentWeapon) + 1}/{hud.weapons.length})</div>
+          )}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div className="loadout-icon" title={s?.name} style={{ borderColor: s?.projColour }}>
+          <span style={{ color: s?.projColour }}>{s?.glyph ?? '?'}</span>
+        </div>
+        <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--bone)' }}>
+          <div className="violet-text" style={{ fontSize: 10 }}>{s?.name ?? 'No spell'}</div>
+          {hud.spells.length > 1 && (
+            <div style={{ opacity: 0.7 }}>[R] cycle ({hud.spells.indexOf(hud.currentSpell) + 1}/{hud.spells.length})</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ShrinePrompt({ name, effect, downside }: { name: string; effect: string; downside: string }): JSX.Element {

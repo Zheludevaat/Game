@@ -3,9 +3,12 @@ import { RNG, hashSeed } from './math/rng';
 import { clamp, dist, lerp, norm } from './math/vec2';
 import {
   ArchetypeDef, Floor, MetaState, RelicId, Room, RoomDoorState, RoomType, ShrineKind,
+  SpellId, WeaponId,
 } from './GameTypes';
 import { getArchetype } from './data/archetypes';
 import { RELICS, RELIC_IDS } from './data/relics';
+import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
+import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
 import {
@@ -22,6 +25,10 @@ export interface HudSnapshot {
   roomType: RoomType | null;
   roomName: string;
   relics: RelicId[];
+  weapons: WeaponId[];
+  spells: SpellId[];
+  currentWeapon: WeaponId;
+  currentSpell: SpellId;
   bossHp?: number;
   bossMaxHp?: number;
   bossName?: string;
@@ -57,6 +64,8 @@ export interface RunSummary {
   essenceCollected: number;
   coinsCollected: number;
   relicsFound: RelicId[];
+  weaponsFound: WeaponId[];
+  spellsFound: SpellId[];
   bestFloor: number;
   archetype: ArchetypeDef;
 }
@@ -91,6 +100,12 @@ interface PlayerState {
   relics: RelicId[];
   reviveAvailable: boolean;
   damageMul: number;
+  weapons: WeaponId[];
+  spells: SpellId[];
+  weaponIdx: number;
+  spellIdx: number;
+  attackHitsLeft: number;       // remaining hits in a multi-hit weapon swing
+  attackHitTimer: number;       // time until next hit in a multi-hit swing
 }
 
 interface Enemy {
@@ -141,9 +156,11 @@ interface Projectile {
 interface Pickup {
   id: number;
   pos: Vec;
-  kind: 'coin' | 'essence' | 'key' | 'hp' | 'mp' | 'relic';
+  kind: 'coin' | 'essence' | 'key' | 'hp' | 'mp' | 'relic' | 'weapon' | 'spell';
   value: number;
   relic?: RelicId;
+  weapon?: WeaponId;
+  spell?: SpellId;
   life: number;
 }
 
@@ -153,6 +170,9 @@ interface SigilHazard {
   delay: number;
   damage: number;
   fired: boolean;
+  fromPlayer?: boolean;
+  radius?: number;
+  colour?: string;
 }
 
 export interface EngineConfig {
@@ -244,6 +264,7 @@ export class GameEngine {
     this.summary = {
       floorReached: 1, roomsCleared: 0, enemiesDefeated: 0, bossesDefeated: 0,
       essenceCollected: 0, coinsCollected: 0, relicsFound: [],
+      weaponsFound: [], spellsFound: [],
       bestFloor: 0, archetype: getArchetype('magus'),
     };
   }
@@ -264,6 +285,16 @@ export class GameEngine {
     this.archetype = getArchetype(config.archetypeId);
     this.runSeed = config.runSeed ?? Math.floor(Math.random() * 0xffffffff);
 
+    // Reset per-run summary fields
+    this.summary.floorReached = config.startingFloor ?? 1;
+    this.summary.roomsCleared = 0;
+    this.summary.enemiesDefeated = 0;
+    this.summary.bossesDefeated = 0;
+    this.summary.essenceCollected = 0;
+    this.summary.coinsCollected = 0;
+    this.summary.relicsFound = [];
+    this.summary.weaponsFound = [];
+    this.summary.spellsFound = [];
     this.summary.archetype = this.archetype;
 
     this.initPlayer();
@@ -329,8 +360,32 @@ export class GameEngine {
       relics: [],
       reviveAvailable: false,
       damageMul: 1,
+      weapons: [STARTER_WEAPON],
+      spells: [STARTER_SPELL],
+      weaponIdx: 0,
+      spellIdx: 0,
+      attackHitsLeft: 0,
+      attackHitTimer: 0,
     };
     this.grantRelic(a.startingRelic, true);
+    this.summary.weaponsFound.push(STARTER_WEAPON);
+    this.summary.spellsFound.push(STARTER_SPELL);
+
+    // Debug hook: ?devloot=1 grants every weapon + spell for previewing
+    if (typeof window !== 'undefined' && window.location?.search?.includes('devloot')) {
+      for (const id of WEAPON_LOOT_POOL) {
+        if (!this.player.weapons.includes(id)) {
+          this.player.weapons.push(id);
+          this.summary.weaponsFound.push(id);
+        }
+      }
+      for (const id of SPELL_LOOT_POOL) {
+        if (!this.player.spells.includes(id)) {
+          this.player.spells.push(id);
+          this.summary.spellsFound.push(id);
+        }
+      }
+    }
   }
 
   private grantRelic(id: RelicId, silent = false): void {
@@ -370,6 +425,34 @@ export class GameEngine {
         colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.9,
       });
     }
+  }
+
+  private grantWeapon(id: WeaponId): boolean {
+    if (this.player.weapons.includes(id)) return false;
+    this.player.weapons.push(id);
+    this.player.weaponIdx = this.player.weapons.length - 1;
+    if (!this.summary.weaponsFound.includes(id)) this.summary.weaponsFound.push(id);
+    const w = WEAPONS[id];
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, w.name, '#f4d27a');
+    this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 18, {
+      colour: w.swingColour, life: 0.8, maxLife: 0.8, drag: 0.85,
+    });
+    audio.sfx('chest');
+    return true;
+  }
+
+  private grantSpell(id: SpellId): boolean {
+    if (this.player.spells.includes(id)) return false;
+    this.player.spells.push(id);
+    this.player.spellIdx = this.player.spells.length - 1;
+    if (!this.summary.spellsFound.includes(id)) this.summary.spellsFound.push(id);
+    const sp = SPELLS[id];
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, sp.name, '#9b6cff');
+    this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 18, {
+      colour: sp.projColour, life: 0.8, maxLife: 0.8, drag: 0.85,
+    });
+    audio.sfx('chest');
+    return true;
   }
 
   private goToFloor(n: number): void {
@@ -646,28 +729,50 @@ export class GameEngine {
     }
 
     if ((s.attackPressed || s.attackHeld) && p.attackCooldown <= 0) {
+      const w = WEAPONS[p.weapons[p.weaponIdx]];
       this.performMelee();
-      p.attackCooldown = 0.32;
-      p.attackTimer = 0.18;
+      p.attackCooldown = w.cooldown;
+      p.attackTimer = w.duration;
+      p.attackHitsLeft = Math.max(0, w.hits - 1);
+      p.attackHitTimer = w.duration / Math.max(1, w.hits);
     }
 
-    if ((s.spellPressed || s.spellHeld) && p.spellCooldown <= 0 && p.mp >= 12) {
-      this.castSpell();
-      p.spellCooldown = 0.42;
-      p.spellTimer = 0.2;
-      p.mp = Math.max(0, p.mp - 12);
+    // Multi-hit follow-ups (e.g. twin sickles)
+    if (p.attackHitsLeft > 0) {
+      p.attackHitTimer -= dt;
+      if (p.attackHitTimer <= 0) {
+        this.performMelee();
+        p.attackHitsLeft -= 1;
+        const w = WEAPONS[p.weapons[p.weaponIdx]];
+        p.attackHitTimer = w.duration / Math.max(1, w.hits);
+      }
+    }
+
+    if ((s.spellPressed || s.spellHeld) && p.spellCooldown <= 0) {
+      const sp = SPELLS[p.spells[p.spellIdx]];
+      if (p.mp >= sp.manaCost) {
+        this.castSpell();
+        p.spellCooldown = sp.cooldown;
+        p.spellTimer = 0.18;
+        p.mp = Math.max(0, p.mp - sp.manaCost);
+      }
     }
 
     if (s.interactPressed) {
       this.tryInteract();
     }
 
-    if (s.cycleRelicPressed) {
-      // Rotate relic strip — visual only for now
-      if (p.relics.length > 1) {
-        const first = p.relics.shift()!;
-        p.relics.push(first);
-      }
+    if (s.cycleWeaponPressed && p.weapons.length > 1) {
+      p.weaponIdx = (p.weaponIdx + 1) % p.weapons.length;
+      audio.sfx('pickup');
+      const w = WEAPONS[p.weapons[p.weaponIdx]];
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, w.name, '#f4d27a');
+    }
+    if (s.cycleSpellPressed && p.spells.length > 1) {
+      p.spellIdx = (p.spellIdx + 1) % p.spells.length;
+      audio.sfx('pickup');
+      const sp = SPELLS[p.spells[p.spellIdx]];
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, sp.name, '#9b6cff');
     }
 
     // Death check
@@ -699,53 +804,126 @@ export class GameEngine {
 
   private performMelee(): void {
     const p = this.player;
+    const w = WEAPONS[p.weapons[p.weaponIdx]];
     const fx = p.facing.x || 1, fy = p.facing.y;
-    const cx = p.pos.x + fx * 14;
-    const cy = p.pos.y + fy * 14;
-    const range = 22;
-    const dmg = p.attack * p.damageMul;
+    const fl = Math.hypot(fx, fy) || 1;
+    const ux = fx / fl, uy = fy / fl;
+    const baseAngle = Math.atan2(fy, fx);
+    const dmg = p.attack * p.damageMul * w.damageMul;
+
+    // Hit detection — circle around an offset point, gated by angle to the facing
+    const reach = w.range;
+    const cx = p.pos.x + ux * (reach * 0.55);
+    const cy = p.pos.y + uy * (reach * 0.55);
     for (const e of this.enemies) {
-      const d = Math.hypot(e.pos.x - cx, e.pos.y - cy);
-      if (d <= range + e.radius) {
-        this.damageEnemy(e, dmg, { x: e.pos.x - p.pos.x, y: e.pos.y - p.pos.y }, 70);
-      }
+      const dx = e.pos.x - p.pos.x, dy = e.pos.y - p.pos.y;
+      const dToCentre = Math.hypot(e.pos.x - cx, e.pos.y - cy);
+      if (dToCentre > reach + e.radius) continue;
+      // angle gate
+      const a = Math.atan2(dy, dx);
+      let da = a - baseAngle;
+      while (da >  Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      if (Math.abs(da) > w.arcHalf) continue;
+      this.damageEnemy(e, dmg, { x: dx, y: dy }, w.knockback);
     }
     audio.sfx('attack');
+
+    // Particles styled per swing type
     if (!this.reducedParticles) {
-      for (let i = 0; i < 6; i++) {
-        const a = Math.atan2(fy, fx) + (Math.random() - 0.5) * 0.6;
-        this.particles.emit({
-          x: cx, y: cy,
-          vx: Math.cos(a) * 70, vy: Math.sin(a) * 70,
-          life: 0.18, maxLife: 0.18,
-          size: 1.4, colour: '#ffe6a3', drag: 0.9,
-        });
+      const palette = [w.swingColour, w.accentColour];
+      if (w.swingType === 'overhead') {
+        // heavy slam: radial burst + shake
+        this.camera.shakeT = 0.18; this.camera.shakeMag = 3;
+        for (let i = 0; i < 14; i++) {
+          const a = baseAngle + (i / 14 - 0.5) * w.arcHalf * 2;
+          this.particles.emit({
+            x: cx, y: cy,
+            vx: Math.cos(a) * 95, vy: Math.sin(a) * 95,
+            life: 0.28, maxLife: 0.28,
+            size: 1.6, colour: palette[i % 2]!, drag: 0.88,
+          });
+        }
+      } else if (w.swingType === 'lunge') {
+        // forward dust streak
+        for (let i = 0; i < 8; i++) {
+          this.particles.emit({
+            x: p.pos.x + ux * (8 + i * 2),
+            y: p.pos.y + uy * (8 + i * 2),
+            vx: ux * 60 + (Math.random() - 0.5) * 20,
+            vy: uy * 60 + (Math.random() - 0.5) * 20,
+            life: 0.22, maxLife: 0.22,
+            size: 1.2, colour: palette[i % 2]!, drag: 0.9,
+          });
+        }
+      } else {
+        // arc / thrust / flurry — fanned sparks
+        for (let i = 0; i < 6; i++) {
+          const a = baseAngle + (Math.random() - 0.5) * w.arcHalf * 2;
+          this.particles.emit({
+            x: cx, y: cy,
+            vx: Math.cos(a) * 70, vy: Math.sin(a) * 70,
+            life: 0.18, maxLife: 0.18,
+            size: 1.4, colour: palette[i % 2]!, drag: 0.9,
+          });
+        }
       }
     }
   }
 
   private castSpell(): void {
     const p = this.player;
-    const dx = p.facing.x, dy = p.facing.y;
-    const dl = Math.hypot(dx, dy) || 1;
-    const dir = { x: dx / dl, y: dy / dl };
-    const dmg = p.spellPower * p.damageMul;
-    const pierce = p.relics.includes('emeraldTablet') ? 1 : 0;
-    const homing = p.relics.includes('serpentWand');
-    const proj: Projectile = {
-      id: nid(),
-      pos: { x: p.pos.x + dir.x * 8, y: p.pos.y + dir.y * 8 },
-      vel: { x: dir.x * 220, y: dir.y * 220 },
-      life: 1.0,
-      radius: 4,
-      damage: dmg,
-      fromPlayer: true,
-      pierce,
-      homing,
-      colour: PALETTE.teal,
-      trailColour: PALETTE.violet,
-    };
-    this.projectiles.push(proj);
+    const sp = SPELLS[p.spells[p.spellIdx]];
+    const fx = p.facing.x || 1, fy = p.facing.y;
+    const fl = Math.hypot(fx, fy) || 1;
+    const dir = { x: fx / fl, y: fy / fl };
+    const baseAngle = Math.atan2(fy, fx);
+    const dmg = p.spellPower * p.damageMul * sp.damageMul;
+    const pierce = sp.pierce + (p.relics.includes('emeraldTablet') ? 1 : 0);
+    const homing = sp.seeking || p.relics.includes('serpentWand');
+
+    if (sp.kind === 'sigil') {
+      // Place a sigil where the player faces (within sigilRange)
+      const sx = p.pos.x + dir.x * (sp.sigilRange ?? 60);
+      const sy = p.pos.y + dir.y * (sp.sigilRange ?? 60);
+      this.sigils.push({
+        pos: { x: sx, y: sy },
+        timer: 0,
+        delay: sp.sigilDelay ?? 0.5,
+        damage: dmg,
+        fired: false,
+        fromPlayer: true,
+        radius: sp.radius,
+        colour: sp.projColour,
+      });
+      audio.sfx('spell');
+      return;
+    }
+
+    const count = Math.max(1, sp.projCount);
+    const totalSpread = sp.spreadHalf * 2;
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 0 : (i / (count - 1)) - 0.5; // -0.5 to 0.5
+      const a = baseAngle + t * totalSpread;
+      const ux = Math.cos(a), uy = Math.sin(a);
+      const proj: Projectile = {
+        id: nid(),
+        pos: { x: p.pos.x + ux * 8, y: p.pos.y + uy * 8 },
+        vel: { x: ux * sp.speed, y: uy * sp.speed },
+        life: sp.life,
+        radius: sp.radius,
+        damage: dmg,
+        fromPlayer: true,
+        pierce,
+        homing,
+        colour: sp.projColour,
+        trailColour: sp.trailColour,
+      };
+      // Mark visual kind on the projectile via a side channel
+      (proj as Projectile & { visual?: string; explodeRadius?: number }).visual = sp.projVisual;
+      (proj as Projectile & { visual?: string; explodeRadius?: number }).explodeRadius = sp.explodeRadius;
+      this.projectiles.push(proj);
+    }
     audio.sfx('spell');
   }
 
@@ -787,13 +965,30 @@ export class GameEngine {
   private openChestLoot(x: number, y: number): void {
     audio.sfx('chest');
     const r = Math.random();
-    if (r < 0.18) {
+    // 12% weapon, 12% spell, 14% relic, rest is gold/essence
+    if (r < 0.12) {
+      const pool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
+      if (pool.length > 0) {
+        const id = pool[Math.floor(Math.random() * pool.length)];
+        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'weapon', value: 0, weapon: id, life: 30 });
+        return;
+      }
+    }
+    if (r < 0.24) {
+      const pool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
+      if (pool.length > 0) {
+        const id = pool[Math.floor(Math.random() * pool.length)];
+        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'spell', value: 0, spell: id, life: 30 });
+        return;
+      }
+    }
+    if (r < 0.38) {
       // relic
       const owned = new Set(this.player.relics);
       const pool = RELIC_IDS.filter((id) => !owned.has(id));
       if (pool.length > 0) {
         const id = pool[Math.floor(Math.random() * pool.length)];
-        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: id, life: 12 });
+        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: id, life: 20 });
         return;
       }
     }
@@ -1115,6 +1310,34 @@ export class GameEngine {
         const id = pool[Math.floor(Math.random() * pool.length)];
         this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'relic', value: 0, relic: id, life: 30 });
       }
+      // Every boss drops either a weapon or a spell the player doesn't own yet.
+      // Alternate by floor — odd floors give weapons, even floors give spells.
+      const giveWeapon = this.floor.number % 2 === 1;
+      if (giveWeapon) {
+        const wPool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
+        if (wPool.length) {
+          const id = wPool[Math.floor(Math.random() * wPool.length)];
+          this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'weapon', value: 0, weapon: id, life: 60 });
+        } else {
+          const sPool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
+          if (sPool.length) {
+            const id = sPool[Math.floor(Math.random() * sPool.length)];
+            this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'spell', value: 0, spell: id, life: 60 });
+          }
+        }
+      } else {
+        const sPool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
+        if (sPool.length) {
+          const id = sPool[Math.floor(Math.random() * sPool.length)];
+          this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'spell', value: 0, spell: id, life: 60 });
+        } else {
+          const wPool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
+          if (wPool.length) {
+            const id = wPool[Math.floor(Math.random() * wPool.length)];
+            this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'weapon', value: 0, weapon: id, life: 60 });
+          }
+        }
+      }
       for (let i = 0; i < 20; i++) {
         const a = Math.random() * Math.PI * 2;
         const d = 20 + Math.random() * 40;
@@ -1248,6 +1471,21 @@ export class GameEngine {
           const d = Math.hypot(e.pos.x - pr.pos.x, e.pos.y - pr.pos.y);
           if (d < pr.radius + e.radius) {
             this.damageEnemy(e, pr.damage, { x: pr.vel.x, y: pr.vel.y }, 90);
+            const explodeR = (pr as Projectile & { explodeRadius?: number }).explodeRadius ?? 0;
+            if (explodeR > 0) {
+              // splash damage to nearby enemies
+              for (const e2 of this.enemies) {
+                if (e2 === e) continue;
+                const dd = Math.hypot(e2.pos.x - pr.pos.x, e2.pos.y - pr.pos.y);
+                if (dd < explodeR + e2.radius) {
+                  this.damageEnemy(e2, pr.damage * 0.6, { x: e2.pos.x - pr.pos.x, y: e2.pos.y - pr.pos.y }, 70);
+                }
+              }
+              this.particles.burst(pr.pos.x, pr.pos.y, 26, { colour: pr.colour, life: 0.6, maxLife: 0.6, drag: 0.85 });
+              this.camera.shakeT = 0.12; this.camera.shakeMag = 2;
+              this.projectiles.splice(i, 1);
+              break;
+            }
             if (pr.pierce <= 0) { this.projectiles.splice(i, 1); break; }
             pr.pierce -= 1;
           }
@@ -1318,6 +1556,12 @@ export class GameEngine {
       case 'relic':
         if (pk.relic) this.grantRelic(pk.relic);
         break;
+      case 'weapon':
+        if (pk.weapon) this.grantWeapon(pk.weapon);
+        break;
+      case 'spell':
+        if (pk.spell) this.grantSpell(pk.spell);
+        break;
     }
     audio.sfx('pickup');
   }
@@ -1328,11 +1572,23 @@ export class GameEngine {
       s.timer += dt;
       if (!s.fired && s.timer >= s.delay) {
         s.fired = true;
-        const d = Math.hypot(this.player.pos.x - s.pos.x, this.player.pos.y - s.pos.y);
-        if (d < 28) this.damagePlayer(s.damage);
-        this.particles.burst(s.pos.x, s.pos.y, 32, { colour: '#e23a4a', life: 0.8, maxLife: 0.8 });
-        this.camera.shakeT = 0.2; this.camera.shakeMag = 2;
-        audio.sfx('enemyHit');
+        const radius = s.radius ?? 28;
+        const colour = s.colour ?? '#e23a4a';
+        if (s.fromPlayer) {
+          // damage all enemies in radius
+          for (const e of this.enemies) {
+            const d = Math.hypot(e.pos.x - s.pos.x, e.pos.y - s.pos.y);
+            if (d < radius + e.radius) {
+              this.damageEnemy(e, s.damage, { x: e.pos.x - s.pos.x, y: e.pos.y - s.pos.y }, 60);
+            }
+          }
+        } else {
+          const d = Math.hypot(this.player.pos.x - s.pos.x, this.player.pos.y - s.pos.y);
+          if (d < radius) this.damagePlayer(s.damage);
+        }
+        this.particles.burst(s.pos.x, s.pos.y, 32, { colour, life: 0.8, maxLife: 0.8 });
+        this.camera.shakeT = 0.2; this.camera.shakeMag = 2.5;
+        audio.sfx(s.fromPlayer ? 'spell' : 'enemyHit');
       }
       if (s.timer > s.delay + 0.4) this.sigils.splice(i, 1);
     }
@@ -1693,15 +1949,46 @@ export class GameEngine {
     const ctx = this.ctx;
     for (const s of this.sigils) {
       const p = Math.min(1, s.timer / s.delay);
+      const radius = s.radius ?? 18;
+      const fromPlayer = !!s.fromPlayer;
+      const stroke = fromPlayer ? '155, 108, 255' : '226, 58, 74';
+      const accent = fromPlayer ? '244, 210, 122' : '226, 58, 74';
       ctx.save();
       ctx.translate(s.pos.x, s.pos.y);
-      ctx.strokeStyle = `rgba(226, 58, 74, ${0.4 + 0.6 * p})`;
-      ctx.lineWidth = 1;
+      // Outer expanding ring
+      ctx.strokeStyle = `rgba(${stroke}, ${0.45 + 0.55 * p})`;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(0, 0, 18 * p, 0, Math.PI * 2);
+      ctx.arc(0, 0, radius * p, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = `rgba(226, 58, 74, ${0.15 + 0.35 * p})`;
+      // Inner ring
+      ctx.strokeStyle = `rgba(${accent}, ${0.35 + 0.4 * p})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.55 * p, 0, Math.PI * 2);
+      ctx.stroke();
+      // Cross / spokes
+      const rot = this.timeAlive * (fromPlayer ? 2.2 : 1.4);
+      ctx.rotate(rot);
+      ctx.strokeStyle = `rgba(${stroke}, ${0.5 * p})`;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -radius * 0.9 * p);
+        ctx.stroke();
+        ctx.rotate(Math.PI / 2);
+      }
+      ctx.rotate(-rot);
+      // Centre rune
+      ctx.fillStyle = `rgba(${accent}, ${0.4 + 0.5 * p})`;
       ctx.fillRect(-2, -2, 4, 4);
+      // Flash when fired
+      if (s.fired) {
+        const ft = Math.max(0, 1 - (s.timer - s.delay) / 0.4);
+        ctx.fillStyle = `rgba(${accent}, ${ft * 0.6})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * (1 + (1 - ft) * 1.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     }
   }
@@ -1751,6 +2038,50 @@ export class GameEngine {
           ctx.fillRect(pk.pos.x - 1, pk.pos.y - 1 + wobble, 2, 2);
           break;
         }
+        case 'weapon': {
+          const w = pk.weapon ? WEAPONS[pk.weapon] : null;
+          if (!w) break;
+          // golden halo + altar stone
+          const g = ctx.createRadialGradient(pk.pos.x, pk.pos.y + wobble, 2, pk.pos.x, pk.pos.y + wobble, 18);
+          g.addColorStop(0, 'rgba(244, 210, 122, 0.55)');
+          g.addColorStop(1, 'rgba(244, 210, 122, 0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(pk.pos.x - 18, pk.pos.y - 18 + wobble, 36, 36);
+          // altar pedestal
+          ctx.fillStyle = '#3b265c';
+          ctx.fillRect(pk.pos.x - 6, pk.pos.y + 5 + wobble, 12, 3);
+          ctx.fillStyle = '#1a0f2c';
+          ctx.fillRect(pk.pos.x - 7, pk.pos.y + 7 + wobble, 14, 1);
+          // weapon icon, drawn rotated 45° point-up
+          ctx.save();
+          ctx.translate(pk.pos.x, pk.pos.y - 2 + wobble);
+          ctx.rotate(-Math.PI / 4);
+          this.drawWeaponSilhouette(w, 0.3);
+          ctx.restore();
+          break;
+        }
+        case 'spell': {
+          const sp = pk.spell ? SPELLS[pk.spell] : null;
+          if (!sp) break;
+          const halo = ctx.createRadialGradient(pk.pos.x, pk.pos.y + wobble, 2, pk.pos.x, pk.pos.y + wobble, 18);
+          halo.addColorStop(0, 'rgba(155, 108, 255, 0.55)');
+          halo.addColorStop(1, 'rgba(155, 108, 255, 0)');
+          ctx.fillStyle = halo;
+          ctx.fillRect(pk.pos.x - 18, pk.pos.y - 18 + wobble, 36, 36);
+          // tome/grimoire base
+          ctx.fillStyle = '#1a0f2c';
+          ctx.fillRect(pk.pos.x - 5, pk.pos.y - 4 + wobble, 10, 8);
+          ctx.fillStyle = '#3b265c';
+          ctx.fillRect(pk.pos.x - 5, pk.pos.y - 4 + wobble, 10, 1);
+          ctx.fillStyle = '#5b3a86';
+          ctx.fillRect(pk.pos.x - 4, pk.pos.y - 3 + wobble, 8, 6);
+          // sigil floating above
+          ctx.fillStyle = sp.projColour;
+          ctx.fillRect(pk.pos.x - 2, pk.pos.y - 8 + wobble, 4, 4);
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 7 + wobble, 2, 2);
+          break;
+        }
       }
     }
   }
@@ -1779,38 +2110,8 @@ export class GameEngine {
     this.ctx.fillStyle = 'rgba(0,0,0,0.45)';
     this.ctx.fillRect(p.pos.x - 6, p.pos.y + 3, 12, 2);
     drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 14, 1, p.facing, p.walkPhase, p.flash);
-    // melee swing
-    if (p.attackTimer > 0) {
-      const ctx = this.ctx;
-      const fx = p.facing.x || 1, fy = p.facing.y;
-      const a = Math.atan2(fy, fx);
-      const tNorm = p.attackTimer / 0.18; // 1 → 0 across the swing
-      const sweep = (1 - tNorm) * 1.6 - 0.8; // arc front edge sweeping forward
-      ctx.save();
-      ctx.translate(p.pos.x, p.pos.y);
-      ctx.rotate(a);
-      // Outer slash glow (wedge)
-      ctx.fillStyle = `rgba(244, 210, 122, ${tNorm * 0.35})`;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, 26, sweep - 0.9, sweep + 0.2);
-      ctx.closePath();
-      ctx.fill();
-      // Inner bright streak
-      ctx.fillStyle = `rgba(255, 230, 163, ${tNorm * 0.85})`;
-      ctx.beginPath();
-      ctx.moveTo(6, 0);
-      ctx.arc(6, 0, 20, sweep - 0.5, sweep + 0.1);
-      ctx.closePath();
-      ctx.fill();
-      // Leading edge sparkline
-      ctx.strokeStyle = `rgba(255, 247, 214, ${tNorm})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 22, sweep - 0.05, sweep + 0.05);
-      ctx.stroke();
-      ctx.restore();
-    }
+    // Weapon (held in player's hand when idle, animated during attack)
+    this.drawPlayerWeapon();
     // iframe shimmer — outline pulse
     if (p.iframes > 0 && Math.floor(this.timeAlive * 18) % 2 === 0) {
       this.ctx.strokeStyle = 'rgba(108,246,229,0.65)';
@@ -1819,13 +2120,202 @@ export class GameEngine {
     }
   }
 
+  private drawPlayerWeapon(): void {
+    const p = this.player;
+    const w = WEAPONS[p.weapons[p.weaponIdx]];
+    const ctx = this.ctx;
+    const fx = p.facing.x || 1, fy = p.facing.y;
+    const baseAngle = Math.atan2(fy, fx);
+    const swinging = p.attackTimer > 0;
+    const tNorm = swinging ? p.attackTimer / w.duration : 0; // 1 → 0 across swing
+    // Anchor: roughly at player's hand height
+    const ax = p.pos.x;
+    const ay = p.pos.y - 2;
+
+    ctx.save();
+    ctx.translate(ax, ay);
+
+    if (!swinging) {
+      // Idle: weapon held diagonally beside the player, pointing in facing direction
+      const idleAngle = baseAngle + 0.6;
+      ctx.rotate(idleAngle);
+      this.drawWeaponSilhouette(w, 0);
+      ctx.restore();
+      return;
+    }
+
+    // Animation by swing type
+    if (w.swingType === 'arc' || w.swingType === 'flurry') {
+      // Sweep from -arcHalf to +arcHalf
+      const progress = 1 - tNorm; // 0 → 1
+      const sweep = -w.arcHalf + progress * w.arcHalf * 2;
+      ctx.rotate(baseAngle + sweep);
+      this.drawSlashFx(w, tNorm, sweep);
+      this.drawWeaponSilhouette(w, 0.6);
+    } else if (w.swingType === 'thrust' || w.swingType === 'lunge') {
+      // Quick forward extension; weapon points along facing, length grows then retracts
+      const phase = 1 - tNorm;
+      const extend = w.swingType === 'lunge' ? 10 : 6;
+      const off = Math.sin(phase * Math.PI) * extend;
+      ctx.rotate(baseAngle);
+      ctx.translate(off, 0);
+      this.drawThrustFx(w, tNorm);
+      this.drawWeaponSilhouette(w, 0.6);
+    } else if (w.swingType === 'overhead') {
+      // Heavy chop: rotate from -130° to +60° around facing
+      const progress = 1 - tNorm;
+      // ease-in: slow at start, fast slam
+      const eased = progress * progress;
+      const sweep = -2.2 + eased * 3.3;
+      ctx.rotate(baseAngle + sweep);
+      this.drawSlashFx(w, tNorm, sweep);
+      this.drawWeaponSilhouette(w, 0.8);
+    } else {
+      ctx.rotate(baseAngle);
+      this.drawSlashFx(w, tNorm, 0);
+      this.drawWeaponSilhouette(w, 0.5);
+    }
+
+    ctx.restore();
+  }
+
+  // Draws the weapon's silhouette extending forward from the origin.
+  // `glowAlpha` adds a coloured glow during animation.
+  private drawWeaponSilhouette(w: import('./GameTypes').WeaponDef, glowAlpha: number): void {
+    const ctx = this.ctx;
+    const len = w.length;
+    const th = w.thickness;
+    // grip (1/3 of length back from origin)
+    ctx.fillStyle = w.hiltColour;
+    ctx.fillRect(-3, -1, 4, 2);
+    // crossguard
+    ctx.fillStyle = w.accentColour;
+    ctx.fillRect(0, -2, 2, 5);
+    // blade — outline + body + highlight
+    ctx.fillStyle = '#04020a';
+    ctx.fillRect(1, -Math.ceil(th / 2) - 1, len + 1, th + 2);
+    ctx.fillStyle = w.bladeColour;
+    ctx.fillRect(2, -Math.floor(th / 2), len - 1, th);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(2, -Math.floor(th / 2), len - 2, 1);
+    // accent stripe
+    ctx.fillStyle = w.accentColour;
+    ctx.fillRect(len - 3, 0, 2, 1);
+    // glow halo during animation
+    if (glowAlpha > 0) {
+      ctx.globalAlpha = glowAlpha;
+      ctx.fillStyle = w.swingColour;
+      ctx.fillRect(2, -Math.floor(th / 2) - 1, len - 1, th + 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  private drawSlashFx(w: import('./GameTypes').WeaponDef, tNorm: number, sweep: number): void {
+    const ctx = this.ctx;
+    const reach = w.range;
+    // Outer wedge
+    ctx.fillStyle = `rgba(255, 247, 214, ${tNorm * 0.22})`;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, reach + 4, sweep - 0.7, sweep + 0.5);
+    ctx.closePath();
+    ctx.fill();
+    // Inner glow tinted by weapon
+    const c = w.swingColour;
+    ctx.fillStyle = c;
+    ctx.globalAlpha = tNorm * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(2, 0);
+    ctx.arc(2, 0, reach - 2, sweep - 0.4, sweep + 0.25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Leading-edge bright streak
+    ctx.strokeStyle = `rgba(255, 255, 255, ${tNorm})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, reach, sweep - 0.04, sweep + 0.04);
+    ctx.stroke();
+  }
+
+  private drawThrustFx(w: import('./GameTypes').WeaponDef, tNorm: number): void {
+    const ctx = this.ctx;
+    const reach = w.range;
+    // bright line along facing
+    ctx.fillStyle = w.swingColour;
+    ctx.globalAlpha = tNorm * 0.6;
+    ctx.fillRect(0, -1, reach, 2);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = `rgba(255, 255, 255, ${tNorm})`;
+    ctx.fillRect(reach - 4, -1, 4, 2);
+  }
+
   private drawProjectiles(): void {
     const ctx = this.ctx;
     for (const pr of this.projectiles) {
       const r = pr.radius;
       const vx = pr.vel.x, vy = pr.vel.y;
       const speed = Math.hypot(vx, vy) || 1;
-      // motion trail — 3 fading echoes behind
+      const visual = (pr as Projectile & { visual?: string }).visual ?? 'orb';
+      const angle = Math.atan2(vy, vx);
+
+      if (visual === 'shard') {
+        // Frost shard — diamond with leading edge
+        ctx.save();
+        ctx.translate(pr.pos.x, pr.pos.y);
+        ctx.rotate(angle);
+        ctx.fillStyle = pr.trailColour;
+        ctx.globalAlpha = 0.45;
+        ctx.fillRect(-r * 3, -r * 0.5, r * 3, r);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = pr.colour;
+        ctx.beginPath();
+        ctx.moveTo(r * 1.6, 0);
+        ctx.lineTo(0, -r);
+        ctx.lineTo(-r * 1.2, 0);
+        ctx.lineTo(0, r);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-1, -1, r * 1.6, 1);
+        ctx.restore();
+        continue;
+      }
+
+      if (visual === 'flame') {
+        // Hellfire orb — pulsing fire core with crackling trail
+        for (let i = 1; i <= 4; i++) {
+          const tx = pr.pos.x - (vx / speed) * i * (r * 0.9);
+          const ty = pr.pos.y - (vy / speed) * i * (r * 0.9);
+          ctx.fillStyle = pr.trailColour;
+          ctx.globalAlpha = 0.32 * (5 - i) / 4;
+          ctx.beginPath();
+          ctx.arc(tx, ty, r * (1 - i * 0.12), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        // halo
+        const halo = ctx.createRadialGradient(pr.pos.x, pr.pos.y, 1, pr.pos.x, pr.pos.y, r * 2.4);
+        halo.addColorStop(0, 'rgba(255, 122, 58, 0.55)');
+        halo.addColorStop(1, 'rgba(255, 122, 58, 0)');
+        ctx.fillStyle = halo;
+        ctx.fillRect(pr.pos.x - r * 3, pr.pos.y - r * 3, r * 6, r * 6);
+        // body — pulse
+        const pulse = 1 + Math.sin(this.timeAlive * 18 + pr.id) * 0.15;
+        ctx.fillStyle = pr.colour;
+        ctx.beginPath();
+        ctx.arc(pr.pos.x, pr.pos.y, r * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffe6a3';
+        ctx.beginPath();
+        ctx.arc(pr.pos.x, pr.pos.y, r * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(pr.pos.x - 1, pr.pos.y - 1, 2, 2);
+        continue;
+      }
+
+      // Default orb (spark bolt and any enemy projectiles)
       for (let i = 1; i <= 3; i++) {
         const tx = pr.pos.x - (vx / speed) * i * (r + 1);
         const ty = pr.pos.y - (vy / speed) * i * (r + 1);
@@ -1836,19 +2326,16 @@ export class GameEngine {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-      // outer halo
       ctx.fillStyle = pr.colour;
       ctx.globalAlpha = 0.35;
       ctx.beginPath();
       ctx.arc(pr.pos.x, pr.pos.y, r * 1.8, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
-      // body
       ctx.fillStyle = pr.colour;
       ctx.beginPath();
       ctx.arc(pr.pos.x, pr.pos.y, r, 0, Math.PI * 2);
       ctx.fill();
-      // hot core
       ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.arc(pr.pos.x, pr.pos.y, r * 0.45, 0, Math.PI * 2);
@@ -1928,6 +2415,10 @@ export class GameEngine {
       floor: this.floor.number,
       roomType: room.type, roomName: room.name,
       relics: p.relics,
+      weapons: p.weapons,
+      spells: p.spells,
+      currentWeapon: p.weapons[p.weaponIdx],
+      currentSpell: p.spells[p.spellIdx],
       bossHp: this.bossSnapshot?.hp,
       bossMaxHp: this.bossSnapshot?.maxHp,
       bossName: this.bossSnapshot?.name,

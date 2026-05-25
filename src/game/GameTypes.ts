@@ -42,6 +42,70 @@ export interface RelicDef {
   description: string;
 }
 
+export type WeaponId =
+  | 'tarnishedDagger'
+  | 'boneCleaver'
+  | 'ironHalberd'
+  | 'twinSickles'
+  | 'ashenGreatsword';
+
+export type WeaponSwingType = 'thrust' | 'arc' | 'lunge' | 'flurry' | 'overhead';
+
+export interface WeaponDef {
+  id: WeaponId;
+  name: string;
+  glyph: string;
+  description: string;
+  swingType: WeaponSwingType;
+  damageMul: number;
+  cooldown: number;
+  duration: number;
+  range: number;
+  arcHalf: number;
+  knockback: number;
+  hits: number;
+  // visual
+  swingColour: string;
+  hiltColour: string;
+  bladeColour: string;
+  accentColour: string;
+  length: number;
+  thickness: number;
+}
+
+export type SpellId =
+  | 'sparkBolt'
+  | 'frostLance'
+  | 'hellfireOrb'
+  | 'thunderSigil';
+
+export type SpellKind = 'singleProjectile' | 'spread' | 'sigil';
+export type SpellVisual = 'orb' | 'shard' | 'flame' | 'sigil';
+
+export interface SpellDef {
+  id: SpellId;
+  name: string;
+  glyph: string;
+  description: string;
+  kind: SpellKind;
+  manaCost: number;
+  cooldown: number;
+  damageMul: number;
+  projCount: number;
+  spreadHalf: number;
+  speed: number;
+  radius: number;
+  life: number;
+  pierce: number;
+  seeking: boolean;
+  explodeRadius: number;
+  sigilDelay?: number;
+  sigilRange?: number;
+  projColour: string;
+  trailColour: string;
+  projVisual: SpellVisual;
+}
+
 export type RoomType =
   | 'start'
   | 'enemy'
@@ -135,4 +199,6 @@ export interface RunStats {
   essenceCollected: number;
   coinsCollected: number;
   relicsFound: RelicId[];
+  weaponsFound: WeaponId[];
+  spellsFound: SpellId[];
 }

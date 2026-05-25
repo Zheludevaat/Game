@@ -246,6 +246,20 @@
   position: relative;
 }
 
+.loadout-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--gold-3);
+  background: rgba(10, 4, 22, 0.85);
+  font-size: 18px;
+  font-family: 'Iowan Old Style', 'Cinzel', 'Georgia', serif;
+  line-height: 1;
+  text-shadow: 0 0 6px rgba(244, 210, 122, 0.5);
+}
+
 .relic-icon[title]::after {
   content: attr(data-name);
   position: absolute;
@@ -344,6 +358,35 @@
 .touch-buttons button.active {
   box-shadow: 0 0 18px rgba(108, 246, 229, 0.55);
   color: var(--teal);
+}
+
+.touch-cycle {
+  position: absolute;
+  right: calc(20px + var(--safe-right));
+  bottom: calc(220px + var(--safe-bottom));
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.touch-cycle button {
+  border-radius: 50%;
+  width: clamp(42px, 7.5vh, 60px);
+  height: clamp(42px, 7.5vh, 60px);
+  border: 2px solid var(--gold-3);
+  background:
+    radial-gradient(circle, rgba(40, 20, 70, 0.85), rgba(10, 4, 24, 0.95));
+  color: var(--gold-1);
+  font-size: clamp(11px, 1.6vh, 14px);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 0 4px rgba(0,0,0,0.6);
+  touch-action: none;
+}
+
+.touch-cycle button.active {
+  box-shadow: 0 0 12px rgba(244, 210, 122, 0.55);
+  color: var(--bone);
 }
 
 .rotate-overlay {

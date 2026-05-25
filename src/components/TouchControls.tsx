@@ -99,6 +99,10 @@ export function TouchControls({ input }: Props): JSX.Element {
         {button('interact', 'USE')}
         {button('dash', 'DASH')}
       </div>
+      <div className="touch-cycle">
+        {button('cycleWeapon', '↻W')}
+        {button('cycleSpell', '↻S')}
+      </div>
     </div>
   );
 }

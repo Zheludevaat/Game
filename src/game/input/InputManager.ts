@@ -14,6 +14,8 @@ export interface InputState {
   mapPressed: boolean;
   useItemPressed: boolean;
   cycleRelicPressed: boolean;
+  cycleWeaponPressed: boolean;
+  cycleSpellPressed: boolean;
   uiUp: boolean;
   uiDown: boolean;
   uiLeft: boolean;
@@ -124,6 +126,7 @@ export class InputManager {
       dashPressed: false, spellPressed: false, spellHeld: false,
       interactPressed: false, pausePressed: false, mapPressed: false,
       useItemPressed: false, cycleRelicPressed: false,
+      cycleWeaponPressed: false, cycleSpellPressed: false,
       uiUp: false, uiDown: false, uiLeft: false, uiRight: false,
       uiConfirm: false, uiCancel: false,
     };
@@ -150,8 +153,10 @@ export class InputManager {
     s.interactPressed ||= this.keysPressedThisFrame.has('KeyE') || this.keysPressedThisFrame.has('Enter');
     s.pausePressed    ||= this.keysPressedThisFrame.has('Escape') || this.keysPressedThisFrame.has('KeyP');
     s.mapPressed      ||= this.keysPressedThisFrame.has('KeyM') || this.keysPressedThisFrame.has('Tab');
-    s.useItemPressed  ||= this.keysPressedThisFrame.has('KeyQ');
-    s.cycleRelicPressed ||= this.keysPressedThisFrame.has('KeyR');
+    s.useItemPressed  ||= this.keysPressedThisFrame.has('KeyU');
+    s.cycleRelicPressed ||= this.keysPressedThisFrame.has('KeyT');
+    s.cycleWeaponPressed ||= this.keysPressedThisFrame.has('KeyQ');
+    s.cycleSpellPressed  ||= this.keysPressedThisFrame.has('KeyR');
 
     s.uiUp     ||= this.keysPressedThisFrame.has('ArrowUp')    || this.keysPressedThisFrame.has('KeyW');
     s.uiDown   ||= this.keysPressedThisFrame.has('ArrowDown')  || this.keysPressedThisFrame.has('KeyS');
@@ -173,6 +178,8 @@ export class InputManager {
     s.interactPressed ||= !!this.touchPressedThisFrame['interact'];
     s.pausePressed    ||= !!this.touchPressedThisFrame['pause'];
     s.mapPressed      ||= !!this.touchPressedThisFrame['map'];
+    s.cycleWeaponPressed ||= !!this.touchPressedThisFrame['cycleWeapon'];
+    s.cycleSpellPressed  ||= !!this.touchPressedThisFrame['cycleSpell'];
 
     // Gamepad
     if (this.gamepadInfo.connected) {
@@ -196,6 +203,8 @@ export class InputManager {
       s.mapPressed      ||= this.padPressed(m.map);
       s.useItemPressed  ||= this.padPressed(m.useItem);
       s.cycleRelicPressed ||= this.padPressed(m.cycleRelic);
+      s.cycleWeaponPressed ||= this.padPressed(m.cycleRelic);
+      s.cycleSpellPressed  ||= this.padPressed(m.useItem);
 
       s.uiUp     ||= this.padPressed(m.dpadUp);
       s.uiDown   ||= this.padPressed(m.dpadDown);

@@ -1,5 +1,7 @@
 import { RunSummary } from '../game/GameEngine';
 import { RELICS } from '../game/data/relics';
+import { WEAPONS } from '../game/data/weapons';
+import { SPELLS } from '../game/data/spells';
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
 import { useMenuNav } from './useMenuNav';
@@ -29,6 +31,26 @@ export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onM
           <span className="stat-name">Bosses Defeated</span><span className="stat-value">{summary.bossesDefeated}</span>
           <span className="stat-name">Essence Collected</span><span className="stat-value">{summary.essenceCollected}</span>
           <span className="stat-name">Coins Collected</span><span className="stat-value">{summary.coinsCollected}</span>
+        </div>
+        <div className="pixel-divider" />
+        <div style={{ fontSize: 12, letterSpacing: '0.18em', marginBottom: 6 }} className="glow-text">WEAPONS WIELDED</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {summary.weaponsFound.length === 0 && <span style={{ opacity: 0.6, fontSize: 12 }}>None</span>}
+          {summary.weaponsFound.map((id) => (
+            <div key={id} className="relic-icon" data-name={WEAPONS[id].name} title={WEAPONS[id].name}>
+              {WEAPONS[id].glyph}
+            </div>
+          ))}
+        </div>
+        <div className="pixel-divider" />
+        <div style={{ fontSize: 12, letterSpacing: '0.18em', marginBottom: 6 }} className="violet-text">SPELLS LEARNED</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {summary.spellsFound.length === 0 && <span style={{ opacity: 0.6, fontSize: 12 }}>None</span>}
+          {summary.spellsFound.map((id) => (
+            <div key={id} className="relic-icon" data-name={SPELLS[id].name} title={SPELLS[id].name}>
+              {SPELLS[id].glyph}
+            </div>
+          ))}
         </div>
         <div className="pixel-divider" />
         <div style={{ fontSize: 12, letterSpacing: '0.18em', marginBottom: 6 }} className="glow-text">RELICS FOUND</div>
