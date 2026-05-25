@@ -9,6 +9,8 @@ import { getArchetype } from './data/archetypes';
 import { RELICS, RELIC_IDS } from './data/relics';
 import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
 import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
+import { CODEX, CODEX_BY_ID } from './data/codex';
+import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
 import {
@@ -22,6 +24,10 @@ export interface HudSnapshot {
   mp: number; maxMp: number;
   coins: number; keys: number; essence: number;
   floor: number;
+  sphereId: SphereId;
+  sphereName: string;
+  sphereGlyph: string;
+  sphereGodName: string;
   roomType: RoomType | null;
   roomName: string;
   relics: RelicId[];
@@ -54,6 +60,10 @@ export interface EngineCallbacks {
   onOpenMap: () => void;
   onGameOver: (summary: RunSummary) => void;
   onFloorChange: (n: number) => void;
+  /** A codex entry was unlocked this run. The host should persist it to MetaState. */
+  onCodexUnlock: (id: string) => void;
+  /** The player reached the Eighth Sphere for the first time this run. */
+  onOgdoadReached: () => void;
 }
 
 export interface RunSummary {
@@ -66,6 +76,9 @@ export interface RunSummary {
   relicsFound: RelicId[];
   weaponsFound: WeaponId[];
   spellsFound: SpellId[];
+  codexUnlockedThisRun: string[];
+  spheresVisited: SphereId[];
+  ogdoadReached: boolean;
   bestFloor: number;
   archetype: ArchetypeDef;
 }
@@ -265,6 +278,7 @@ export class GameEngine {
       floorReached: 1, roomsCleared: 0, enemiesDefeated: 0, bossesDefeated: 0,
       essenceCollected: 0, coinsCollected: 0, relicsFound: [],
       weaponsFound: [], spellsFound: [],
+      codexUnlockedThisRun: [], spheresVisited: [], ogdoadReached: false,
       bestFloor: 0, archetype: getArchetype('magus'),
     };
   }
@@ -295,6 +309,9 @@ export class GameEngine {
     this.summary.relicsFound = [];
     this.summary.weaponsFound = [];
     this.summary.spellsFound = [];
+    this.summary.codexUnlockedThisRun = [];
+    this.summary.spheresVisited = [];
+    this.summary.ogdoadReached = false;
     this.summary.archetype = this.archetype;
 
     this.initPlayer();
@@ -441,6 +458,33 @@ export class GameEngine {
     return true;
   }
 
+  /**
+   * Unlock a codex entry by id. No-op if it doesn't exist or was already
+   * unlocked this run (or persistently, via the host's meta state). Emits
+   * a floating "REVELATION — title" damage-number-style note above the
+   * player and notifies the host to persist.
+   */
+  private unlockCodex(id: string): void {
+    const entry = CODEX_BY_ID[id];
+    if (!entry) return;
+    if (this.summary.codexUnlockedThisRun.includes(id)) return;
+    if (this.meta.unlockedCodex.includes(id)) {
+      // Already known across runs — silent, no extra UI.
+      return;
+    }
+    this.summary.codexUnlockedThisRun.push(id);
+    // Mirror into meta so subsequent unlock checks this run are correct.
+    this.meta.unlockedCodex = [...this.meta.unlockedCodex, id];
+    this.cbs.onCodexUnlock?.(id);
+    // Floating revelation
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 22, 'REVELATION', '#ffe6a3');
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 12, entry.title, '#9b6cff');
+    this.particles.burst(this.player.pos.x, this.player.pos.y - 8, 22, {
+      colour: '#ffe6a3', life: 1.0, maxLife: 1.0, drag: 0.88,
+    });
+    audio.sfx('shrine');
+  }
+
   private grantSpell(id: SpellId): boolean {
     if (this.player.spells.includes(id)) return false;
     this.player.spells.push(id);
@@ -469,7 +513,41 @@ export class GameEngine {
     this.cbs.onFloorChange(n);
     const startRoom = this.floor.rooms.find((r) => r.id === this.floor.startRoomId)!;
     this.enterRoom(startRoom, { x: ROOM_W / 2, y: ROOM_H / 2 });
-    this.floorBanner = { t: 0, duration: 2.4, text: `Floor ${n} — ${this.floor.isBoss ? 'Sanctum of the Warden' : 'Descent'}` };
+
+    // Narrative — name the floor by its planetary sphere.
+    const sph = sphereForFloor(n);
+    const isFirstReach = !this.summary.spheresVisited.includes(sph.id);
+    if (isFirstReach) this.summary.spheresVisited.push(sph.id);
+    const cycle = Math.floor((n - 1) / 7); // 0 = first ascent, 1 = second, …
+    const suffix = cycle > 0 ? ` (Cycle ${cycle + 1})` : '';
+    const bannerText = this.floor.isBoss
+      ? `${sph.name} — Sanctum of the Warden`
+      : `Floor ${n} · ${sph.inscription}${suffix}`;
+    this.floorBanner = { t: 0, duration: 3.2, text: bannerText };
+
+    // First time the player reaches each sphere, unlock its Governor entry —
+    // and on the first three spheres, the matching Descent fragment.
+    if (isFirstReach) {
+      this.unlockCodex(`gov.${sph.id}`);
+      if (sph.id === 'moon') this.unlockCodex('descent.mind');
+      if (sph.id === 'mercury') this.unlockCodex('descent.anthropos');
+      if (sph.id === 'venus') this.unlockCodex('descent.fall');
+    }
+    // Two narrative breadcrumbs at the very start of a new player's run.
+    if (n === 1) {
+      this.unlockCodex('awaken.pimander');
+      this.unlockCodex('awaken.light');
+    }
+    // Reaching the Eighth Sphere is the climactic moment.
+    if (isOgdoadFloor(n)) {
+      if (!this.summary.ogdoadReached) {
+        this.summary.ogdoadReached = true;
+        this.unlockCodex('ogdoad.hymn');
+        this.unlockCodex('ogdoad.alone');
+        this.cbs.onOgdoadReached?.();
+      }
+    }
+
     this.floorTransition = { t: 0, duration: 0.9 };
     audio.startDungeonAmbience();
     audio.sfx('descend');
@@ -796,6 +874,8 @@ export class GameEngine {
   private die(): void {
     if (this.dead) return;
     this.dead = true;
+    // The soul is dissolved and prepares for rebirth (palingenesia).
+    this.unlockCodex('death.palingenesia');
     this.cbs.onGameOver({
       ...this.summary,
       bestFloor: Math.max(this.summary.bestFloor, this.summary.floorReached),
@@ -1085,6 +1165,8 @@ export class GameEngine {
       room.shrineUsed = true;
       audio.sfx('shrine');
       this.particles.burst(ROOM_W / 2, ROOM_H / 2 - 16, 36, { colour: PALETTE.teal, life: 1.4, maxLife: 1.4 });
+      // Reveal the teaching tied to this Operation.
+      this.unlockCodex(`op.${kind}`);
     }
     this.pendingShrine = null;
   }
@@ -1304,6 +1386,12 @@ export class GameEngine {
       this.summary.bossesDefeated += 1;
       audio.sfx('bossDeath');
       this.camera.shakeT = 1.0; this.camera.shakeMag = 6;
+      // The Warden of this sphere has fallen — the soul surrenders its tribute.
+      const sph = sphereForFloor(this.floor.number);
+      this.unlockCodex(`asc.${sph.id}`);
+      // After two victories, Plotinus on Beauty. After three, Iamblichus on theurgy.
+      if (this.summary.bossesDefeated >= 2) this.unlockCodex('ogdoad.beauty');
+      if (this.summary.bossesDefeated >= 3) this.unlockCodex('ogdoad.theurgy');
       // drop relic and lots of essence
       const pool = RELIC_IDS.filter((id) => !this.player.relics.includes(id));
       if (pool.length) {
@@ -2413,6 +2501,10 @@ export class GameEngine {
       mp: p.mp, maxMp: p.maxMp,
       coins: p.coins, keys: p.keys, essence: p.essence,
       floor: this.floor.number,
+      sphereId: sphereForFloor(this.floor.number).id,
+      sphereName: sphereForFloor(this.floor.number).name,
+      sphereGlyph: sphereForFloor(this.floor.number).glyph,
+      sphereGodName: sphereForFloor(this.floor.number).godName,
       roomType: room.type, roomName: room.name,
       relics: p.relics,
       weapons: p.weapons,

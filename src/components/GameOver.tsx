@@ -2,6 +2,8 @@ import { RunSummary } from '../game/GameEngine';
 import { RELICS } from '../game/data/relics';
 import { WEAPONS } from '../game/data/weapons';
 import { SPELLS } from '../game/data/spells';
+import { CODEX_BY_ID } from '../game/data/codex';
+import { SPHERE_BY_ID } from '../game/data/spheres';
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
 import { useMenuNav } from './useMenuNav';
@@ -12,17 +14,24 @@ interface Props {
   essenceTotal: number;
   onNewRun: () => void;
   onMenu: () => void;
+  onCodex: () => void;
 }
 
-export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onMenu }: Props): JSX.Element {
+export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onMenu, onCodex }: Props): JSX.Element {
   const items = [
     { onActivate: onNewRun },
+    { onActivate: onCodex },
     { onActivate: onMenu },
   ];
   const focus = useMenuNav(items, { horizontal: false, onCancel: onMenu });
+  const newFragments = summary.codexUnlockedThisRun
+    .map((id) => CODEX_BY_ID[id])
+    .filter(Boolean);
+  const title = summary.ogdoadReached ? 'The Eighth Sphere' : 'The Lamps Dim';
+  const subtitle = summary.ogdoadReached ? 'The soul, made bare, returns' : 'The initiate falls — what is learned, remains';
   return (
     <div className="menu-screen with-bg">
-      <PixelPanel title="The Lamps Dim" subtitle="The initiate falls" width={520}>
+      <PixelPanel title={title} subtitle={subtitle} width={560}>
         <div className="gameover-grid" style={{ marginTop: 8 }}>
           <span className="stat-name">Archetype</span><span className="stat-value">{summary.archetype.name}</span>
           <span className="stat-name">Floor Reached</span><span className="stat-value">{summary.floorReached}</span>
@@ -68,9 +77,37 @@ export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onM
           <span>Total Essence: <span className="gold-text">{essenceTotal}</span></span>
         </div>
         <div className="pixel-divider" />
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+        <div style={{ fontSize: 12, letterSpacing: '0.18em', marginBottom: 6 }} className="glow-text">SPHERES VISITED</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {summary.spheresVisited.length === 0 && <span style={{ opacity: 0.6, fontSize: 12 }}>None</span>}
+          {summary.spheresVisited.map((id) => {
+            const s = SPHERE_BY_ID[id];
+            return (
+              <div key={id} className="relic-icon" title={`${s.name} — ${s.godName}`} data-name={s.name} style={{ color: s.colour, borderColor: s.colour }}>
+                {s.glyph}
+              </div>
+            );
+          })}
+        </div>
+        <div className="pixel-divider" />
+        <div style={{ fontSize: 12, letterSpacing: '0.18em', marginBottom: 6 }} className="violet-text">FRAGMENTS LEARNED THIS DESCENT</div>
+        {newFragments.length === 0 ? (
+          <div style={{ opacity: 0.6, fontSize: 12 }}>The soul remembered nothing new.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 130, overflowY: 'auto', paddingRight: 4 }}>
+            {newFragments.map((f) => (
+              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, letterSpacing: '0.06em' }}>
+                <span className="gold-text" style={{ flex: 1 }}>{f.title}</span>
+                <span style={{ opacity: 0.65, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase' }}>{f.source}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="pixel-divider" />
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <PixelButton onClick={onNewRun} focused={focus === 0}>New Run</PixelButton>
-          <PixelButton onClick={onMenu} focused={focus === 1}>Main Menu</PixelButton>
+          <PixelButton onClick={onCodex} focused={focus === 1}>Codex</PixelButton>
+          <PixelButton onClick={onMenu} focused={focus === 2}>Main Menu</PixelButton>
         </div>
       </PixelPanel>
     </div>

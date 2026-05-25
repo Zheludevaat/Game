@@ -20,10 +20,15 @@ import { TouchControls } from './components/TouchControls';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
 import { ArchetypeId, MetaState, SettingsState } from './game/GameTypes';
 import { MapOverlay } from './components/MapOverlay';
+import { CodexScreen } from './components/CodexScreen';
+import { Prologue } from './components/Prologue';
+import { Epilogue } from './components/Epilogue';
+import { CODEX } from './game/data/codex';
 
 type Screen =
   | 'loading' | 'menu' | 'archetype' | 'game' | 'pause' | 'settings'
-  | 'controllerTest' | 'howTo' | 'gameOver' | 'meta' | 'map';
+  | 'controllerTest' | 'howTo' | 'gameOver' | 'meta' | 'map'
+  | 'codex' | 'prologue' | 'epilogue';
 
 export function App(): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -157,6 +162,19 @@ export function App(): JSX.Element {
           // Update resume floor checkpoint
           saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
         },
+        onCodexUnlock: (id) => {
+          setMeta((m) => {
+            if (m.unlockedCodex.includes(id)) return m;
+            return { ...m, unlockedCodex: [...m.unlockedCodex, id] };
+          });
+        },
+        onOgdoadReached: () => {
+          setMeta((m) => ({ ...m, ogdoadReached: (m.ogdoadReached ?? 0) + 1 }));
+          // Pause the run and show the climactic epilogue. The player can
+          // continue descending after dismissing it.
+          setPreviousScreen('game');
+          setScreen('epilogue');
+        },
       });
       engineRef.current = engine;
       audio.unlock();
@@ -183,7 +201,11 @@ export function App(): JSX.Element {
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
-    engine.setPaused(screen === 'pause' || screen === 'settings' || screen === 'controllerTest' || screen === 'map' || screen === 'gameOver');
+    engine.setPaused(
+      screen === 'pause' || screen === 'settings' || screen === 'controllerTest'
+      || screen === 'map' || screen === 'gameOver'
+      || screen === 'codex' || screen === 'epilogue'
+    );
   }, [screen]);
 
   // Reduced particles toggle should propagate live
@@ -237,7 +259,16 @@ export function App(): JSX.Element {
           bestFloor={bestFloor}
           essence={essence}
           resumeAvailable={resumeAvailable}
-          onNewRun={() => setScreen('archetype')}
+          codexUnlocked={meta.unlockedCodex.length}
+          codexTotal={CODEX.length}
+          onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
+          onNewRun={() => {
+            if (!meta.seenPrologue) {
+              setScreen('prologue');
+            } else {
+              setScreen('archetype');
+            }
+          }}
           onContinue={() => {
             const r = loadResume();
             if (!r) { setScreen('archetype'); return; }
@@ -314,6 +345,7 @@ export function App(): JSX.Element {
             stopRun();
             setScreen('archetype');
           }}
+          onCodex={() => { setPreviousScreen('gameOver'); setScreen('codex'); }}
           onMenu={() => {
             stopRun();
             setScreen('menu');
@@ -327,6 +359,34 @@ export function App(): JSX.Element {
           meta={meta}
           onSpend={onSpendMeta}
           onBack={() => setScreen('menu')}
+        />
+      )}
+
+      {screen === 'codex' && (
+        <CodexScreen
+          unlocked={meta.unlockedCodex}
+          newIds={summary?.codexUnlockedThisRun ?? []}
+          onBack={() => setScreen(previousScreen === 'gameOver' ? 'gameOver' : 'menu')}
+        />
+      )}
+
+      {screen === 'prologue' && (
+        <Prologue
+          onContinue={() => {
+            setMeta((m) => ({ ...m, seenPrologue: true }));
+            setScreen('archetype');
+          }}
+          onSkip={() => {
+            setMeta((m) => ({ ...m, seenPrologue: true }));
+            setScreen('archetype');
+          }}
+        />
+      )}
+
+      {screen === 'epilogue' && (
+        <Epilogue
+          ogdoadCount={meta.ogdoadReached || 1}
+          onContinue={() => setScreen(previousScreen === 'game' ? 'game' : 'menu')}
         />
       )}
 

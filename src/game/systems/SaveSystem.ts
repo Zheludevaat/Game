@@ -16,6 +16,9 @@ const DEFAULT_META: MetaState = {
   bonusStartingMp: 0,
   bonusEssenceGain: 0,
   cosmeticLampAura: false,
+  unlockedCodex: [],
+  seenPrologue: false,
+  ogdoadReached: 0,
 };
 
 export function loadSettings(): SettingsState {
@@ -55,7 +58,12 @@ export function loadMeta(): MetaState {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.meta);
     if (!raw) return { ...DEFAULT_META };
-    return { ...DEFAULT_META, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_META,
+      ...parsed,
+      unlockedCodex: Array.isArray(parsed.unlockedCodex) ? parsed.unlockedCodex : [],
+    };
   } catch { return { ...DEFAULT_META }; }
 }
 export function saveMeta(m: MetaState): void {

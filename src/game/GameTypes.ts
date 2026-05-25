@@ -182,6 +182,10 @@ export interface MetaState {
   bonusStartingMp: number;
   bonusEssenceGain: number;
   cosmeticLampAura: boolean;
+  // Persistent narrative state
+  unlockedCodex: string[];
+  seenPrologue: boolean;
+  ogdoadReached: number; // count of times the player has reached the Eighth Sphere
 }
 
 export interface SaveState {

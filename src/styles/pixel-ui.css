@@ -576,3 +576,203 @@
 }
 .scroll-area::-webkit-scrollbar { width: 6px; }
 .scroll-area::-webkit-scrollbar-thumb { background: var(--gold-3); }
+
+/* ──────────────  Prologue / Epilogue ────────────── */
+.prologue-card {
+  max-width: 720px;
+  width: clamp(280px, 80vw, 720px);
+  padding: 22px 26px;
+  background:
+    linear-gradient(180deg, rgba(20, 12, 38, 0.96), rgba(8, 4, 18, 0.96));
+  border: 2px solid var(--gold-2);
+  box-shadow:
+    inset 0 0 0 2px #000,
+    inset 0 0 0 4px #221636,
+    0 0 32px rgba(108, 246, 229, 0.15),
+    0 0 80px rgba(0, 0, 0, 0.85);
+  transition: opacity 0.5s ease;
+}
+.prologue-body {
+  font-family: 'Iowan Old Style', 'Georgia', serif;
+  font-size: clamp(14px, 1.7vw, 16px);
+  line-height: 1.7;
+  color: var(--bone);
+  margin: 0 0 12px;
+  letter-spacing: 0.01em;
+}
+.prologue-source {
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  color: var(--gold-1);
+  text-align: right;
+  opacity: 0.85;
+  text-transform: uppercase;
+}
+.prologue-controls {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.prologue-pips {
+  display: flex;
+  gap: 8px;
+}
+.prologue-pip {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--gold-3);
+  background: transparent;
+  display: inline-block;
+}
+.prologue-pip.active {
+  background: var(--gold-1);
+  box-shadow: 0 0 8px rgba(244, 210, 122, 0.7);
+}
+.epilogue-banner {
+  text-align: center;
+  margin-bottom: 14px;
+  color: var(--gold-1);
+  text-shadow: 0 0 12px rgba(244, 210, 122, 0.5);
+}
+
+/* ──────────────  Codex screen ────────────── */
+.codex-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) 1fr;
+  gap: 14px;
+  min-height: 460px;
+  max-height: 60vh;
+}
+.codex-chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.codex-chapter-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: rgba(10, 4, 22, 0.7);
+  border: 1px solid var(--gold-3);
+  color: var(--bone);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.codex-chapter-btn:hover { background: rgba(40, 22, 70, 0.75); color: var(--gold-1); }
+.codex-chapter-btn.active {
+  background: rgba(60, 30, 110, 0.65);
+  border-color: var(--gold-1);
+  color: var(--gold-1);
+  box-shadow: 0 0 14px rgba(244, 210, 122, 0.25);
+}
+.codex-chapter-title { font-weight: 700; }
+.codex-chapter-meta { font-size: 9px; opacity: 0.75; display: flex; gap: 6px; align-items: center; }
+.codex-new-badge {
+  font-size: 8px;
+  background: var(--gold-1);
+  color: #1a0f2c;
+  padding: 1px 5px;
+  letter-spacing: 0.15em;
+  font-weight: 700;
+}
+
+.codex-main {
+  display: grid;
+  grid-template-rows: auto 1fr 1fr;
+  gap: 10px;
+  min-width: 0;
+}
+.codex-chapter-header { text-align: left; }
+.codex-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  border: 1px solid #221636;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  min-height: 0;
+}
+.codex-entry-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(20, 12, 38, 0.5);
+  border: 1px solid transparent;
+  border-left: 2px solid var(--gold-3);
+  color: var(--bone);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.codex-entry-row:hover { background: rgba(40, 22, 70, 0.65); }
+.codex-entry-row.active {
+  border-color: var(--gold-1);
+  border-left: 2px solid var(--gold-1);
+  color: var(--gold-1);
+}
+.codex-entry-row[aria-disabled="true"],
+.codex-entry-row:disabled {
+  cursor: default;
+  opacity: 0.55;
+  font-style: italic;
+  color: rgba(231, 227, 215, 0.5);
+}
+.codex-entry-title { font-weight: 600; }
+.codex-entry-meta { display: flex; gap: 8px; align-items: center; }
+.codex-entry-source {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--gold-1);
+  opacity: 0.85;
+  text-transform: uppercase;
+}
+.codex-entry-hint {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: rgba(108, 246, 229, 0.7);
+  text-transform: uppercase;
+}
+.codex-preview {
+  border: 1px solid #221636;
+  padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+  min-height: 0;
+}
+.codex-body {
+  font-family: 'Iowan Old Style', 'Georgia', serif;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--bone);
+  margin: 0;
+}
+.codex-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
+
+@media (max-width: 760px) {
+  .codex-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    max-height: 65vh;
+  }
+  .codex-chapters {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+  }
+  .codex-chapter-btn { min-width: 140px; flex-shrink: 0; }
+}

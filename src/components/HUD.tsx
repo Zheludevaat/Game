@@ -30,8 +30,13 @@ export function HUD({ hud }: Props): JSX.Element {
       </div>
 
       <div className="hud-top-right">
-        <div style={{ letterSpacing: '0.3em', color: 'var(--gold-1)' }}>Floor {hud.floor}</div>
-        <div className="glow-text" style={{ fontSize: 10 }}>{hud.roomName}</div>
+        <div style={{ letterSpacing: '0.3em', color: 'var(--gold-1)' }}>
+          {hud.sphereGlyph} Floor {hud.floor}
+        </div>
+        <div className="violet-text" style={{ fontSize: 10, letterSpacing: '0.2em', marginTop: 2 }}>
+          {hud.sphereName}
+        </div>
+        <div className="glow-text" style={{ fontSize: 10, marginTop: 2 }}>{hud.roomName}</div>
         <div className="pixel-tag" style={{ marginTop: 6 }}>{hud.roomType?.toUpperCase()}</div>
         <Minimap rooms={hud.rooms} />
         <div className="relic-strip" style={{ marginTop: 8 }}>
