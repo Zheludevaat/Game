@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PixelButton } from './PixelButton';
+import { useGamepadButtons } from './useGamepadButtons';
 
 interface Props {
   onContinue: () => void;
@@ -51,6 +52,14 @@ export function Epilogue({ onContinue, ogdoadCount }: Props): JSX.Element {
     if (page < pages.length - 1) setPage(page + 1);
     else onContinue();
   };
+  const prev = (): void => { if (page > 0) setPage(page - 1); };
+  useGamepadButtons({
+    onA: next,
+    onB: prev,
+    onStart: onContinue,
+    onRight: next,
+    onLeft: prev,
+  });
 
   // Brighter, warmer backdrop than the prologue — the player has arrived.
   const canvasRef = useRef<HTMLCanvasElement | null>(null);

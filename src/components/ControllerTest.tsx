@@ -3,6 +3,7 @@ import { InputManager } from '../game/input/InputManager';
 import { GAMEPAD_BUTTON_NAMES } from '../game/input/controlMappings';
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
+import { useGamepadButtons } from './useGamepadButtons';
 
 interface Props {
   input: InputManager | null;
@@ -17,6 +18,9 @@ interface PadSnap {
 }
 
 export function ControllerTest({ onBack }: Props): JSX.Element {
+  // ControllerTest WANTS the user to press every button — so don't bind A.
+  // B (cancel) + Start exit the screen.
+  useGamepadButtons({ onB: onBack, onStart: onBack });
   const [snap, setSnap] = useState<PadSnap>({ connected: false, id: '', axes: [], buttons: [] });
   useEffect(() => {
     let raf = 0;

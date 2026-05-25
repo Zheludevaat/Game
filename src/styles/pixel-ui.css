@@ -482,8 +482,69 @@
 }
 
 .settings-row input[type="range"] {
-  width: 200px;
+  width: 140px;
 }
+
+.settings-row-focused {
+  background: rgba(60, 30, 110, 0.35);
+  outline: 1px solid var(--teal);
+  outline-offset: -1px;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.settings-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+.settings-slider-track {
+  display: none;
+}
+.settings-slider-fill {
+  display: none;
+}
+.settings-value {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--gold-1);
+  min-width: 38px;
+  text-align: right;
+}
+
+.settings-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-arrow {
+  background: rgba(10, 4, 22, 0.6);
+  border: 1px solid var(--gold-3);
+  color: var(--gold-1);
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.settings-arrow:hover { color: var(--bone); border-color: var(--gold-1); }
+
+.settings-pad-label {
+  color: var(--teal);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+}
+.settings-remap-btn {
+  background: rgba(10, 4, 22, 0.6);
+  border: 1px solid var(--gold-2);
+  color: var(--gold-1);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  padding: 4px 10px;
+  cursor: pointer;
+  min-width: 110px;
+}
+.settings-remap-btn:hover { color: var(--bone); border-color: var(--gold-1); }
 
 .toggle {
   position: relative;
@@ -674,6 +735,10 @@
   color: var(--gold-1);
   box-shadow: 0 0 14px rgba(244, 210, 122, 0.25);
 }
+.codex-chapter-btn.focused {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+}
 .codex-chapter-title { font-weight: 700; }
 .codex-chapter-meta { font-size: 9px; opacity: 0.75; display: flex; gap: 6px; align-items: center; }
 .codex-new-badge {
@@ -724,10 +789,20 @@
   border-left: 2px solid var(--gold-1);
   color: var(--gold-1);
 }
-.codex-entry-row[aria-disabled="true"],
-.codex-entry-row:disabled {
+.codex-entry-row.focused {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+  box-shadow: 0 0 12px rgba(108, 246, 229, 0.3);
+}
+.codex-entry-row[aria-disabled="true"]:not(.focused),
+.codex-entry-row:disabled:not(.focused) {
   cursor: default;
   opacity: 0.55;
+  font-style: italic;
+  color: rgba(231, 227, 215, 0.5);
+}
+.codex-entry-row[aria-disabled="true"] {
+  cursor: default;
   font-style: italic;
   color: rgba(231, 227, 215, 0.5);
 }

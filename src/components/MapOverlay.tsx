@@ -1,10 +1,12 @@
 import { HudSnapshot } from '../game/GameEngine';
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
+import { useGamepadButtons } from './useGamepadButtons';
 
 interface Props { hud: HudSnapshot; onClose: () => void; }
 
 export function MapOverlay({ hud, onClose }: Props): JSX.Element {
+  useGamepadButtons({ onA: onClose, onB: onClose, onStart: onClose, onSelect: onClose });
   const xs = hud.rooms.map((r) => r.gx);
   const ys = hud.rooms.map((r) => r.gy);
   const minX = Math.min(...xs), maxX = Math.max(...xs);

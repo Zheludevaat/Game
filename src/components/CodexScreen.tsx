@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CODEX, CHAPTER_ORDER, CHAPTER_TITLES, CHAPTER_SUBTITLES,
   CodexChapter, CodexEntry,
 } from '../game/data/codex';
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
+import { useGamepadButtons } from './useGamepadButtons';
 
 interface Props {
   unlocked: string[];
@@ -13,12 +14,17 @@ interface Props {
   newIds?: string[];
 }
 
+type Pane = 'chapters' | 'entries';
+
 export function CodexScreen({ unlocked, onBack, newIds }: Props): JSX.Element {
   const unlockedSet = useMemo(() => new Set(unlocked), [unlocked]);
   const newSet = useMemo(() => new Set(newIds ?? []), [newIds]);
 
   const [chapter, setChapter] = useState<CodexChapter>('awakening');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [pane, setPane] = useState<Pane>('chapters');
+  const [entryFocus, setEntryFocus] = useState(0);
+  const entryRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const entriesByChapter = useMemo(() => {
     const m = new Map<CodexChapter, CodexEntry[]>();
@@ -33,6 +39,64 @@ export function CodexScreen({ unlocked, onBack, newIds }: Props): JSX.Element {
   const chapterEntries = entriesByChapter.get(chapter) ?? [];
   const openEntry = openId ? CODEX.find((e) => e.id === openId) ?? null : null;
   const openIsUnlocked = openEntry ? unlockedSet.has(openEntry.id) : false;
+
+  // Keep the entry focus in range when the chapter changes
+  useEffect(() => {
+    setEntryFocus(0);
+    setOpenId(null);
+  }, [chapter]);
+
+  // Scroll the focused entry into view in the entries pane
+  useEffect(() => {
+    if (pane !== 'entries') return;
+    const node = entryRefs.current[entryFocus];
+    node?.scrollIntoView({ block: 'nearest' });
+  }, [entryFocus, pane]);
+
+  const cycleChapter = (dir: number): void => {
+    const idx = CHAPTER_ORDER.indexOf(chapter);
+    const next = (idx + dir + CHAPTER_ORDER.length) % CHAPTER_ORDER.length;
+    setChapter(CHAPTER_ORDER[next]);
+  };
+
+  const activateEntry = (): void => {
+    const e = chapterEntries[entryFocus];
+    if (!e) return;
+    if (unlockedSet.has(e.id)) setOpenId(e.id);
+  };
+
+  useGamepadButtons({
+    onA: () => {
+      if (pane === 'chapters') { setPane('entries'); setEntryFocus(0); }
+      else activateEntry();
+    },
+    onB: () => {
+      if (openId) setOpenId(null);
+      else if (pane === 'entries') setPane('chapters');
+      else onBack();
+    },
+    onStart: onBack,
+    onLB: () => cycleChapter(-1),
+    onRB: () => cycleChapter(1),
+    onUp: () => {
+      if (pane === 'chapters') {
+        const idx = CHAPTER_ORDER.indexOf(chapter);
+        setChapter(CHAPTER_ORDER[(idx - 1 + CHAPTER_ORDER.length) % CHAPTER_ORDER.length]);
+      } else {
+        setEntryFocus((f) => Math.max(0, f - 1));
+      }
+    },
+    onDown: () => {
+      if (pane === 'chapters') {
+        const idx = CHAPTER_ORDER.indexOf(chapter);
+        setChapter(CHAPTER_ORDER[(idx + 1) % CHAPTER_ORDER.length]);
+      } else {
+        setEntryFocus((f) => Math.min(chapterEntries.length - 1, f + 1));
+      }
+    },
+    onLeft: () => { if (pane === 'entries') setPane('chapters'); },
+    onRight: () => { if (pane === 'chapters' && chapterEntries.length > 0) { setPane('entries'); setEntryFocus(0); } },
+  });
 
   return (
     <div className="menu-screen with-bg" style={{ overflow: 'hidden' }}>
@@ -53,8 +117,12 @@ export function CodexScreen({ unlocked, onBack, newIds }: Props): JSX.Element {
                 <button
                   key={ch}
                   type="button"
-                  className={'codex-chapter-btn' + (active ? ' active' : '')}
-                  onClick={() => { setChapter(ch); setOpenId(null); }}
+                  className={
+                    'codex-chapter-btn'
+                    + (active ? ' active' : '')
+                    + (active && pane === 'chapters' ? ' focused' : '')
+                  }
+                  onClick={() => { setChapter(ch); setOpenId(null); setPane('chapters'); }}
                 >
                   <span className="codex-chapter-title">{CHAPTER_TITLES[ch]}</span>
                   <span className="codex-chapter-meta">
@@ -73,16 +141,22 @@ export function CodexScreen({ unlocked, onBack, newIds }: Props): JSX.Element {
               <h3 className="pixel-title" style={{ fontSize: 20, margin: '4px 0' }}>{CHAPTER_TITLES[chapter]}</h3>
             </div>
             <div className="codex-entries">
-              {chapterEntries.map((e) => {
+              {chapterEntries.map((e, i) => {
                 const unlocked = unlockedSet.has(e.id);
                 const isNew = newSet.has(e.id);
+                const focused = pane === 'entries' && entryFocus === i;
                 return (
                   <button
                     key={e.id}
                     type="button"
-                    className={'codex-entry-row' + (openId === e.id ? ' active' : '')}
-                    onClick={() => unlocked && setOpenId(e.id)}
-                    disabled={!unlocked}
+                    ref={(el) => { entryRefs.current[i] = el; }}
+                    className={
+                      'codex-entry-row'
+                      + (openId === e.id ? ' active' : '')
+                      + (focused ? ' focused' : '')
+                    }
+                    onClick={() => { setPane('entries'); setEntryFocus(i); if (unlocked) setOpenId(e.id); }}
+                    onMouseEnter={() => { setPane('entries'); setEntryFocus(i); }}
                     aria-disabled={!unlocked}
                   >
                     <span className="codex-entry-title">
@@ -119,7 +193,13 @@ export function CodexScreen({ unlocked, onBack, newIds }: Props): JSX.Element {
           </div>
         </div>
 
-        <div style={{ marginTop: 14, textAlign: 'center' }}>
+        <div style={{ marginTop: 12, textAlign: 'center', fontSize: 10, letterSpacing: '0.18em', color: 'rgba(231,227,215,0.6)' }}>
+          <span>D-PAD / WASD navigate · </span>
+          <span>A / Enter open · </span>
+          <span>B / Esc back · </span>
+          <span>LB/RB or Q/R · chapter</span>
+        </div>
+        <div style={{ marginTop: 10, textAlign: 'center' }}>
           <PixelButton onClick={onBack}>Back</PixelButton>
         </div>
       </PixelPanel>

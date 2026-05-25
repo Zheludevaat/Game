@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PixelButton } from './PixelButton';
+import { useGamepadButtons } from './useGamepadButtons';
 
 interface Props {
   onContinue: () => void;
@@ -54,6 +55,13 @@ export function Prologue({ onContinue, onSkip }: Props): JSX.Element {
     else onContinue();
   };
   const prev = (): void => { if (page > 0) setPage(page - 1); };
+  useGamepadButtons({
+    onA: next,
+    onB: () => { if (page > 0) prev(); else onSkip(); },
+    onStart: onSkip,
+    onRight: next,
+    onLeft: prev,
+  });
 
   // Canvas backdrop — drifting lamps
   const canvasRef = useRef<HTMLCanvasElement | null>(null);

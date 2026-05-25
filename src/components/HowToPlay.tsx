@@ -1,7 +1,9 @@
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
+import { useGamepadButtons } from './useGamepadButtons';
 
 export function HowToPlay({ onBack }: { onBack: () => void }): JSX.Element {
+  useGamepadButtons({ onA: onBack, onB: onBack, onStart: onBack });
   return (
     <div className="menu-screen with-bg">
       <PixelPanel title="How to Play" subtitle="A guide for the Initiate" width={620}>
