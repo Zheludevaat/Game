@@ -9,7 +9,7 @@ import { RELICS, RELIC_IDS } from './data/relics';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
 import {
-  drawChest, drawEnemy, drawFloorTile, drawInitiate, drawShrine, drawStairs, drawTorch, drawWallTile,
+  drawChest, drawEnemy, drawFloorTile, drawInitiate, drawShrine, drawStairs, drawTorch, drawWallTile, getEnemySize,
 } from './rendering/PixelArt';
 import { InputManager } from './input/InputManager';
 import { audio } from './systems/AudioSystem';
@@ -620,9 +620,18 @@ export class GameEngine {
       p.pos.y += p.vel.y * dt;
     }
 
-    // Bounds
-    p.pos.x = clamp(p.pos.x, ROOM_MARGIN, ROOM_W - ROOM_MARGIN);
-    p.pos.y = clamp(p.pos.y, ROOM_MARGIN + 4, ROOM_H - ROOM_MARGIN);
+    // Bounds — let the player walk into the doorway gap when a door is open
+    const room = this.currentRoom;
+    const hostileBounds = (room.type === 'enemy' || room.type === 'miniBoss' || room.type === 'boss') && !room.cleared;
+    const dwHalf = 22;
+    const inXDoor = Math.abs(p.pos.x - ROOM_W / 2) < dwHalf;
+    const inYDoor = Math.abs(p.pos.y - ROOM_H / 2) < dwHalf;
+    const passL = room.doors.left  && !hostileBounds && inYDoor;
+    const passR = room.doors.right && !hostileBounds && inYDoor;
+    const passU = room.doors.up    && !hostileBounds && inXDoor;
+    const passD = room.doors.down  && !hostileBounds && inXDoor;
+    p.pos.x = clamp(p.pos.x, passL ? 2 : ROOM_MARGIN, passR ? ROOM_W - 2 : ROOM_W - ROOM_MARGIN);
+    p.pos.y = clamp(p.pos.y, passU ? 2 : ROOM_MARGIN + 4, passD ? ROOM_H - 2 : ROOM_H - ROOM_MARGIN);
 
     // Actions
     if (s.dashPressed && p.dashCooldown <= 0) {
@@ -1335,12 +1344,15 @@ export class GameEngine {
     // Block exits when room not cleared and is hostile
     const hostile = (cur.type === 'enemy' || cur.type === 'miniBoss' || cur.type === 'boss') && !cur.cleared;
     if (hostile) return;
-    const margin = 8;
+    const margin = 14;
+    const dwHalf = 22;
+    const inXDoor = Math.abs(p.x - ROOM_W / 2) < dwHalf;
+    const inYDoor = Math.abs(p.y - ROOM_H / 2) < dwHalf;
     let dirX = 0, dirY = 0;
-    if (cur.doors.left  && p.x < margin)            dirX = -1;
-    if (cur.doors.right && p.x > ROOM_W - margin)   dirX = 1;
-    if (cur.doors.up    && p.y < margin)            dirY = -1;
-    if (cur.doors.down  && p.y > ROOM_H - margin)   dirY = 1;
+    if (cur.doors.left  && p.x < margin            && inYDoor) dirX = -1;
+    if (cur.doors.right && p.x > ROOM_W - margin   && inYDoor) dirX = 1;
+    if (cur.doors.up    && p.y < margin            && inXDoor) dirY = -1;
+    if (cur.doors.down  && p.y > ROOM_H - margin   && inXDoor) dirY = 1;
     if (dirX === 0 && dirY === 0) return;
     const nx = cur.grid.x + dirX;
     const ny = cur.grid.y + dirY;
@@ -1682,8 +1694,11 @@ export class GameEngine {
 
   private drawEnemiesAll(): void {
     for (const e of this.enemies) {
-      const off = e.isBoss ? -16 : e.isMiniBoss ? -10 : -6;
-      drawEnemy(this.ctx, e.visualKey, e.pos.x - e.width / 2, e.pos.y + off, 2, e.flash, e.facing.x < 0);
+      const sz = getEnemySize(e.visualKey);
+      const scale = 2;
+      const dx = e.pos.x - (sz.w * scale) / 2;
+      const dy = e.pos.y - (sz.h * scale) + e.radius + 1;
+      drawEnemy(this.ctx, e.visualKey, dx, dy, scale, e.flash, e.facing.x < 0);
       // shadow
       this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
       this.ctx.fillRect(e.pos.x - e.radius, e.pos.y + e.radius - 1, e.radius * 2, 2);
@@ -1699,8 +1714,8 @@ export class GameEngine {
     const p = this.player;
     // shadow
     this.ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    this.ctx.fillRect(p.pos.x - 6, p.pos.y + 7, 12, 2);
-    drawInitiate(this.ctx, p.pos.x - 5, p.pos.y - 12, 1, p.facing, p.walkPhase, p.flash);
+    this.ctx.fillRect(p.pos.x - 6, p.pos.y + 3, 12, 2);
+    drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 14, 1, p.facing, p.walkPhase, p.flash);
     // melee swing
     if (p.attackTimer > 0) {
       const ctx = this.ctx;
