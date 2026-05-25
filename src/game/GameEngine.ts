@@ -1550,26 +1550,61 @@ export class GameEngine {
 
   private drawOccultCircle(cx: number, cy: number, r: number): void {
     const ctx = this.ctx;
+    const t = this.timeAlive;
     ctx.save();
-    ctx.strokeStyle = 'rgba(244, 210, 122, 0.35)';
+    // Faint halo behind the circle
+    const halo = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 1.4);
+    halo.addColorStop(0, 'rgba(108, 246, 229, 0.08)');
+    halo.addColorStop(1, 'rgba(108, 246, 229, 0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(cx - r * 1.5, cy - r * 1.5, r * 3, r * 3);
+
+    // Outer rotating ring of glyph marks
+    ctx.strokeStyle = `rgba(244, 210, 122, ${0.45 + Math.sin(t * 1.2) * 0.1})`;
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2); ctx.stroke();
-    // Pentagram-ish
-    ctx.strokeStyle = 'rgba(108, 246, 229, 0.25)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    // glyph ticks on the outer ring (rotate slowly)
+    ctx.fillStyle = 'rgba(244, 210, 122, 0.55)';
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + t * 0.18;
+      const gx = cx + Math.cos(a) * r;
+      const gy = cy + Math.sin(a) * r;
+      ctx.fillRect(gx - 1, gy - 1, 2, 2);
+    }
+
+    // Inner ring
+    ctx.strokeStyle = 'rgba(244, 210, 122, 0.35)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Pentagram — thicker and brighter
+    ctx.strokeStyle = `rgba(108, 246, 229, ${0.55 + Math.sin(t * 2) * 0.15})`;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
-      const x = cx + Math.cos(a) * r;
-      const y = cy + Math.sin(a) * r;
+      // 5-pointed star: step by 2/5 turns
+      const a = (((i * 2) % 5) / 5) * Math.PI * 2 - Math.PI / 2;
+      const x = cx + Math.cos(a) * r * 0.92;
+      const y = cy + Math.sin(a) * r * 0.92;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
     ctx.stroke();
-    // Centre rune
-    ctx.fillStyle = 'rgba(244, 210, 122, 0.4)';
-    ctx.fillRect(cx - 2, cy - 2, 4, 4);
+
+    // Centre rune — pulsing diamond
+    const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+    ctx.fillStyle = `rgba(244, 210, 122, ${0.4 + pulse * 0.4})`;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-3, -3, 6, 6);
+    ctx.restore();
+    ctx.fillStyle = `rgba(255, 230, 163, ${pulse})`;
+    ctx.fillRect(cx - 1, cy - 1, 2, 2);
     ctx.restore();
   }
 
@@ -1578,14 +1613,27 @@ export class GameEngine {
     const d = this.currentRoom.doors;
     const locked = (this.currentRoom.type === 'enemy' || this.currentRoom.type === 'miniBoss' || this.currentRoom.type === 'boss') && !this.currentRoom.cleared;
     const w = 56;
+    const pulse = 0.55 + 0.35 * Math.sin(this.timeAlive * 3);
     const drawDoor = (x: number, y: number, horiz: boolean): void => {
       if (locked) {
         // closed glyph stones
         ctx.fillStyle = PALETTE.wallDark;
         if (horiz) ctx.fillRect(x - w / 2, y - TILE / 2, w, TILE);
         else ctx.fillRect(x - TILE / 2, y - w / 2, TILE, w);
+        // ward sigils — three crimson studs
         ctx.fillStyle = PALETTE.crimson;
-        ctx.fillRect(x - 2, y - 2, 4, 4);
+        if (horiz) {
+          ctx.fillRect(x - 16, y - 2, 4, 4);
+          ctx.fillRect(x -  2, y - 2, 4, 4);
+          ctx.fillRect(x + 12, y - 2, 4, 4);
+        } else {
+          ctx.fillRect(x - 2, y - 16, 4, 4);
+          ctx.fillRect(x - 2, y -  2, 4, 4);
+          ctx.fillRect(x - 2, y + 12, 4, 4);
+        }
+        ctx.fillStyle = 'rgba(226, 58, 74, 0.35)';
+        if (horiz) ctx.fillRect(x - w / 2, y - 1, w, 2);
+        else ctx.fillRect(x - 1, y - w / 2, 2, w);
       } else {
         // Open doorway — dark archway
         ctx.fillStyle = '#000';
@@ -1596,10 +1644,25 @@ export class GameEngine {
         if (horiz) {
           ctx.fillRect(x - w / 2, y - 8, w, 2);
           ctx.fillRect(x - w / 2, y + 6, w, 2);
+          // capital studs
+          ctx.fillStyle = PALETTE.gold2;
+          ctx.fillRect(x - w / 2, y - 8, 2, 16);
+          ctx.fillRect(x + w / 2 - 2, y - 8, 2, 16);
         } else {
           ctx.fillRect(x - 8, y - w / 2, 2, w);
           ctx.fillRect(x + 6, y - w / 2, 2, w);
+          ctx.fillStyle = PALETTE.gold2;
+          ctx.fillRect(x - 8, y - w / 2, 16, 2);
+          ctx.fillRect(x - 8, y + w / 2 - 2, 16, 2);
         }
+        // Pulsing teal threshold glow — the "you can pass" cue
+        ctx.fillStyle = `rgba(108, 246, 229, ${0.18 * pulse})`;
+        if (horiz) ctx.fillRect(x - w / 2 + 2, y - 4, w - 4, 8);
+        else ctx.fillRect(x - 4, y - w / 2 + 2, 8, w - 4);
+        // bright sliver in the centre
+        ctx.fillStyle = `rgba(255, 247, 214, ${0.6 * pulse})`;
+        if (horiz) ctx.fillRect(x - 12, y - 1, 24, 2);
+        else ctx.fillRect(x - 1, y - 12, 2, 24);
       }
     };
     if (d.up)    drawDoor(ROOM_W / 2, 8, true);
@@ -1721,49 +1784,98 @@ export class GameEngine {
       const ctx = this.ctx;
       const fx = p.facing.x || 1, fy = p.facing.y;
       const a = Math.atan2(fy, fx);
+      const tNorm = p.attackTimer / 0.18; // 1 → 0 across the swing
+      const sweep = (1 - tNorm) * 1.6 - 0.8; // arc front edge sweeping forward
       ctx.save();
       ctx.translate(p.pos.x, p.pos.y);
       ctx.rotate(a);
-      ctx.fillStyle = `rgba(244, 210, 122, ${p.attackTimer / 0.18 * 0.85})`;
+      // Outer slash glow (wedge)
+      ctx.fillStyle = `rgba(244, 210, 122, ${tNorm * 0.35})`;
       ctx.beginPath();
-      ctx.moveTo(6, 0);
-      ctx.arc(6, 0, 18, -0.8, 0.8);
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, 26, sweep - 0.9, sweep + 0.2);
       ctx.closePath();
       ctx.fill();
+      // Inner bright streak
+      ctx.fillStyle = `rgba(255, 230, 163, ${tNorm * 0.85})`;
+      ctx.beginPath();
+      ctx.moveTo(6, 0);
+      ctx.arc(6, 0, 20, sweep - 0.5, sweep + 0.1);
+      ctx.closePath();
+      ctx.fill();
+      // Leading edge sparkline
+      ctx.strokeStyle = `rgba(255, 247, 214, ${tNorm})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, sweep - 0.05, sweep + 0.05);
+      ctx.stroke();
       ctx.restore();
     }
-    // iframe shimmer
-    if (p.iframes > 0 && Math.floor(this.timeAlive * 24) % 2 === 0) {
-      this.ctx.fillStyle = 'rgba(108,246,229,0.25)';
-      this.ctx.fillRect(p.pos.x - 6, p.pos.y - 12, 12, 18);
+    // iframe shimmer — outline pulse
+    if (p.iframes > 0 && Math.floor(this.timeAlive * 18) % 2 === 0) {
+      this.ctx.strokeStyle = 'rgba(108,246,229,0.65)';
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(p.pos.x - 7, p.pos.y - 14, 14, 18);
     }
   }
 
   private drawProjectiles(): void {
     const ctx = this.ctx;
     for (const pr of this.projectiles) {
+      const r = pr.radius;
+      const vx = pr.vel.x, vy = pr.vel.y;
+      const speed = Math.hypot(vx, vy) || 1;
+      // motion trail — 3 fading echoes behind
+      for (let i = 1; i <= 3; i++) {
+        const tx = pr.pos.x - (vx / speed) * i * (r + 1);
+        const ty = pr.pos.y - (vy / speed) * i * (r + 1);
+        ctx.fillStyle = pr.colour;
+        ctx.globalAlpha = 0.18 * (4 - i) / 3;
+        ctx.beginPath();
+        ctx.arc(tx, ty, r * (1 - i * 0.15), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      // outer halo
+      ctx.fillStyle = pr.colour;
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      ctx.arc(pr.pos.x, pr.pos.y, r * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // body
       ctx.fillStyle = pr.colour;
       ctx.beginPath();
-      ctx.arc(pr.pos.x, pr.pos.y, pr.radius, 0, Math.PI * 2);
+      ctx.arc(pr.pos.x, pr.pos.y, r, 0, Math.PI * 2);
       ctx.fill();
+      // hot core
       ctx.fillStyle = '#fff';
       ctx.beginPath();
-      ctx.arc(pr.pos.x, pr.pos.y, pr.radius * 0.4, 0, Math.PI * 2);
+      ctx.arc(pr.pos.x, pr.pos.y, r * 0.45, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
   private drawDamageNumbers(): void {
     const ctx = this.ctx;
-    ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const d of this.damageNumbers) {
       const a = Math.max(0, Math.min(1, d.life / d.maxLife));
-      ctx.globalAlpha = a;
-      ctx.fillStyle = '#000';
+      // Pop-in scale: 1.6 -> 1.0 over the first 30%, then steady
+      const tFromStart = 1 - a;
+      const scale = tFromStart < 0.3 ? 1.0 + (0.3 - tFromStart) * 2 : 1.0;
       const text = ((d as DamageNumber & { text?: string }).text ?? `${d.value}`);
+      const big = text.startsWith('-') || /^\d+$/.test(text);
+      const baseSize = big ? 11 : 9;
+      ctx.font = `bold ${Math.round(baseSize * scale)}px "Iowan Old Style","Georgia",serif`;
+      ctx.globalAlpha = a;
+      // soft halo
+      ctx.fillStyle = 'rgba(0,0,0,0.85)';
       ctx.fillText(text, Math.round(d.x) + 1, Math.round(d.y) + 1);
+      ctx.fillText(text, Math.round(d.x) - 1, Math.round(d.y) + 1);
+      ctx.fillText(text, Math.round(d.x) + 1, Math.round(d.y) - 1);
+      ctx.fillText(text, Math.round(d.x) - 1, Math.round(d.y) - 1);
       ctx.fillStyle = d.colour;
       ctx.fillText(text, Math.round(d.x), Math.round(d.y));
     }
