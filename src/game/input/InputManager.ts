@@ -99,7 +99,17 @@ export class InputManager {
     try { localStorage.setItem(STORAGE_KEYS.gamepadMap, JSON.stringify(m)); } catch { /* */ }
   }
 
-  resetMapping(): void { this.setMapping({ ...DEFAULT_GAMEPAD_MAP }); }
+  /** Restore the default Xbox-style binding AND clear the "user
+   * customised" flag, so the next time a Nintendo pad connects the
+   * auto-Switch preset can apply itself. */
+  resetMapping(): void {
+    this.mapping = { ...DEFAULT_GAMEPAD_MAP };
+    this.mappingIsCustom = false;
+    try { localStorage.removeItem(STORAGE_KEYS.gamepadMap); } catch { /* */ }
+    // If a pad is already connected, re-apply the matching preset right
+    // now (Switch → swap; otherwise stays Xbox default).
+    if (this.gamepadInfo.connected) this.maybeApplyControllerPreset(this.gamepadInfo.id);
+  }
 
   private loadMapping(): void {
     try {

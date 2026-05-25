@@ -6,7 +6,7 @@ export interface MenuItem {
   disabled?: boolean;
 }
 
-export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; horizontal?: boolean }): number {
+export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; horizontal?: boolean; enabled?: boolean }): number {
   const [focused, setFocused] = useState(0);
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
@@ -29,6 +29,7 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
       });
     };
     const onKey = (e: KeyboardEvent): void => {
+      if (optsRef.current?.enabled === false) return;
       const horiz = !!optsRef.current?.horizontal;
       if (e.code === 'ArrowDown' || (!horiz && e.code === 'KeyS')) { move(1); e.preventDefault(); }
       else if (e.code === 'ArrowUp' || (!horiz && e.code === 'KeyW')) { move(-1); e.preventDefault(); }
@@ -51,6 +52,7 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
     const prevPressed: Record<number, boolean> = {};
     let firstTick = true;
     const tick = (): void => {
+      if (optsRef.current?.enabled === false) { raf = requestAnimationFrame(tick); return; }
       const pads = navigator.getGamepads?.() ?? [];
       let pad: Gamepad | null = null;
       for (const p of pads) if (p) { pad = p; break; }

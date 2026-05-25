@@ -29,12 +29,13 @@ export interface GamepadButtonHandlers {
   onRight?: () => void;
 }
 
-export function useGamepadButtons(handlers: GamepadButtonHandlers): void {
+export function useGamepadButtons(handlers: GamepadButtonHandlers & { enabled?: boolean }): void {
   const ref = useRef(handlers);
   ref.current = handlers;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      if (ref.current.enabled === false) return;
       const h = ref.current;
       if (e.code === 'Escape') { h.onB?.(); }
       else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyJ') { h.onA?.(); }
@@ -55,6 +56,7 @@ export function useGamepadButtons(handlers: GamepadButtonHandlers): void {
     const prevAxis = { up: false, down: false, left: false, right: false };
     let firstTick = true;
     const tick = (): void => {
+      if (ref.current.enabled === false) { raf = requestAnimationFrame(tick); return; }
       const pads = navigator.getGamepads?.() ?? [];
       let pad: Gamepad | null = null;
       for (const p of pads) if (p) { pad = p; break; }

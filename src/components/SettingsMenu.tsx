@@ -9,6 +9,7 @@ interface Props {
   settings: SettingsState;
   onChange: (s: SettingsState) => void;
   onResetSave: () => void;
+  onResetPad: () => void;
   onBack: () => void;
 }
 
@@ -28,7 +29,7 @@ interface RowDef {
 
 const PIXEL_SCALE_OPTIONS = ['auto', '1', '2', '3', '4'];
 
-export function SettingsMenu({ settings, onChange, onResetSave, onBack }: Props): JSX.Element {
+export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBack }: Props): JSX.Element {
   const [confirm, setConfirm] = useState(false);
   const [remapping, setRemapping] = useState<GamepadAction | null>(null);
   const set = <K extends keyof SettingsState>(key: K, val: SettingsState[K]): void => {
@@ -47,6 +48,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onBack }: Props)
       kind: 'remap' as const,
       action,
     })),
+    { id: 'resetPad', label: 'Reset Pad Bindings to Default', kind: 'button' },
     { id: 'resetSave', label: confirm ? 'Confirm Reset' : 'Reset Save Data', kind: 'button' },
     ...(confirm ? [{ id: 'cancelReset', label: 'Cancel', kind: 'button' as const }] : []),
     { id: 'back', label: 'Back', kind: 'button' },
@@ -101,6 +103,10 @@ export function SettingsMenu({ settings, onChange, onResetSave, onBack }: Props)
         if (!confirm) setConfirm(true);
         else { setConfirm(false); onResetSave(); }
       } else if (row.id === 'cancelReset') setConfirm(false);
+      else if (row.id === 'resetPad') {
+        onChange({ ...settings, gamepadMap: { ...DEFAULT_GAMEPAD_MAP } });
+        onResetPad();
+      }
     }
   };
 
@@ -206,6 +212,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onBack }: Props)
             if (row.id === 'back') onBack();
             else if (row.id === 'resetSave') { if (!confirm) setConfirm(true); else { setConfirm(false); onResetSave(); } }
             else if (row.id === 'cancelReset') setConfirm(false);
+            else if (row.id === 'resetPad') { onChange({ ...settings, gamepadMap: { ...DEFAULT_GAMEPAD_MAP } }); onResetPad(); }
           }}
           focused={focused}
         >

@@ -21,6 +21,7 @@ import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
 import { ArchetypeId, MetaState, SettingsState } from './game/GameTypes';
 import { MapOverlay } from './components/MapOverlay';
 import { CodexScreen } from './components/CodexScreen';
+import { CinematicsScreen } from './components/CinematicsScreen';
 import { Prologue } from './components/Prologue';
 import { Epilogue } from './components/Epilogue';
 import { CODEX } from './game/data/codex';
@@ -28,7 +29,7 @@ import { CODEX } from './game/data/codex';
 type Screen =
   | 'loading' | 'menu' | 'archetype' | 'game' | 'pause' | 'settings'
   | 'controllerTest' | 'howTo' | 'gameOver' | 'meta' | 'map'
-  | 'codex' | 'prologue' | 'epilogue';
+  | 'codex' | 'prologue' | 'epilogue' | 'cinematics';
 
 export function App(): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -63,6 +64,11 @@ export function App(): JSX.Element {
   useEffect(() => { saveSettings(settings); }, [settings]);
   useEffect(() => { audio.setMusicVolume(settings.musicVolume); }, [settings.musicVolume]);
   useEffect(() => { audio.setSfxVolume(settings.sfxVolume); }, [settings.sfxVolume]);
+  // Keep the InputManager's gamepad mapping in sync with the SettingsMenu —
+  // otherwise the remap UI changes nothing.
+  useEffect(() => {
+    inputRef.current?.setMapping(settings.gamepadMap);
+  }, [settings.gamepadMap]);
   useEffect(() => { saveMeta(meta); }, [meta]);
   useEffect(() => { saveEssence(essence); }, [essence]);
   useEffect(() => { saveBestFloor(bestFloor); }, [bestFloor]);
@@ -210,7 +216,7 @@ export function App(): JSX.Element {
     engine.setPaused(
       screen === 'pause' || screen === 'settings' || screen === 'controllerTest'
       || screen === 'map' || screen === 'gameOver'
-      || screen === 'codex' || screen === 'epilogue'
+      || screen === 'codex' || screen === 'epilogue' || screen === 'cinematics'
     );
   }, [screen]);
 
@@ -268,6 +274,7 @@ export function App(): JSX.Element {
           codexUnlocked={meta.unlockedCodex.length}
           codexTotal={CODEX.length}
           onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
+          onCinematics={() => setScreen('cinematics')}
           onNewRun={() => {
             if (!meta.seenPrologue) {
               setScreen('prologue');
@@ -327,6 +334,7 @@ export function App(): JSX.Element {
           settings={settings}
           onChange={setSettings}
           onResetSave={onResetSave}
+          onResetPad={() => inputRef.current?.resetMapping()}
           onBack={() => setScreen(previousScreen)}
         />
       )}
@@ -394,6 +402,10 @@ export function App(): JSX.Element {
           ogdoadCount={meta.ogdoadReached || 1}
           onContinue={() => setScreen(previousScreen === 'game' ? 'game' : 'menu')}
         />
+      )}
+
+      {screen === 'cinematics' && (
+        <CinematicsScreen onBack={() => setScreen('menu')} />
       )}
 
       {isPortrait && <RotateDeviceOverlay />}

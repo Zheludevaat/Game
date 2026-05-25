@@ -431,6 +431,73 @@
   outline: none;
 }
 
+/* ──────────────  Cutscenes ────────────── */
+.cutscene-chapter {
+  position: absolute;
+  top: calc(20px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  color: var(--gold-1);
+  text-shadow: 0 0 10px rgba(244, 210, 122, 0.4);
+}
+.cutscene-card {
+  /* Slightly tighter card than the prologue's so backdrops breathe */
+  max-width: 760px;
+  width: clamp(280px, 78vw, 760px);
+}
+
+/* ──────────────  Cinematics list ────────────── */
+.cinematics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cinematics-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(20, 12, 38, 0.6);
+  border: 1px solid transparent;
+  border-left: 3px solid var(--gold-3);
+  color: var(--bone);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.cinematics-row:hover { background: rgba(40, 22, 70, 0.7); transform: translateX(2px); }
+.cinematics-row.focused {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+  box-shadow: 0 0 14px rgba(108, 246, 229, 0.3);
+}
+.cinematics-row-main { flex: 1; min-width: 0; }
+.cinematics-row-title {
+  font-family: 'Iowan Old Style', 'Georgia', serif;
+  font-size: 16px;
+  color: var(--gold-1);
+  letter-spacing: 0.04em;
+}
+.cinematics-row-sub {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--teal);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.cinematics-row-meta {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: rgba(244, 210, 122, 0.7);
+  text-transform: uppercase;
+}
+
 .rotate-overlay {
   position: absolute;
   inset: 0;

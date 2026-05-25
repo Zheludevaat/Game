@@ -15,6 +15,7 @@ interface Props {
   onController: () => void;
   onHowTo: () => void;
   onCodex: () => void;
+  onCinematics: () => void;
 }
 
 export function MainMenu(p: Props): JSX.Element {
@@ -114,6 +115,7 @@ export function MainMenu(p: Props): JSX.Element {
     { onActivate: p.onNewRun },
     { onActivate: p.resumeAvailable ? p.onContinue : () => undefined, disabled: !p.resumeAvailable },
     { onActivate: p.onCodex },
+    { onActivate: p.onCinematics },
     { onActivate: p.onMeta },
     { onActivate: p.onSettings },
     { onActivate: p.onController },
@@ -139,12 +141,15 @@ export function MainMenu(p: Props): JSX.Element {
           <PixelButton onClick={p.onCodex} focused={focus === 2} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
             Codex Hermeticum
           </PixelButton>
-          <PixelButton onClick={p.onMeta} focused={focus === 3} badge={`✦ ${p.essence}`}>
+          <PixelButton onClick={p.onCinematics} focused={focus === 3} badge="▶">
+            Cinematics
+          </PixelButton>
+          <PixelButton onClick={p.onMeta} focused={focus === 4} badge={`✦ ${p.essence}`}>
             Meta Progression
           </PixelButton>
-          <PixelButton onClick={p.onSettings} focused={focus === 4}>Settings</PixelButton>
-          <PixelButton onClick={p.onController} focused={focus === 5}>Controller Test</PixelButton>
-          <PixelButton onClick={p.onHowTo} focused={focus === 6}>How to Play</PixelButton>
+          <PixelButton onClick={p.onSettings} focused={focus === 5}>Settings</PixelButton>
+          <PixelButton onClick={p.onController} focused={focus === 6}>Controller Test</PixelButton>
+          <PixelButton onClick={p.onHowTo} focused={focus === 7}>How to Play</PixelButton>
         </div>
         <div style={{ marginTop: 24, fontSize: 11, letterSpacing: '0.3em', color: 'var(--teal)' }}>
           Best Floor: <span className="gold-text">{p.bestFloor}</span> &nbsp;·&nbsp; Essence: <span className="gold-text">{p.essence}</span>
