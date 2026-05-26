@@ -64,6 +64,9 @@ export interface EngineCallbacks {
   onCodexUnlock: (id: string) => void;
   /** The player reached the Eighth Sphere for the first time this run. */
   onOgdoadReached: () => void;
+  /** Player entered a boss room for the first time this run. Host plays the
+   * sphere's boss-intro film, then resumes the game. */
+  onBossRoomEntered?: (sphereId: string) => void;
 }
 
 export interface RunSummary {
@@ -266,6 +269,9 @@ export class GameEngine {
   private bossBannerTimer = 0;
   private roomClearEffects: RoomClearEffect[] = [];
   private bossSnapshot: { hp: number; maxHp: number; name: string } | null = null;
+  // Set to true the first time the player enters this run's boss room.
+  // Stays true across deaths inside the same run; reset on a new run.
+  private bossIntroPlayedThisRun = false;
   private pendingShrine: { kind: ShrineKind; name: string; effect: string; downside: string } | null = null;
   private damageNumbers: DamageNumber[] = [];
   private timeAlive = 0;
@@ -304,6 +310,7 @@ export class GameEngine {
     this.summary.roomsCleared = 0;
     this.summary.enemiesDefeated = 0;
     this.summary.bossesDefeated = 0;
+    this.bossIntroPlayedThisRun = false;
     this.summary.essenceCollected = 0;
     this.summary.coinsCollected = 0;
     this.summary.relicsFound = [];
@@ -580,6 +587,14 @@ export class GameEngine {
       this.bossBannerTimer = 2.2;
       this.camera.shakeT = 0.8;
       this.camera.shakeMag = 5;
+      // First time this run that we step into THIS sphere's boss room,
+      // ask the host to play the cinematic. The host decides whether to
+      // actually play (gated on MetaState.bossesSeen + settings).
+      if (!this.bossIntroPlayedThisRun) {
+        this.bossIntroPlayedThisRun = true;
+        const sphere = sphereForFloor(this.floor.number);
+        this.cbs.onBossRoomEntered?.(sphere.id);
+      }
     }
   }
 

@@ -543,6 +543,12 @@
   outline-offset: -2px;
   box-shadow: 0 0 14px rgba(108, 246, 229, 0.3);
 }
+.cinematics-row.locked {
+  cursor: default;
+  opacity: 0.45;
+  font-style: italic;
+}
+.cinematics-row.locked:hover { background: rgba(20, 12, 38, 0.6); transform: none; }
 .cinematics-row-main { flex: 1; min-width: 0; }
 .cinematics-row-title {
   font-family: 'Iowan Old Style', 'Georgia', serif;

@@ -184,7 +184,10 @@ export interface MetaState {
   cosmeticLampAura: boolean;
   // Persistent narrative state
   unlockedCodex: string[];
-  seenPrologue: boolean;
+  seenPrologue: boolean;          // doubles as "has seen the Tabula film at boot"
+  seenNewRunCinematic: boolean;   // "has seen The Gate Opens"
+  bossesSeen: string[];           // sphere ids whose Warden intro film has played
+  seenEnding: boolean;            // "has seen the Eighth Sphere film"
   ogdoadReached: number; // count of times the player has reached the Eighth Sphere
 }
 

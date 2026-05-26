@@ -24,12 +24,22 @@ import { CodexScreen } from './components/CodexScreen';
 import { CinematicsScreen } from './components/CinematicsScreen';
 import { Prologue } from './components/Prologue';
 import { Epilogue } from './components/Epilogue';
+import { CinematicShort } from './components/CinematicShort';
 import { CODEX } from './game/data/codex';
+import { TABULA_CINEMATIC } from './game/data/cinematicTabula';
+import { NEW_GAME_CINEMATIC } from './game/data/cinematicNewGame';
+import { bossIntroShots } from './game/data/cinematicBossIntro';
+import { ENDING_CINEMATIC } from './game/data/cinematicEnding';
+import { SPHERE_BY_ID, SphereId } from './game/data/spheres';
 
 type Screen =
   | 'loading' | 'menu' | 'archetype' | 'game' | 'pause' | 'settings'
   | 'controllerTest' | 'howTo' | 'gameOver' | 'meta' | 'map'
-  | 'codex' | 'prologue' | 'epilogue' | 'cinematics';
+  | 'codex' | 'prologue' | 'epilogue' | 'cinematics'
+  | 'tabula'        // opening film (replaces card Prologue as default)
+  | 'newRunIntro'   // "The Gate Opens" between archetype select and game
+  | 'bossIntro'     // sphere-specific Warden manifest film
+  | 'ending';       // "The Eighth Sphere" climactic ending film
 
 export function App(): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -53,11 +63,22 @@ export function App(): JSX.Element {
     return window.matchMedia('(hover: none) and (pointer: coarse)').matches
       || ('ontouchstart' in window);
   });
+  // Which Warden's intro film is queued, if any. App routes to 'bossIntro'
+  // when this is set, then back to 'game' on completion.
+  const [pendingBossIntro, setPendingBossIntro] = useState<string | null>(null);
+  // Archetype + run options stashed when a new-run cinematic is queued.
+  const [pendingRunStart, setPendingRunStart] = useState<{ id: ArchetypeId; floor?: number; runSeed?: number } | null>(null);
 
   // --- Loading screen timer ---
+  // First-load goes through the Tabula opening film instead of straight to
+  // the menu. Subsequent loads (after the player has seen it once) skip
+  // ahead. The film is replayable from the Cinematics gallery.
   useEffect(() => {
-    const t = setTimeout(() => setScreen('menu'), 1400);
+    const t = setTimeout(() => {
+      setScreen(meta.seenPrologue ? 'menu' : 'tabula');
+    }, 1400);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- Persist settings ---
@@ -143,6 +164,15 @@ export function App(): JSX.Element {
     saveLastArchetype(archetypeId);
     setLastArchetype(archetypeId);
     setSummary(null);
+    // First time ever: gate through "The Gate Opens" cinematic, then
+    // resume into the actual run on its onDone. Resume flow (opts.floor
+    // > 1) skips the cinematic — that's a continuation, not a new run.
+    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1;
+    if (isFirstRun) {
+      setPendingRunStart({ id: archetypeId, floor: opts?.floor, runSeed: opts?.runSeed });
+      setScreen('newRunIntro');
+      return;
+    }
     setScreen('game');
     // Persist a resume entry — used by Continue button next time
     const runSeed = opts?.runSeed ?? Math.floor(Math.random() * 0xffffffff);
@@ -182,10 +212,18 @@ export function App(): JSX.Element {
         },
         onOgdoadReached: () => {
           setMeta((m) => ({ ...m, ogdoadReached: (m.ogdoadReached ?? 0) + 1 }));
-          // Pause the run and show the climactic epilogue. The player can
-          // continue descending after dismissing it.
+          // First time reaching the Ogdoad: the climactic Ending film.
+          // Subsequent times (replays of the same achievement): the card
+          // Epilogue, which is shorter and resumable.
           setPreviousScreen('game');
-          setScreen('epilogue');
+          setScreen(meta.seenEnding ? 'epilogue' : 'ending');
+        },
+        onBossRoomEntered: (sphereId: string) => {
+          // Already seen this sphere's intro across runs? skip.
+          if (meta.bossesSeen?.includes(sphereId)) return;
+          setPendingBossIntro(sphereId);
+          setPreviousScreen('game');
+          setScreen('bossIntro');
         },
       });
       engineRef.current = engine;
@@ -217,6 +255,8 @@ export function App(): JSX.Element {
       screen === 'pause' || screen === 'settings' || screen === 'controllerTest'
       || screen === 'map' || screen === 'gameOver'
       || screen === 'codex' || screen === 'epilogue' || screen === 'cinematics'
+      || screen === 'tabula' || screen === 'newRunIntro' || screen === 'bossIntro'
+      || screen === 'ending'
     );
   }, [screen]);
 
@@ -275,13 +315,7 @@ export function App(): JSX.Element {
           codexTotal={CODEX.length}
           onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
           onCinematics={() => setScreen('cinematics')}
-          onNewRun={() => {
-            if (!meta.seenPrologue) {
-              setScreen('prologue');
-            } else {
-              setScreen('archetype');
-            }
-          }}
+          onNewRun={() => setScreen('archetype')}
           onContinue={() => {
             const r = loadResume();
             if (!r) { setScreen('archetype'); return; }
@@ -405,8 +439,62 @@ export function App(): JSX.Element {
       )}
 
       {screen === 'cinematics' && (
-        <CinematicsScreen onBack={() => setScreen('menu')} />
+        <CinematicsScreen onBack={() => setScreen('menu')} endingUnlocked={meta.seenEnding} />
       )}
+
+      {screen === 'tabula' && (
+        <CinematicShort
+          shots={TABULA_CINEMATIC}
+          title="I — OPENING"
+          onDone={() => {
+            setMeta((m) => ({ ...m, seenPrologue: true }));
+            setScreen('menu');
+          }}
+        />
+      )}
+
+      {screen === 'ending' && (
+        <CinematicShort
+          shots={ENDING_CINEMATIC}
+          title="VIII — THE OGDOAD"
+          onDone={() => {
+            setMeta((m) => ({ ...m, seenEnding: true }));
+            setScreen(previousScreen === 'game' ? 'game' : 'menu');
+          }}
+        />
+      )}
+
+      {screen === 'newRunIntro' && pendingRunStart && (
+        <CinematicShort
+          shots={NEW_GAME_CINEMATIC}
+          title="II — THE DESCENT BEGINS"
+          onDone={() => {
+            setMeta((m) => ({ ...m, seenNewRunCinematic: true }));
+            const run = pendingRunStart;
+            setPendingRunStart(null);
+            startRun(run.id, { floor: run.floor, runSeed: run.runSeed });
+          }}
+        />
+      )}
+
+      {screen === 'bossIntro' && pendingBossIntro && (() => {
+        const sphereId = pendingBossIntro as SphereId;
+        const sphere = SPHERE_BY_ID[sphereId];
+        return (
+          <CinematicShort
+            shots={bossIntroShots(sphereId)}
+            title={`${sphere.numeral} — ${sphere.name.toUpperCase()}`}
+            onDone={() => {
+              setPendingBossIntro(null);
+              setMeta((m) => ({
+                ...m,
+                bossesSeen: m.bossesSeen?.includes(sphereId) ? m.bossesSeen : [...(m.bossesSeen ?? []), sphereId],
+              }));
+              setScreen('game');
+            }}
+          />
+        );
+      })()}
 
       {isPortrait && <RotateDeviceOverlay />}
     </>

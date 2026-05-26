@@ -150,7 +150,7 @@ function shotFracture(a: ShotArgs): void {
 
 // ─── SHOT 3 — Seven rings draw outward; lamps ignite ────────────────
 
-const SPHERE_COLOURS = [
+export const SPHERE_COLOURS = [
   { ring: '#cdd6dc', lamp: '#ffe6a3' },
   { ring: '#6cf6e5', lamp: '#a4faf0' },
   { ring: '#ff9bc1', lamp: '#ffd0e3' },

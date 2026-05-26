@@ -18,6 +18,9 @@ const DEFAULT_META: MetaState = {
   cosmeticLampAura: false,
   unlockedCodex: [],
   seenPrologue: false,
+  seenNewRunCinematic: false,
+  bossesSeen: [],
+  seenEnding: false,
   ogdoadReached: 0,
 };
 
@@ -63,6 +66,7 @@ export function loadMeta(): MetaState {
       ...DEFAULT_META,
       ...parsed,
       unlockedCodex: Array.isArray(parsed.unlockedCodex) ? parsed.unlockedCodex : [],
+      bossesSeen: Array.isArray(parsed.bossesSeen) ? parsed.bossesSeen : [],
     };
   } catch { return { ...DEFAULT_META }; }
 }
