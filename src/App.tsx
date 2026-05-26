@@ -137,6 +137,37 @@ export function App(): JSX.Element {
     };
   }, []);
 
+  // --- iOS audio context recovery + auto-pause on background ---
+  // iOS Safari and standalone PWAs suspend the AudioContext on app
+  // switch / lock; the drone + SFX fall silent on return. Re-resuming
+  // on visibilitychange + pageshow restores audio without the user
+  // having to tap something first. We also auto-pause the live run
+  // when the tab goes hidden — the player coming back to a dead
+  // character from a phone call is a felony-level frustration.
+  useEffect(() => {
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') audio.resume();
+    };
+    const onHidden = (): void => {
+      // Only pause if a run is actually live.
+      if (document.visibilityState === 'hidden' && engineRef.current && screen === 'game') {
+        setScreen('pause');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    document.addEventListener('visibilitychange', onHidden);
+    window.addEventListener('pageshow', onVisible);
+    window.addEventListener('focus', onVisible);
+    window.addEventListener('blur', onHidden);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('visibilitychange', onHidden);
+      window.removeEventListener('pageshow', onVisible);
+      window.removeEventListener('focus', onVisible);
+      window.removeEventListener('blur', onHidden);
+    };
+  }, [screen]);
+
   // --- Canvas DPR resize ---
   useEffect(() => {
     const onResize = (): void => {
@@ -151,16 +182,26 @@ export function App(): JSX.Element {
         canvas.height = h;
       }
     };
+    // iOS Safari sometimes reports stale viewport rects during the
+    // orientationchange event itself; the real layout settles a few
+    // frames later. Double-rAF after the event catches the new size.
+    const onRotate = (): void => {
+      onResize();
+      requestAnimationFrame(() => {
+        onResize();
+        requestAnimationFrame(onResize);
+      });
+    };
     onResize();
     window.addEventListener('resize', onResize);
-    window.addEventListener('orientationchange', onResize);
+    window.addEventListener('orientationchange', onRotate);
     // iOS Safari fires this when the URL bar slides — without it the
     // canvas keeps its old dimensions and the game shrinks/clips.
     window.visualViewport?.addEventListener('resize', onResize);
     window.visualViewport?.addEventListener('scroll', onResize);
     return () => {
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
+      window.removeEventListener('orientationchange', onRotate);
       window.visualViewport?.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('scroll', onResize);
     };
@@ -286,18 +327,21 @@ export function App(): JSX.Element {
     setHud(null);
   }, []);
 
-  // Pause behaviour
+  // Pause behaviour. Includes the rotate-device overlay — if the player
+  // tilts back to portrait mid-fight, freeze the world so they don't
+  // come back to a dead character.
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
     engine.setPaused(
-      screen === 'pause' || screen === 'settings' || screen === 'controllerTest'
+      isPortrait
+      || screen === 'pause' || screen === 'settings' || screen === 'controllerTest'
       || screen === 'map' || screen === 'gameOver'
       || screen === 'codex' || screen === 'epilogue' || screen === 'cinematics'
       || screen === 'tabula' || screen === 'newRunIntro' || screen === 'bossIntro'
       || screen === 'ending'
     );
-  }, [screen]);
+  }, [screen, isPortrait]);
 
   // Reduced particles toggle should propagate live
   useEffect(() => {

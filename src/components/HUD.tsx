@@ -10,7 +10,10 @@ interface Props { hud: HudSnapshot; input?: InputManager | null }
 export function HUD({ hud, input }: Props): JSX.Element {
   // Always-visible "pause" affordance — so a player whose Bluetooth
   // controller has a non-firing Start button can still reach the menu.
+  // Hidden on touch devices since TouchControls renders its own dedicated
+  // top-centre pause; showing two pause buttons confuses the eye.
   const onPauseTap = (): void => { input?.setTouchButton('pause', true); setTimeout(() => input?.setTouchButton('pause', false), 30); };
+  const isTouch = hud.inputMethod === 'touch';
   const hpFrac = hud.maxHp > 0 ? hud.hp / hud.maxHp : 0;
   const mpFrac = hud.maxMp > 0 ? hud.mp / hud.maxMp : 0;
   const bossFrac = hud.bossMaxHp ? Math.max(0, (hud.bossHp ?? 0) / hud.bossMaxHp) : 0;
@@ -39,14 +42,15 @@ export function HUD({ hud, input }: Props): JSX.Element {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
           <RunTimer seconds={hud.runTimer} />
           {hud.combo >= 2 && <ComboTag count={hud.combo} pulse={hud.comboPulse} />}
-          <button
-            type="button"
-            className="hud-pause-btn"
-            aria-label="Pause"
-            title="Pause"
-            onClick={onPauseTap}
-            onTouchStart={(e) => { e.preventDefault(); onPauseTap(); }}
-          >☰</button>
+          {!isTouch && (
+            <button
+              type="button"
+              className="hud-pause-btn"
+              aria-label="Pause"
+              title="Pause"
+              onPointerDown={(e) => { e.preventDefault(); onPauseTap(); }}
+            >☰</button>
+          )}
           <div style={{ letterSpacing: '0.3em', color: 'var(--gold-1)' }}>
             {hud.sphereGlyph} Floor {hud.floor}
           </div>

@@ -68,6 +68,17 @@ export class AudioSystem {
     }
   }
 
+  /** Best-effort context resume — call when the page becomes visible
+   *  again. iOS Safari + standalone PWAs suspend the AudioContext when
+   *  the user switches apps; without this nudge the menu drone + SFX
+   *  fall silent until the next pointerdown. */
+  resume(): void {
+    if (!this.unlocked || !this.ctx) return;
+    if (this.ctx.state === 'suspended') {
+      void this.ctx.resume();
+    }
+  }
+
   setMusicVolume(v: number): void {
     this.musicVolume = Math.max(0, Math.min(1, v));
     if (this.musicGain) this.musicGain.gain.value = this.musicVolume;

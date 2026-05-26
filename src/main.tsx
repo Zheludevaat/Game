@@ -33,6 +33,26 @@ document.addEventListener('touchmove', (e) => {
 
 // Block gesture (pinch-to-zoom) and double-tap zoom on iOS.
 document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('gesturechange', (e) => e.preventDefault());
+document.addEventListener('gestureend', (e) => e.preventDefault());
+
+// iOS Safari fires `dblclick` after a fast double-tap on any element
+// even with viewport user-scalable=no; explicit suppression is the only
+// fully-reliable shield. The game itself never uses dblclick events.
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+
+// Selection menu can pop up on long-press of canvas / buttons on older
+// iOS. Suppress globally — the game has no text the player should select.
+document.addEventListener('selectstart', (e) => {
+  const t = e.target as HTMLElement | null;
+  // Allow selection inside scroll panes that might contain copyable text.
+  if (t && t.closest('[data-allow-select]')) return;
+  e.preventDefault();
+}, { passive: false });
+
+// Prevent the iOS Safari context menu on long-press of buttons. The
+// passive: false flag lets us actually cancel.
+document.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
 root.render(
