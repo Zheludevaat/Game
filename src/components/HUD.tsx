@@ -71,9 +71,17 @@ export function HUD({ hud, input }: Props): JSX.Element {
       </div>
 
       <div className="hud-bottom-left">
-        <span className="input-method-pill">
-          {hud.inputMethod === 'controller' ? '🎮' : hud.inputMethod === 'keyboard' ? '⌨' : '👆'} {hud.inputMethod.toUpperCase()}
-        </span>
+        {(() => {
+          // Display the active controller as soon as we know one is in
+          // use — not just when inputMethod has flipped. iPad players
+          // pair a pad, get into the run, and previously kept seeing
+          // "TOUCH" until the first button press; now the pill flips
+          // the moment any pad input is observed.
+          const showAsController = hud.controllerActive || hud.inputMethod === 'controller';
+          const icon = showAsController ? '🎮' : hud.inputMethod === 'keyboard' ? '⌨' : '👆';
+          const label = showAsController ? 'CONTROLLER' : hud.inputMethod.toUpperCase();
+          return <span className="input-method-pill">{icon} {label}</span>;
+        })()}
         {hud.gamepadConnected && (
           <div style={{ fontSize: 9, marginTop: 4, color: 'var(--teal)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {hud.gamepadName || 'Controller connected'}

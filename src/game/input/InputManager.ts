@@ -70,6 +70,16 @@ export class InputManager {
 
   private method: InputMethod = 'keyboard';
   private onMethodChange?: (m: InputMethod) => void;
+  /** Wall-clock time (engine timeAlive proxy via performance.now) the
+   *  pad last produced input. Used to keep `method='controller'` sticky
+   *  on iPad — accidental touch / pause-button taps no longer flip the
+   *  input method back to "touch" within ~2 s of pad activity. */
+  private lastControllerActivityMs = 0;
+  /** True once any pad button or stick movement has been seen this
+   *  session. iPad Safari hides connected pads from navigator.getGamepads
+   *  until first user interaction with the pad; this flag lets the HUD
+   *  show "CONTROLLER" the moment we know one is actually live. */
+  private padHasBeenUsed = false;
 
   state: InputState = this.blankState();
 
@@ -187,13 +197,32 @@ export class InputManager {
   setTouchAxes(x: number, y: number): void {
     this.touchAxes.x = x;
     this.touchAxes.y = y;
-    if (Math.hypot(x, y) > 0.05) this.setMethod('touch');
+    // Don't flip the input method to "touch" if the controller has been
+    // active in the last 2 s. iPad players with a paired pad shouldn't
+    // see touch overlays summoned by an accidental screen brush.
+    if (Math.hypot(x, y) > 0.05 && !this.controllerRecentlyActive()) {
+      this.setMethod('touch');
+    }
   }
   setTouchButton(name: string, down: boolean): void {
     if (down && !this.touchButtons[name]) this.touchPressedThisFrame[name] = true;
     this.touchButtons[name] = down;
-    if (down) this.setMethod('touch');
+    if (down && !this.controllerRecentlyActive()) this.setMethod('touch');
   }
+
+  /** True if the controller has produced input within the stickiness
+   *  window. Used to suppress touch-method flips that would otherwise
+   *  fire on accidental screen contact (HUD pause button, palm rest,
+   *  etc.) on iPad / iPadOS Safari. */
+  private controllerRecentlyActive(): boolean {
+    if (!this.padHasBeenUsed) return false;
+    return performance.now() - this.lastControllerActivityMs < 2000;
+  }
+
+  /** True the instant any pad has been seen with input this session.
+   *  HUD reads this so an iPad player with a connected pad sees the
+   *  "controller" pill even before the first button-edge fires. */
+  hasControllerBeenUsed(): boolean { return this.padHasBeenUsed; }
 
   // --- Tick ---
   tick(): void {
@@ -382,11 +411,25 @@ export class InputManager {
     for (let i = 0; i < pressed.length; i++) {
       if (pressed[i] && !this.prevPadButtons[i]) anyEdge = true;
     }
+    // Also catch buttons that are HELD past the first frame so iPad
+    // players who pair + grip the controller see the "controller"
+    // input method flip even without releasing.
+    let anyHeld = false;
+    for (let i = 0; i < pressed.length; i++) {
+      if (pressed[i]) { anyHeld = true; break; }
+    }
     // Use radial magnitude to decide "the player intentionally moved the
     // stick" so drift can't flip the input method to controller.
     const stickMag = Math.hypot(newPad.axes[0] ?? 0, newPad.axes[1] ?? 0);
     if (anyEdge || stickMag > DEADZONE) {
       this.setMethod('controller');
+      this.lastControllerActivityMs = performance.now();
+      this.padHasBeenUsed = true;
+    } else if (anyHeld) {
+      // Held button still counts as "controller active" for stickiness,
+      // even though we don't re-fire setMethod on every tick.
+      this.lastControllerActivityMs = performance.now();
+      this.padHasBeenUsed = true;
     }
 
     this.gamepadInfo = newPad;
@@ -407,6 +450,11 @@ export class InputManager {
     this.gamepadIndex = e.gamepad.index;
     this.scanPads();
     this.setMethod('controller');
+    // gamepadconnected on iPadOS Safari fires only after first user
+    // interaction with the pad — so the event firing is itself a
+    // confirmed "controller is live" signal. Stamp the activity timer.
+    this.lastControllerActivityMs = performance.now();
+    this.padHasBeenUsed = true;
   };
   private onGamepadDisconnected = (_e: GamepadEvent): void => {
     this.gamepadIndex = null;

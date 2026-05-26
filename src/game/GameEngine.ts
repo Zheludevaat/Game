@@ -56,6 +56,10 @@ export interface HudSnapshot {
   inputMethod: 'controller' | 'keyboard' | 'touch';
   gamepadConnected: boolean;
   gamepadName: string;
+  /** True the moment any pad button or stick produces input — used so
+   *  iPad players with a paired controller stop seeing the touch
+   *  overlay even before the input-method pill flips. */
+  controllerActive: boolean;
   hint?: string;
   // For minimap
   rooms: { gx: number; gy: number; type: RoomType; discovered: boolean; current: boolean }[];
@@ -4711,6 +4715,7 @@ export class GameEngine {
       inputMethod: this.input.getMethod(),
       gamepadConnected: this.input.getGamepad().connected,
       gamepadName: this.input.getGamepad().id || '',
+      controllerActive: this.input.hasControllerBeenUsed(),
       hint,
       rooms: roomCells,
       pendingShrine: this.pendingShrine ? {

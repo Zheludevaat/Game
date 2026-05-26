@@ -423,7 +423,18 @@ export function App(): JSX.Element {
         <HUD hud={hud} input={inputRef.current} />
       )}
 
+      {/* Touch overlay rule:
+        * - Always honour the user's settings.touchControls toggle.
+        * - Hide when a controller has produced ANY input this session
+        *   (controllerActive). This was the iPad pain point — touch
+        *   buttons stayed onscreen even after pairing a controller
+        *   because inputMethod didn't flip until first button press.
+        * - Otherwise, render on touch devices unless the current input
+        *   method is explicitly "controller" (keyboard users still see
+        *   touch on a hybrid laptop in case they tap the screen).
+        */}
       {screen === 'game' && settings.touchControls && inputRef.current && hud &&
+        !hud.controllerActive &&
         (hud.inputMethod === 'touch' || (isTouchDevice && hud.inputMethod !== 'controller')) && (
         <TouchControls input={inputRef.current} />
       )}
