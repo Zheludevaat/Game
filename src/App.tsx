@@ -18,7 +18,8 @@ import { GameOverScreen } from './components/GameOver';
 import { MetaProgression } from './components/MetaProgression';
 import { TouchControls } from './components/TouchControls';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
-import { ArchetypeId, MetaState, SettingsState } from './game/GameTypes';
+import { ArchetypeId, MetaState, RunHistoryEntry, SettingsState } from './game/GameTypes';
+import { evaluateAchievements } from './game/data/achievements';
 import { MapOverlay } from './components/MapOverlay';
 import { CodexScreen } from './components/CodexScreen';
 import { CinematicsScreen } from './components/CinematicsScreen';
@@ -212,6 +213,25 @@ export function App(): JSX.Element {
             return nb;
           });
           setEssence((e) => { const ne = e + s.essenceCollected; saveEssence(ne); return ne; });
+          // Append the run to history, update per-archetype best, evaluate
+          // achievements. setMeta then auto-persists via the existing useEffect.
+          setMeta((m) => {
+            const entry: RunHistoryEntry = {
+              date: Date.now(),
+              archetype: archetypeId,
+              floorReached: s.floorReached,
+              bossesDefeated: s.bossesDefeated,
+              essenceCollected: s.essenceCollected,
+              ascensionLevel: m.ascensionLevel ?? 0,
+              deathCause: s.ogdoadReached ? 'descend' : undefined,
+            };
+            const history = [entry, ...(m.runHistory ?? [])].slice(0, 20);
+            const pab = { ...(m.perArchetypeBest ?? {}) };
+            pab[archetypeId] = Math.max(pab[archetypeId] ?? 0, s.floorReached);
+            const newAchievements = evaluateAchievements(s, { ...m, perArchetypeBest: pab }, m.ascensionLevel ?? 0);
+            const achievements = [...(m.achievements ?? []), ...newAchievements];
+            return { ...m, runHistory: history, perArchetypeBest: pab, achievements };
+          });
           saveResume(null);
           setResumeAvailable(false);
           setScreen('gameOver');
@@ -425,6 +445,7 @@ export function App(): JSX.Element {
           essence={essence}
           meta={meta}
           onSpend={onSpendMeta}
+          onSetAscension={(level) => setMeta((m) => ({ ...m, ascensionLevel: level }))}
           onBack={() => setScreen('menu')}
         />
       )}

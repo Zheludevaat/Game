@@ -891,7 +891,12 @@ export class GameEngine {
   }
 
   private spawnEnemy(type: Enemy['type'], pos: Vec, floor: number, isMiniBoss = false): void {
-    const lvl = 1 + (floor - 1) * 0.2;
+    // Ascension scales enemy HP + damage. Each tier (1..5) adds +30 % HP
+    // and +20 % damage. Bosses scale a touch faster — handled below.
+    const asc = Math.max(0, this.meta.ascensionLevel ?? 0);
+    const hpMul = 1 + asc * 0.30;
+    const dmgMul = 1 + asc * 0.20;
+    const lvl = (1 + (floor - 1) * 0.2) * hpMul;
     const e: Enemy = {
       id: nid(), type, visualKey: type,
       pos: { ...pos }, vel: { x: 0, y: 0 },
@@ -974,6 +979,12 @@ export class GameEngine {
       }
     }
     if (isMiniBoss && !e.isBoss && !e.isMiniBoss) e.isMiniBoss = true;
+    // Bosses scale a bit harder than mooks under ascension.
+    if (e.isBoss) {
+      e.hp = e.maxHp = Math.round(e.hp * (1 + asc * 0.10));
+      e.contactDamage = Math.round(e.contactDamage * (1 + asc * 0.10));
+    }
+    e.contactDamage = Math.round(e.contactDamage * dmgMul);
     this.enemies.push(e);
   }
 
