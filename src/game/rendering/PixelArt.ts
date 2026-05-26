@@ -517,6 +517,166 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       r: '#9b6cff', g: '#0a0420', y: '#c8983f', Y: '#ffe6a3',
     },
   },
+  // Martyr Beacon — gilded armoured spirit. Saturn Knight silhouette,
+  // sun palette. Heals other enemies, doesn't attack on contact much.
+  martyrBeacon: {
+    rows: [
+      '...ooooo.....',
+      '..okkkkkoo...',
+      '.okKKKKKKko..',
+      'okKKyyyKKKko.',
+      'okKyy.yyKKko.',
+      'okKKyyyKKKko.',
+      'okKKKKKKKKko.',
+      'okKkkkkkKkko.',
+      'okKkKKKKkKko.',
+      'okKkkyykkKko.',
+      'okKkk..kkKko.',
+      '.okkk..kkko..',
+      '.ooo....ooo..',
+      '..oo....oo...',
+    ],
+    palette: {
+      '.': null,
+      o: '#1a0a04',
+      k: '#3a1a04',
+      K: '#c8983f',
+      y: '#ffe6a3',
+    },
+  },
+  // Umbral Stalker — Lesser Shade silhouette but rendered at half-alpha
+  // (the engine's status-based draw applies the fade). Saturn palette.
+  umbralStalker: {
+    rows: [
+      '....oooo....',
+      '...oDDDDo...',
+      '..oDDDDDDo..',
+      '.oDdddddDo..',
+      'oDdvddddvDo.',
+      'oDdvwddwvDo.',
+      'oDddddddDo..',
+      '.oDdddddDo..',
+      '..oDddddo...',
+      '..oDdddDo...',
+      '...odDdo....',
+      '....of.o....',
+    ],
+    palette: {
+      '.': null,
+      o: '#04020c',
+      d: '#0d041a',
+      D: '#1a0824',
+      v: '#9b6cff',
+      w: '#cdd6dc',
+      f: '#0a0420',
+    },
+  },
+  // Mirror Twin — Lunar Wisp silhouette, venus palette. Spawns a copy
+  // on first damage taken.
+  mirrorTwin: {
+    rows: [
+      '...ovvvo...',
+      '..ovWWWvo..',
+      '.ovWwwwbvo.',
+      'ovWwwwbbvo.',
+      'ovWwwwbbvo.',
+      'ovWWwwbbvo.',
+      'ovWwwwbbvo.',
+      'ovWwwwbvo..',
+      '.ovWwwbvo..',
+      '..ovWvvo...',
+      '...o.oo....',
+    ],
+    palette: {
+      '.': null,
+      o: '#1a0b1a',
+      v: '#ff6caf',
+      b: '#ffd0d6',
+      W: '#ffffff',
+      w: '#ffe6a3',
+    },
+  },
+  // Kronosian Herald — Salt Golem silhouette, saturn palette. Contact
+  // applies slow.
+  kronosianHerald: {
+    rows: [
+      '.ooooooooooo.',
+      'oggGGGGGGGggo',
+      'ogGGddvvddGgo',
+      'ogGvGvvvvGvGo',
+      'ogGGvGvvGvGgo',
+      'ogGGGGGGGGGgo',
+      'oggGGvvvvGggo',
+      'oggGGvvvvGggo',
+      'oggggggggggo.',
+      '.ogGgg.gggo..',
+      '.ogGgg.gggo..',
+      '.oggg...ggo..',
+      '..oo.....oo..',
+    ],
+    palette: {
+      '.': null,
+      o: '#0a0420',
+      g: '#1a0f2c',
+      G: '#3b265c',
+      v: '#9b6cff',
+      d: '#08030f',
+    },
+  },
+  // Heliokrator — Serpent of Brass silhouette, sun palette. Mid-tier
+  // miniboss for Sun → Mars.
+  heliokrator: {
+    rows: [
+      '..oooo............',
+      '.oYYYYo...........',
+      'oYYyyYYo..oooo....',
+      'oYwyYyYo.obYYbo...',
+      'oYyfyfYo.obYyybo..',
+      '.oYyyYo.obYyyyybo.',
+      '..oYYo.obYyyyyyybo',
+      '...oo.obYyyyyyyybo',
+      '......obYyyyyyybo.',
+      '.......obYyyyybo..',
+      '........obYYybo...',
+      '.........oooo.....',
+    ],
+    palette: {
+      '.': null,
+      o: '#1a0a04',
+      Y: '#ffe6a3',
+      y: '#ff7a3a',
+      w: '#ffffff',
+      f: '#3a1a04',
+      b: '#c8983f',
+    },
+  },
+  // Nikethron — Serpent of Brass silhouette, jupiter palette. Late
+  // miniboss for Jupiter → Saturn.
+  nikethron: {
+    rows: [
+      '..oooo............',
+      '.oYYYYo...........',
+      'oYYyyYYo..oooo....',
+      'oYwyYyYo.obYYbo...',
+      'oYyfyfYo.obYyybo..',
+      '.oYyyYo.obYyyyybo.',
+      '..oYYo.obYyyyyyybo',
+      '...oo.obYyyyyyyybo',
+      '......obYyyyyyybo.',
+      '.......obYyyyybo..',
+      '........obYYybo...',
+      '.........oooo.....',
+    ],
+    palette: {
+      '.': null,
+      o: '#04081a',
+      Y: '#cdd6dc',
+      y: '#6cf6e5',
+      w: '#ffe6a3',
+      f: '#04081a',
+      b: '#3b265c',
+    },
+  },
 };
 
 function parseHexRgb(hex: string): [number, number, number] | null {

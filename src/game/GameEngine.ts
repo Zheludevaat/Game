@@ -147,7 +147,9 @@ interface Enemy {
     | 'lesserShade' | 'mercuryImp' | 'saltGolem' | 'lunarWisp'
     | 'saturnKnight' | 'serpentOfBrass' | 'wardenBoss'
     | 'seleneBoss' | 'hermesBoss' | 'aphroditeBoss' | 'heliosBoss'
-    | 'aresBoss' | 'zeusBoss' | 'kronosBoss';
+    | 'aresBoss' | 'zeusBoss' | 'kronosBoss'
+    | 'martyrBeacon' | 'umbralStalker' | 'mirrorTwin' | 'kronosianHerald'
+    | 'heliokrator' | 'nikethron';
   visualKey: string;
   pos: Vec;
   vel: Vec;
@@ -757,7 +759,8 @@ export class GameEngine {
       return;
     }
     if (room.type === 'miniBoss') {
-      this.spawnEnemy('serpentOfBrass', { x: ROOM_W / 2, y: ROOM_H / 2 }, this.floor.number, true);
+      const mbType = this.pickMinibossType(this.floor.number);
+      this.spawnEnemy(mbType, { x: ROOM_W / 2, y: ROOM_H / 2 }, this.floor.number, true);
       room.enemiesSpawned = true;
       return;
     }
@@ -817,12 +820,32 @@ export class GameEngine {
 
   private pickEnemyType(rng: RNG): Enemy['type'] {
     const floor = this.floor.number;
+    const sphere = sphereForFloor(floor).id;
     const pool: Enemy['type'][] = ['lesserShade'];
     if (floor >= 1) pool.push('mercuryImp');
     if (floor >= 2) pool.push('lunarWisp');
     if (floor >= 3) pool.push('saltGolem');
     if (floor >= 4) pool.push('saturnKnight');
+    // Per-sphere accent enemies — make each sphere feel different
+    // even before the structural changes of Track 2 land.
+    if (sphere === 'venus') pool.push('mirrorTwin');
+    if (sphere === 'sun' || sphere === 'mars') pool.push('martyrBeacon');
+    if (sphere === 'saturn') {
+      pool.push('umbralStalker');
+      pool.push('kronosianHerald');
+    }
+    if (sphere === 'jupiter') pool.push('kronosianHerald');
     return pool[rng.int(0, pool.length)];
+  }
+
+  /** Pick the miniboss to spawn for a given floor. serpentOfBrass holds
+   *  the early game; heliokrator and nikethron take over for Sun→Mars
+   *  and Jupiter→Saturn respectively. */
+  private pickMinibossType(floor: number): Enemy['type'] {
+    const sphere = sphereForFloor(floor).id;
+    if (sphere === 'jupiter' || sphere === 'saturn' || sphere === 'ogdoad') return 'nikethron';
+    if (sphere === 'sun' || sphere === 'mars') return 'heliokrator';
+    return 'serpentOfBrass';
   }
 
   private spawnEnemy(type: Enemy['type'], pos: Vec, floor: number, isMiniBoss = false): void {
@@ -856,6 +879,28 @@ export class GameEngine {
         break;
       case 'serpentOfBrass':
         e.hp = e.maxHp = Math.round(120 * (1 + (floor - 1) * 0.25)); e.speed = 46; e.radius = 14; e.width = 14; e.height = 9; e.contactDamage = 12;
+        e.isMiniBoss = true;
+        break;
+      case 'martyrBeacon':
+        e.hp = e.maxHp = Math.round(60 * lvl); e.speed = 22; e.radius = 10; e.width = 9; e.height = 9; e.contactDamage = 4;
+        break;
+      case 'umbralStalker':
+        // Faster + stealthier shade. Half-alpha drawn until it attacks.
+        e.hp = e.maxHp = Math.round(20 * lvl); e.speed = 56; e.radius = 8; e.width = 8; e.height = 8; e.contactDamage = 10;
+        break;
+      case 'mirrorTwin':
+        e.hp = e.maxHp = Math.round(18 * lvl); e.speed = 40; e.radius = 7; e.width = 8; e.height = 7; e.contactDamage = 6;
+        break;
+      case 'kronosianHerald':
+        // Heavier than salt golem; contact applies slow.
+        e.hp = e.maxHp = Math.round(54 * lvl); e.speed = 30; e.radius = 11; e.width = 10; e.height = 9; e.contactDamage = 10;
+        break;
+      case 'heliokrator':
+        e.hp = e.maxHp = Math.round(160 * (1 + (floor - 1) * 0.22)); e.speed = 52; e.radius = 14; e.width = 14; e.height = 9; e.contactDamage = 14;
+        e.isMiniBoss = true;
+        break;
+      case 'nikethron':
+        e.hp = e.maxHp = Math.round(220 * (1 + (floor - 1) * 0.20)); e.speed = 38; e.radius = 14; e.width = 14; e.height = 9; e.contactDamage = 16;
         e.isMiniBoss = true;
         break;
       case 'wardenBoss':
@@ -1267,10 +1312,15 @@ export class GameEngine {
       while (da >  Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
       if (Math.abs(da) > w.arcHalf) continue;
-      this.damageEnemy(e, dmg, { x: dx, y: dy }, w.knockback, {
+      // Iron Hook: pull instead of push by inverting the knock vector.
+      const knockX = w.pullsToward ? -dx : dx;
+      const knockY = w.pullsToward ? -dy : dy;
+      const r = this.damageEnemy(e, dmg, { x: knockX, y: knockY }, w.knockback, {
         fromPlayer: true,
         appliesStatus: w.appliesStatus,
       });
+      if (w.healOnKill && r.killed) this.healPlayer(w.healOnKill);
+      if (p.relics.includes('pulseHeart') && r.isCrit) this.healPlayer(2);
     }
     audio.sfx('attack');
 
@@ -1367,9 +1417,11 @@ export class GameEngine {
         trailColour: sp.trailColour,
       };
       // Mark visual kind on the projectile via a side channel
-      (proj as Projectile & { visual?: string; explodeRadius?: number; appliesStatus?: AppliesStatus }).visual = sp.projVisual;
-      (proj as Projectile & { visual?: string; explodeRadius?: number; appliesStatus?: AppliesStatus }).explodeRadius = sp.explodeRadius;
-      (proj as Projectile & { visual?: string; explodeRadius?: number; appliesStatus?: AppliesStatus }).appliesStatus = sp.appliesStatus;
+      type ProjMeta = Projectile & { visual?: string; explodeRadius?: number; appliesStatus?: AppliesStatus; healOnKill?: number };
+      (proj as ProjMeta).visual = sp.projVisual;
+      (proj as ProjMeta).explodeRadius = sp.explodeRadius;
+      (proj as ProjMeta).appliesStatus = sp.appliesStatus;
+      (proj as ProjMeta).healOnKill = sp.healOnKill;
       this.projectiles.push(proj);
     }
     audio.sfx('spell');
@@ -1663,12 +1715,115 @@ export class GameEngine {
         case 'kronosBoss':
           this.updateWarden(e, dt, n, d);
           break;
+        case 'martyrBeacon': {
+          // Stays roughly in place; heals nearby allies periodically.
+          if (d > 80) this.moveTowards(e, n, e.speed, dt);
+          if (e.cooldown <= 0) {
+            e.cooldown = 1.4;
+            const auraR = 60;
+            let healed = 0;
+            for (const ally of this.enemies) {
+              if (ally === e || ally.hp >= ally.maxHp) continue;
+              const dd = Math.hypot(ally.pos.x - e.pos.x, ally.pos.y - e.pos.y);
+              if (dd < auraR) {
+                ally.hp = Math.min(ally.maxHp, ally.hp + 4);
+                this.spawnDamageNumber(ally.pos.x, ally.pos.y - 8, '+4', '#ffe6a3');
+                healed++;
+              }
+            }
+            if (healed > 0 && !this.reducedParticles) {
+              this.particles.burst(e.pos.x, e.pos.y - 4, 16, {
+                colour: '#ffe6a3', life: 0.6, maxLife: 0.6, drag: 0.86,
+              });
+            }
+          }
+          break;
+        }
+        case 'umbralStalker':
+          this.moveTowards(e, n, e.speed, dt);
+          break;
+        case 'mirrorTwin':
+          this.moveTowards(e, n, e.speed, dt);
+          // Spawn one copy the first time it takes damage (hp < maxHp).
+          if (!e.ai?.prepTimer && e.hp < e.maxHp) {
+            if (!e.ai) e.ai = {};
+            e.ai.prepTimer = 999; // flag: already-cloned
+            const offX = (Math.random() - 0.5) * 30;
+            const offY = (Math.random() - 0.5) * 30;
+            this.spawnEnemy('mirrorTwin', { x: e.pos.x + offX, y: e.pos.y + offY }, this.floor.number);
+            const clone = this.enemies[this.enemies.length - 1];
+            clone.hp = Math.floor(e.maxHp * 0.5);
+            clone.maxHp = clone.hp;
+            if (!clone.ai) clone.ai = {};
+            clone.ai.prepTimer = 999; // clones don't re-clone
+            if (!this.reducedParticles) {
+              this.particles.burst(e.pos.x, e.pos.y - 4, 18, {
+                colour: '#ff6caf', life: 0.5, maxLife: 0.5, drag: 0.85,
+              });
+            }
+          }
+          break;
+        case 'kronosianHerald':
+          if (d > 14) this.moveTowards(e, n, e.speed, dt);
+          break;
+        case 'heliokrator': {
+          // Sun-disc miniboss — wavy chase, fires ricocheting discs.
+          const t = this.timeAlive;
+          const perp = { x: -n.y, y: n.x };
+          const wave = Math.sin(t * 3.6) * 0.5;
+          const dir = { x: n.x + perp.x * wave, y: n.y + perp.y * wave };
+          this.moveTowards(e, norm(dir), e.speed, dt);
+          if (e.cooldown <= 0 && d < 280) {
+            // Three discs in a narrow spread.
+            for (let k = -1; k <= 1; k++) {
+              const a = Math.atan2(n.y, n.x) + k * 0.22;
+              this.projectiles.push({
+                id: nid(),
+                pos: { x: e.pos.x, y: e.pos.y },
+                vel: { x: Math.cos(a) * 150, y: Math.sin(a) * 150 },
+                life: 2.4, radius: 5, damage: 10,
+                fromPlayer: false, pierce: 1, homing: false,
+                colour: '#ffe6a3', trailColour: '#ff7a3a',
+              });
+            }
+            e.cooldown = 1.8;
+          }
+          break;
+        }
+        case 'nikethron': {
+          // Lightning-herald miniboss — slow chase, marks ground with
+          // delayed strike sigils.
+          if (d > 60) this.moveTowards(e, n, e.speed, dt);
+          if (e.cooldown <= 0 && d < 260) {
+            // Three sigils around the player.
+            for (let k = 0; k < 3; k++) {
+              const a = Math.random() * Math.PI * 2;
+              const r = 24 + Math.random() * 24;
+              this.sigils.push({
+                pos: { x: this.player.pos.x + Math.cos(a) * r, y: this.player.pos.y + Math.sin(a) * r },
+                timer: 0,
+                delay: 0.7,
+                damage: 12,
+                fired: false,
+                fromPlayer: false,
+                radius: 22,
+                colour: '#6cf6e5',
+              });
+            }
+            e.cooldown = 2.2;
+          }
+          break;
+        }
       }
       // contact damage
       const collideR = e.radius + PLAYER_RADIUS;
       if (d < collideR) {
         if (!this.tryParry({ kind: 'enemy', enemy: e })) {
           this.damagePlayer(e.contactDamage);
+          // Kronosian Herald applies slow on touch — feels temporal.
+          if (e.type === 'kronosianHerald') {
+            applyStatusEffect(this.player, 'slow', this.timeAlive, { duration: 1.2 });
+          }
         }
         // knockback
         e.pos.x -= n.x * 4;
@@ -2300,7 +2455,7 @@ export class GameEngine {
     knock: Vec,
     knockStrength: number,
     opts?: { fromPlayer?: boolean; appliesStatus?: AppliesStatus; canCrit?: boolean },
-  ): void {
+  ): { isCrit: boolean; killed: boolean } {
     const fromPlayer = opts?.fromPlayer !== false;
     const canCrit = opts?.canCrit !== false;
     let dmg = rawDmg;
@@ -2404,8 +2559,15 @@ export class GameEngine {
     if (fromPlayer && opts?.appliesStatus && e.hp > 0) {
       const as = opts.appliesStatus;
       if (Math.random() < as.chance) {
+        // Wormwood Vial — burn lasts 50 % longer and the stack cap
+        // we enforce is +2 for this single applyStatusEffect path.
+        let dur = as.duration;
+        const isBurn = as.kind === 'burn';
+        if (isBurn && this.player.relics.includes('wormwoodVial')) {
+          dur = (dur ?? STATUS_CONFIG.burn.defaultDuration) * 1.5;
+        }
         const newlyApplied = applyStatusEffect(e, as.kind, this.timeAlive, {
-          duration: as.duration,
+          duration: dur,
           magnitude: as.magnitude,
         });
         if (newlyApplied && !this.reducedParticles) {
@@ -2421,6 +2583,7 @@ export class GameEngine {
     if (fromPlayer && canCrit) {
       this.bumpCombo();
     }
+    return { isCrit, killed: e.hp <= 0 };
   }
 
   private bumpCombo(): void {
@@ -2494,9 +2657,11 @@ export class GameEngine {
     this.camera.shakeT = Math.max(this.camera.shakeT, 0.22);
     this.camera.shakeMag = Math.max(this.camera.shakeMag, 3.5);
 
+    // Saturn Ring extends parry stun and amps reflect damage.
+    const ringMul = p.relics.includes('saturnRing') ? 2.0 : 1.0;
     if (src.kind === 'enemy') {
       // Stun the offender; small backward shove.
-      applyStatusEffect(src.enemy, 'stun', this.timeAlive, { duration: 0.8 });
+      applyStatusEffect(src.enemy, 'stun', this.timeAlive, { duration: 0.8 * ringMul });
       const dx = src.enemy.pos.x - p.pos.x;
       const dy = src.enemy.pos.y - p.pos.y;
       const len = Math.hypot(dx, dy) || 1;
@@ -2510,6 +2675,7 @@ export class GameEngine {
       pr.vel.y *= -1.4;
       pr.colour = '#ffe6a3';
       pr.trailColour = '#f4d27a';
+      pr.damage *= 1.5 * ringMul;
     }
 
     // Combo gets a chunky bump on parry — the skill-expression reward.
@@ -2574,13 +2740,16 @@ export class GameEngine {
 
       if (pr.fromPlayer) {
         // hit enemies
-        const prStatus = (pr as Projectile & { appliesStatus?: AppliesStatus }).appliesStatus;
+        const prMeta = pr as Projectile & { appliesStatus?: AppliesStatus; healOnKill?: number };
+        const prStatus = prMeta.appliesStatus;
         for (const e of this.enemies) {
           const d = Math.hypot(e.pos.x - pr.pos.x, e.pos.y - pr.pos.y);
           if (d < pr.radius + e.radius) {
-            this.damageEnemy(e, pr.damage, { x: pr.vel.x, y: pr.vel.y }, 90, {
+            const r = this.damageEnemy(e, pr.damage, { x: pr.vel.x, y: pr.vel.y }, 90, {
               fromPlayer: true, appliesStatus: prStatus,
             });
+            if (prMeta.healOnKill && r.killed) this.healPlayer(prMeta.healOnKill);
+            if (this.player.relics.includes('pulseHeart') && r.isCrit) this.healPlayer(2);
             const explodeR = (pr as Projectile & { explodeRadius?: number }).explodeRadius ?? 0;
             // Every spell impact gets a small burst + shake so the hit reads
             // as an event, not just a number popping up.
@@ -2692,9 +2861,17 @@ export class GameEngine {
     const essBonus = 1 + this.meta.bonusEssenceGain;
     switch (pk.kind) {
       case 'coin':
-        p.coins += pk.value;
-        this.summary.coinsCollected += pk.value;
-        if (pk.value >= 3) this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${pk.value}`, '#f4d27a');
+        // Inverse Midas — coins transmute to essence on the wind (3:1).
+        if (p.relics.includes('midasInverse')) {
+          const ess = Math.max(1, Math.round(pk.value / 3 * essBonus));
+          p.essence += ess;
+          this.summary.essenceCollected += ess;
+          this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${ess}✦`, '#9b6cff');
+        } else {
+          p.coins += pk.value;
+          this.summary.coinsCollected += pk.value;
+          if (pk.value >= 3) this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${pk.value}`, '#f4d27a');
+        }
         break;
       case 'essence': {
         const gained = Math.max(1, Math.round(pk.value * essBonus));
@@ -3391,7 +3568,12 @@ export class GameEngine {
       const dx = e.pos.x - (sz.w * scale) / 2;
       const dy = e.pos.y - (sz.h * scale) + e.radius + 1;
       const tint = e.isBoss ? undefined : floorTint;
+      // Umbral Stalker is half-visible unless actively damaged. Players
+      // see a faint silhouette outline — readable but not bright.
+      const stealth = e.type === 'umbralStalker' && e.flash <= 0;
+      if (stealth) this.ctx.globalAlpha = 0.35;
       drawEnemy(this.ctx, e.visualKey, dx, dy, scale, e.flash, e.facing.x < 0, tint);
+      if (stealth) this.ctx.globalAlpha = 1;
       // shadow
       this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
       this.ctx.fillRect(e.pos.x - e.radius, e.pos.y + e.radius - 1, e.radius * 2, 2);

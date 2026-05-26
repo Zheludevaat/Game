@@ -38,7 +38,13 @@ export type RelicId =
   | 'roseCross'
   | 'sulfurHeart'
   | 'chaliceOfLuna'
-  | 'keyOfTheGate';
+  | 'keyOfTheGate'
+  | 'wormwoodVial'
+  | 'saturnRing'
+  | 'pulseHeart'
+  | 'brassEar'
+  | 'echoChalice'
+  | 'midasInverse';
 
 export interface RelicDef {
   id: RelicId;
@@ -52,7 +58,12 @@ export type WeaponId =
   | 'boneCleaver'
   | 'ironHalberd'
   | 'twinSickles'
-  | 'ashenGreatsword';
+  | 'ashenGreatsword'
+  | 'ironHook'
+  | 'tridentOfBrass'
+  | 'crystallizedTear'
+  | 'serpentCoil'
+  | 'sunDisc';
 
 export type WeaponSwingType = 'thrust' | 'arc' | 'lunge' | 'flurry' | 'overhead';
 
@@ -71,6 +82,12 @@ export interface WeaponDef {
   hits: number;
   /** Optional status effect applied on melee hit. */
   appliesStatus?: AppliesStatus;
+  /** If true, the weapon's "knockback" pulls the enemy toward the player
+   *  instead of away. Reads as a chain/hook. */
+  pullsToward?: boolean;
+  /** Heal player by this many HP for each enemy killed by this weapon
+   *  (capped at maxHp). Sacred-flame / sun-disc style. */
+  healOnKill?: number;
   // visual
   swingColour: string;
   hiltColour: string;
@@ -84,7 +101,10 @@ export type SpellId =
   | 'sparkBolt'
   | 'frostLance'
   | 'hellfireOrb'
-  | 'thunderSigil';
+  | 'thunderSigil'
+  | 'frostbiteRay'
+  | 'sacredFlame'
+  | 'eclipseOrb';
 
 export type SpellKind = 'singleProjectile' | 'spread' | 'sigil';
 export type SpellVisual = 'orb' | 'shard' | 'flame' | 'sigil';
@@ -110,6 +130,8 @@ export interface SpellDef {
   sigilRange?: number;
   /** Optional status effect applied on projectile / sigil hit. */
   appliesStatus?: AppliesStatus;
+  /** Heal player by this many HP for each enemy killed by this spell. */
+  healOnKill?: number;
   projColour: string;
   trailColour: string;
   projVisual: SpellVisual;

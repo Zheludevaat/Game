@@ -73,6 +73,42 @@ export const RELICS: Record<RelicId, RelicDef> = {
     glyph: '⚷',
     description: 'Locked rooms and chests sometimes do not consume keys.',
   },
+  wormwoodVial: {
+    id: 'wormwoodVial',
+    name: 'Wormwood Vial',
+    glyph: '🜔',
+    description: 'Burn lasts longer and stacks higher.',
+  },
+  saturnRing: {
+    id: 'saturnRing',
+    name: 'Ring of Saturn',
+    glyph: '♄',
+    description: 'Parries stun for longer and reflect with extra force.',
+  },
+  pulseHeart: {
+    id: 'pulseHeart',
+    name: 'Pulse Heart',
+    glyph: '♥',
+    description: 'Critical strikes restore a wisp of life.',
+  },
+  brassEar: {
+    id: 'brassEar',
+    name: 'Brass Ear',
+    glyph: '🜸',
+    description: 'Hears the hollow stone — hidden rooms reveal themselves.',
+  },
+  echoChalice: {
+    id: 'echoChalice',
+    name: 'Echo Chalice',
+    glyph: '🜺',
+    description: 'The Echo follows. Each floor offers a small tribute.',
+  },
+  midasInverse: {
+    id: 'midasInverse',
+    name: 'Inverse Midas',
+    glyph: '⚖',
+    description: 'Coins are transmuted into essence on the wind.',
+  },
 };
 
 export const RELIC_IDS: RelicId[] = Object.keys(RELICS) as RelicId[];
