@@ -57,6 +57,16 @@ export class InputManager {
   };
   private mapping: GamepadMap = { ...DEFAULT_GAMEPAD_MAP };
   private mappingIsCustom = false;
+  // Live mapping source: when set, computeState reads from this on every
+  // tick instead of from the cached `mapping` field. App.tsx wires this
+  // to point at settings.gamepadMap (the user-visible state) so the
+  // in-game bindings never drift from what the Settings UI shows.
+  private mappingProvider: (() => GamepadMap) | null = null;
+  // When the auto-preset (e.g. Switch swap on first connect) wants to
+  // change the bindings, it calls this callback so App.tsx can update
+  // settings.gamepadMap — the single source of truth — instead of
+  // mutating only the InputManager's cached copy.
+  private onAutoPresetApplied: ((m: GamepadMap) => void) | null = null;
 
   private method: InputMethod = 'keyboard';
   private onMethodChange?: (m: InputMethod) => void;
@@ -99,6 +109,29 @@ export class InputManager {
     try { localStorage.setItem(STORAGE_KEYS.gamepadMap, JSON.stringify(m)); } catch { /* */ }
   }
 
+  /** Wire a live mapping source. Once set, computeState reads the
+   * provider's return value on every tick — the cached `mapping` field
+   * is bypassed. This eliminates the divergence between settings.gamepadMap
+   * (user-visible) and InputManager.mapping (in-engine) that caused
+   * custom bindings to be ignored in-game. */
+  setMappingProvider(fn: (() => GamepadMap) | null): void {
+    this.mappingProvider = fn;
+  }
+
+  /** Wire a callback fired when the auto-preset (Switch swap on first
+   * connect) wants to change bindings. App.tsx uses this to update
+   * settings.gamepadMap so the SettingsMenu, Controller Test, and
+   * in-game reader all see the same map. */
+  setAutoPresetCallback(cb: ((m: GamepadMap) => void) | null): void {
+    this.onAutoPresetApplied = cb;
+  }
+
+  /** Returns the actively-used mapping (provider's value if wired,
+   * else the cached one). Useful for debug / inspection. */
+  getActiveMapping(): GamepadMap {
+    return this.mappingProvider ? this.mappingProvider() : this.mapping;
+  }
+
   /** Restore the default Xbox-style binding AND clear the "user
    * customised" flag, so the next time a Nintendo pad connects the
    * auto-Switch preset can apply itself. */
@@ -130,12 +163,24 @@ export class InputManager {
     if (this.mappingIsCustom) return;
     const layout = detectLayoutFromPadId(padId);
     const preset = presetForLayout(layout);
-    // Compare and only mutate if different — avoid pointless re-renders.
+    // Active mapping is whatever the provider returns (the user's live
+    // settings.gamepadMap) when wired — so we don't auto-swap if they've
+    // already customised. Falls back to the cached field otherwise.
+    const current = this.mappingProvider ? this.mappingProvider() : this.mapping;
     let differs = false;
     for (const k of Object.keys(preset) as (keyof GamepadMap)[]) {
-      if (this.mapping[k] !== preset[k]) { differs = true; break; }
+      if (current[k] !== preset[k]) { differs = true; break; }
     }
-    if (differs) this.mapping = preset;
+    if (!differs) return;
+    // Don't auto-override a map that's already non-default — only nudge
+    // when the user is still on a Xbox-default map AND we detect Switch.
+    const isOnDefault = Object.keys(DEFAULT_GAMEPAD_MAP).every(
+      (k) => current[k as keyof GamepadMap] === DEFAULT_GAMEPAD_MAP[k as keyof GamepadMap]
+    );
+    if (!isOnDefault) return;
+    this.mapping = preset;
+    // Notify App so settings.gamepadMap stays in sync with the auto-swap.
+    if (this.onAutoPresetApplied) this.onAutoPresetApplied(preset);
   }
 
   // --- Touch input bridge ---
@@ -236,7 +281,10 @@ export class InputManager {
       if (ax !== 0 || ay !== 0) {
         s.moveX = ax; s.moveY = ay;
       }
-      const m = this.mapping;
+      // Live source of truth — read the user's current settings.gamepadMap
+      // every tick when wired. Falls back to the cached field only when
+      // no provider is attached (e.g. early boot before App connects).
+      const m = this.mappingProvider ? this.mappingProvider() : this.mapping;
       const dpadX = (this.padDown(m.dpadRight) ? 1 : 0) - (this.padDown(m.dpadLeft) ? 1 : 0);
       const dpadY = (this.padDown(m.dpadDown) ? 1 : 0) - (this.padDown(m.dpadUp) ? 1 : 0);
       if (dpadX !== 0 || dpadY !== 0) { s.moveX = dpadX; s.moveY = dpadY; }

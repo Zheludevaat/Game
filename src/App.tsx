@@ -49,6 +49,11 @@ export function App(): JSX.Element {
   const [screen, setScreen] = useState<Screen>('loading');
   const [previousScreen, setPreviousScreen] = useState<Screen>('menu');
   const [settings, setSettings] = useState<SettingsState>(() => loadSettings());
+  // Settings ref — always points at the latest settings object so the
+  // InputManager's mapping provider can read settings.gamepadMap on
+  // every tick without depending on React render timing.
+  const settingsRef = useRef<SettingsState>(settings);
+  settingsRef.current = settings;
   const [meta, setMeta] = useState<MetaState>(() => loadMeta());
   const [essence, setEssence] = useState<number>(() => loadEssence());
   const [bestFloor, setBestFloor] = useState<number>(() => loadBestFloor());
@@ -184,13 +189,17 @@ export function App(): JSX.Element {
       if (!canvas) return;
       const input = new InputManager();
       inputRef.current = input;
-      // Push the current settings.gamepadMap into the fresh InputManager
-      // immediately — otherwise it loads from STORAGE_KEYS.gamepadMap which
-      // can be stale (or default) if the user remapped from the main menu
-      // before a run ever started. The mappingIsCustom flag is set on this
-      // call which also prevents any auto-Switch preset from silently
-      // overriding the player's choices on the next gamepad reconnect.
-      input.setMapping(settings.gamepadMap);
+      // Wire the live mapping source — InputManager will read
+      // settings.gamepadMap on EVERY tick via this provider, so the
+      // in-game bindings can never diverge from what the SettingsMenu
+      // and Controller Test display. No more stale-localStorage cache.
+      input.setMappingProvider(() => settingsRef.current.gamepadMap);
+      // When the auto-Switch preset fires (Switch controller connects
+      // while the user is still on Xbox defaults), push the swap into
+      // settings so all three views stay in sync.
+      input.setAutoPresetCallback((m) => {
+        setSettings((s) => ({ ...s, gamepadMap: { ...m } }));
+      });
       const engine = new GameEngine({
         onHud: setHud,
         onPause: () => setScreen('pause'),
@@ -244,7 +253,7 @@ export function App(): JSX.Element {
         runSeed,
       });
     }, 30);
-  }, [meta, settings.reducedParticles, settings.gamepadMap]);
+  }, [meta, settings.reducedParticles]);
 
   const stopRun = useCallback(() => {
     const engine = engineRef.current;
