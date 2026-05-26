@@ -37,6 +37,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
 
       <div className="hud-top-right">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+          <RunTimer seconds={hud.runTimer} />
           {hud.combo >= 2 && <ComboTag count={hud.combo} pulse={hud.comboPulse} />}
           <button
             type="button"
@@ -86,6 +87,14 @@ export function HUD({ hud, input }: Props): JSX.Element {
       {hud.showFloorBanner && hud.floorBannerText && (
         <div className="boss-banner" style={{ top: '40%' }}>
           <div className="pixel-title" style={{ fontSize: 22, letterSpacing: '0.3em' }}>{hud.floorBannerText}</div>
+        </div>
+      )}
+
+      {hud.tutorialPrompts.length > 0 && (
+        <div className="tutorial-prompts">
+          {hud.tutorialPrompts.map((t, i) => (
+            <div key={t} className="tutorial-prompt" style={{ animationDelay: `${i * 0.3}s` }}>{t}</div>
+          ))}
         </div>
       )}
 
@@ -184,6 +193,22 @@ function LoadoutStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function RunTimer({ seconds }: { seconds: number }): JSX.Element {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return (
+    <div style={{
+      fontFamily: 'monospace',
+      fontSize: 10,
+      letterSpacing: '0.18em',
+      color: 'var(--bone)',
+      opacity: 0.7,
+    }}>
+      {String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
     </div>
   );
 }

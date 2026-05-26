@@ -241,6 +241,9 @@ export function App(): JSX.Element {
           setPreviousScreen('game');
           setScreen('bossIntro');
         },
+        onTutorialComplete: () => {
+          setMeta((m) => ({ ...m, seenTutorial: true }));
+        },
       });
       engineRef.current = engine;
       audio.unlock();

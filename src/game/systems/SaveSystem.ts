@@ -22,6 +22,11 @@ const DEFAULT_META: MetaState = {
   bossesSeen: [],
   seenEnding: false,
   ogdoadReached: 0,
+  seenTutorial: false,
+  runHistory: [],
+  perArchetypeBest: {},
+  achievements: [],
+  ascensionLevel: 0,
 };
 
 export function loadSettings(): SettingsState {
@@ -67,6 +72,11 @@ export function loadMeta(): MetaState {
       ...parsed,
       unlockedCodex: Array.isArray(parsed.unlockedCodex) ? parsed.unlockedCodex : [],
       bossesSeen: Array.isArray(parsed.bossesSeen) ? parsed.bossesSeen : [],
+      runHistory: Array.isArray(parsed.runHistory) ? parsed.runHistory : [],
+      perArchetypeBest: typeof parsed.perArchetypeBest === 'object' && parsed.perArchetypeBest
+        ? parsed.perArchetypeBest : {},
+      achievements: Array.isArray(parsed.achievements) ? parsed.achievements : [],
+      ascensionLevel: typeof parsed.ascensionLevel === 'number' ? parsed.ascensionLevel : 0,
     };
   } catch { return { ...DEFAULT_META }; }
 }

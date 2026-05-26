@@ -115,3 +115,34 @@ button {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+@keyframes tutorial-pulse {
+  0%   { opacity: 0; transform: translateY(8px); }
+  20%  { opacity: 0.85; transform: translateY(0); }
+  80%  { opacity: 0.85; transform: translateY(0); }
+  100% { opacity: 0.55; transform: translateY(-2px); }
+}
+
+.tutorial-prompts {
+  position: absolute;
+  top: 60%;
+  left: 50%;
+  transform: translate(-50%, 0);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.tutorial-prompt {
+  font-family: 'Press Start 2P', monospace, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: #ffe6a3;
+  text-shadow: 0 0 8px rgba(244, 210, 122, 0.55);
+  opacity: 0;
+  animation: tutorial-pulse 2.2s ease-out infinite;
+  animation-direction: alternate;
+}

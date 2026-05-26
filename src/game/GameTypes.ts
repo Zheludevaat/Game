@@ -220,6 +220,26 @@ export interface MetaState {
   bossesSeen: string[];           // sphere ids whose Warden intro film has played
   seenEnding: boolean;            // "has seen the Eighth Sphere film"
   ogdoadReached: number; // count of times the player has reached the Eighth Sphere
+  /** First-run gameplay tutorial — ghost prompts on floor 1 room 1. */
+  seenTutorial?: boolean;
+  /** Per-run history (most recent first, cap 20). */
+  runHistory?: RunHistoryEntry[];
+  /** Best floor reached by each archetype id. */
+  perArchetypeBest?: Partial<Record<ArchetypeId, number>>;
+  /** Achievements unlocked over the lifetime of the save. */
+  achievements?: string[];
+  /** Current ascension level (0 = standard, 1..5 unlocks after each Ogdoad). */
+  ascensionLevel?: number;
+}
+
+export interface RunHistoryEntry {
+  date: number;            // Date.now() at run end
+  archetype: ArchetypeId;
+  floorReached: number;
+  bossesDefeated: number;
+  essenceCollected: number;
+  ascensionLevel: number;
+  deathCause?: string;     // visualKey of the killer, or 'descend' for an Ogdoad clear
 }
 
 export interface SaveState {

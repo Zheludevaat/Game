@@ -66,6 +66,13 @@ export interface HudSnapshot {
   comboPulse: number;
   /** Player status snapshot (for the HUD effect strip). */
   playerStatus: { kind: StatusEffectKind; remaining: number; stacks: number }[];
+  /** Total elapsed run seconds (frozen during pause/menu/cinematic). */
+  runTimer: number;
+  /** Current / max dash cooldown — drives the HUD dash ring. */
+  dashCooldown: number;
+  dashCooldownMax: number;
+  /** Active tutorial prompts (gold ghost-text overlays). Empty after first run. */
+  tutorialPrompts: string[];
   // For game over
   alive: boolean;
 }
@@ -83,6 +90,8 @@ export interface EngineCallbacks {
   /** Player entered a boss room for the first time this run. Host plays the
    * sphere's boss-intro film, then resumes the game. */
   onBossRoomEntered?: (sphereId: string) => void;
+  /** First-run tutorial completed — host persists MetaState.seenTutorial. */
+  onTutorialComplete?: () => void;
 }
 
 export interface RunSummary {
@@ -412,6 +421,18 @@ export class GameEngine {
   /** Parry window — dashStartT + this many seconds. */
   private static readonly PARRY_WINDOW = 0.15;
 
+  /** First-run tutorial — toggled on at boot from MetaState.seenTutorial.
+   *  When active we render three soft-gold prompts in the first room of
+   *  floor 1 that fade once each input is observed. */
+  private tutorialActive = false;
+  private tutorialDidMove = false;
+  private tutorialDidAttack = false;
+  private tutorialDidDash = false;
+  private tutorialStartPos: Vec = { x: 0, y: 0 };
+
+  /** Wall-clock time spent inside this run (seconds; ticks only while playing). */
+  private runTimer = 0;
+
   constructor(cbs: EngineCallbacks) {
     this.cbs = cbs;
     this.summary = {
@@ -456,6 +477,12 @@ export class GameEngine {
     this.comboCount = 0;
     this.comboLastHitT = 0;
     this.comboPulse = 0;
+    this.runTimer = 0;
+    // Tutorial fires only on the very first run ever — gated by meta flag.
+    this.tutorialActive = !this.meta.seenTutorial;
+    this.tutorialDidMove = false;
+    this.tutorialDidAttack = false;
+    this.tutorialDidDash = false;
     this.summary.essenceCollected = 0;
     this.summary.coinsCollected = 0;
     this.summary.relicsFound = [];
@@ -538,6 +565,7 @@ export class GameEngine {
       status: [],
       dashStartT: -1,
     };
+    this.tutorialStartPos = { x: this.player.pos.x, y: this.player.pos.y };
     this.grantRelic(a.startingRelic, true);
     this.summary.weaponsFound.push(a.startingWeapon ?? STARTER_WEAPON);
     this.summary.spellsFound.push(a.startingSpell ?? STARTER_SPELL);
@@ -988,6 +1016,7 @@ export class GameEngine {
   private update(dt: number): void {
     this.input.tick();
     this.timeAlive += dt;
+    if (!this.dead && !this.paused) this.runTimer += dt;
 
     const s = this.input.state;
     if (s.pausePressed && !this.dead) { this.cbs.onPause(); return; }
@@ -1062,6 +1091,14 @@ export class GameEngine {
     p.mp = Math.min(p.maxMp, p.mp + p.manaRegen * dt);
     if (this.comboPulse > 0) this.comboPulse = Math.max(0, this.comboPulse - dt);
 
+    // Tutorial bake-off — once all three are done, deactivate + ask host
+    // to persist the seenTutorial flag so we never show it again.
+    if (this.tutorialActive && this.tutorialDidMove && this.tutorialDidAttack && this.tutorialDidDash) {
+      this.tutorialActive = false;
+      this.meta.seenTutorial = true;
+      this.cbs.onTutorialComplete?.();
+    }
+
     // Tick status effects on the player. Regen heals via callback; burn /
     // poison return summed damage that we apply through damagePlayer
     // (bypassing iframes — DoT can't be tank-ignored by mashing dash).
@@ -1113,6 +1150,13 @@ export class GameEngine {
     p.pos.x = clamp(p.pos.x, passL ? 2 : ROOM_MARGIN, passR ? ROOM_W - 2 : ROOM_W - ROOM_MARGIN);
     p.pos.y = clamp(p.pos.y, passU ? 2 : ROOM_MARGIN + 4, passD ? ROOM_H - 2 : ROOM_H - ROOM_MARGIN);
 
+    // Tutorial: detect once the player moves a tile or so.
+    if (this.tutorialActive && !this.tutorialDidMove) {
+      const dx = p.pos.x - this.tutorialStartPos.x;
+      const dy = p.pos.y - this.tutorialStartPos.y;
+      if (Math.hypot(dx, dy) > 16) this.tutorialDidMove = true;
+    }
+
     // Actions
     // Dash blocked during Kronos time-stop — the freeze means everything.
     if (s.dashPressed && p.dashCooldown <= 0 && this.timeAlive >= this.timeStopUntil) {
@@ -1126,6 +1170,7 @@ export class GameEngine {
       // Stamp the dash launch for parry detection. First PARRY_WINDOW
       // seconds of any dash can reflect incoming damage.
       p.dashStartT = this.timeAlive;
+      if (this.tutorialActive) this.tutorialDidDash = true;
       audio.sfx('dash');
       // Seed the trail with the launch position so the ghost reads
       // immediately on the first frame of the dash.
@@ -1173,6 +1218,7 @@ export class GameEngine {
       p.attackTimer = w.duration;
       p.attackHitsLeft = Math.max(0, w.hits - 1);
       p.attackHitTimer = w.duration / Math.max(1, w.hits);
+      if (this.tutorialActive) this.tutorialDidAttack = true;
     }
 
     // Multi-hit follow-ups (e.g. twin sickles)
@@ -3937,6 +3983,19 @@ export class GameEngine {
     const p = this.player;
     // Dash afterimages — drawn first so the live sprite sits on top.
     this.drawDashTrail();
+    // Dash cooldown ring under the feet. Reads as a cyan halo when
+    // ready; shrinks to nothing while on cooldown.
+    if (!this.dead && p.dashCdMax > 0) {
+      const ready = 1 - Math.min(1, p.dashCooldown / p.dashCdMax);
+      if (ready > 0.001) {
+        const ctx = this.ctx;
+        ctx.strokeStyle = ready >= 0.999 ? 'rgba(108, 246, 229, 0.55)' : 'rgba(108, 246, 229, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(p.pos.x, p.pos.y + 5, 7 * ready + 1.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
     // Death sequence: fade + collapse the sprite so the body
     // "extinguishes" in place. After the final pop (~82 % through) the
     // sprite hides entirely so the embers carry the moment.
@@ -4309,8 +4368,21 @@ export class GameEngine {
       combo: this.comboCount,
       comboPulse: this.comboPulse,
       playerStatus: p.status.map((s) => ({ kind: s.kind, remaining: s.remaining, stacks: s.stacks })),
+      runTimer: this.runTimer,
+      dashCooldown: p.dashCooldown,
+      dashCooldownMax: p.dashCdMax || 1,
+      tutorialPrompts: this.computeTutorialPrompts(),
       alive: !this.dead,
     });
+  }
+
+  private computeTutorialPrompts(): string[] {
+    if (!this.tutorialActive) return [];
+    const out: string[] = [];
+    if (!this.tutorialDidMove)   out.push('Hold direction to move');
+    if (!this.tutorialDidAttack) out.push('Press J / A to strike');
+    if (!this.tutorialDidDash)   out.push('Press Space / B to dash');
+    return out;
   }
 
   private computeHint(): string | undefined {
