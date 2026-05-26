@@ -24,10 +24,10 @@ export function ArchetypeSelect({ onSelect, onBack, lastArchetype }: Props): JSX
   }, [lastArchetype]);
 
   return (
-    <div className="menu-screen with-bg" style={{ overflow: 'auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+    <div className="menu-screen with-bg">
+      <div className="archetype-header" style={{ textAlign: 'center', marginBottom: 16 }}>
         <div className="pixel-subtitle">Choose Your Vessel</div>
-        <h2 className="pixel-title" style={{ fontSize: 28, margin: 4 }}>Initiation</h2>
+        <h2 className="pixel-title" style={{ fontSize: 'clamp(18px, 5vh, 28px)', margin: 4 }}>Initiation</h2>
       </div>
       <div className="archetype-grid">
         {ARCHETYPES.map((a, i) => (

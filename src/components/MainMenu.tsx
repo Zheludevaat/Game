@@ -126,14 +126,14 @@ export function MainMenu(p: Props): JSX.Element {
   return (
     <>
       <canvas ref={bgRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 }} />
-      <div className="menu-screen no-bg" style={{ zIndex: 5 }}>
-        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+      <div className="menu-screen no-bg main-menu" style={{ zIndex: 5 }}>
+        <div style={{ textAlign: 'center', marginBottom: 18 }} className="main-menu-title">
           <div className="pixel-subtitle">The Initiate Approaches</div>
-          <h1 className="pixel-title" style={{ fontSize: 48, margin: '8px 0 0', letterSpacing: '0.18em' }}>
+          <h1 className="pixel-title" style={{ fontSize: 'clamp(22px, 6.5vh, 48px)', margin: '8px 0 0', letterSpacing: '0.18em', lineHeight: 1.05 }}>
             Abyss of the<br />Seven Lamps
           </h1>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="main-menu-grid">
           <PixelButton onClick={p.onNewRun} focused={focus === 0}>New Run</PixelButton>
           <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 1}>
             Continue {p.resumeAvailable ? '' : '(none)'}
@@ -151,10 +151,10 @@ export function MainMenu(p: Props): JSX.Element {
           <PixelButton onClick={p.onController} focused={focus === 6}>Controller Test</PixelButton>
           <PixelButton onClick={p.onHowTo} focused={focus === 7}>How to Play</PixelButton>
         </div>
-        <div style={{ marginTop: 24, fontSize: 11, letterSpacing: '0.3em', color: 'var(--teal)' }}>
+        <div className="main-menu-stats" style={{ marginTop: 18, fontSize: 11, letterSpacing: '0.3em', color: 'var(--teal)' }}>
           Best Floor: <span className="gold-text">{p.bestFloor}</span> &nbsp;·&nbsp; Essence: <span className="gold-text">{p.essence}</span>
         </div>
-        <div style={{ position: 'absolute', bottom: 14, fontSize: 10, letterSpacing: '0.3em', color: 'rgba(231,227,215,0.5)' }}>
+        <div className="main-menu-footer" style={{ fontSize: 10, letterSpacing: '0.3em', color: 'rgba(231,227,215,0.5)' }}>
           A SOLITARY DESCENT &nbsp;·&nbsp; v0.1
         </div>
       </div>

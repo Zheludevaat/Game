@@ -12,6 +12,12 @@
   border-radius: 2px;
 }
 
+/* Short landscape — tighten panel padding so archetype + meta panels
+ * stop pushing content past the viewport. */
+@media (max-height: 500px) {
+  .pixel-panel { padding: 10px 12px; }
+}
+
 .pixel-panel::before,
 .pixel-panel::after {
   content: '';
@@ -147,6 +153,15 @@
            calc(20px + var(--safe-bottom)) calc(28px + var(--safe-left));
   animation: fade-in 0.4s ease;
   z-index: 5;
+  /* If content exceeds the viewport — common on iPhone landscape where
+   * the height is ~375 px — allow vertical scroll inside the menu so
+   * the bottom buttons never get cut off. main.tsx's touchmove guard
+   * already lets scrollable panes pass through. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .menu-screen.no-bg { background: transparent; }
@@ -156,6 +171,59 @@
     radial-gradient(ellipse at 50% 30%, rgba(80, 30, 140, 0.35), transparent 65%),
     radial-gradient(ellipse at 80% 80%, rgba(20, 90, 100, 0.25), transparent 70%),
     linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.75));
+}
+
+/* Short viewport — typical iPhone landscape (≤ 500 px tall) and most
+ * Android phones in landscape. Compress titles, buttons, and gaps so
+ * the entire menu reads within reach without scrolling far. */
+@media (max-height: 500px) {
+  .menu-screen {
+    justify-content: flex-start;
+    padding-top: calc(10px + var(--safe-top));
+    padding-bottom: calc(10px + var(--safe-bottom));
+  }
+  .pixel-title {
+    font-size: clamp(20px, 6vh, 28px) !important;
+    line-height: 1.05 !important;
+    letter-spacing: 0.14em !important;
+  }
+  .pixel-subtitle {
+    font-size: 9px;
+    letter-spacing: 0.22em;
+  }
+  .pixel-btn {
+    min-width: clamp(130px, 26vw, 180px);
+    padding: 6px 14px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+  }
+  .pixel-divider { margin: 6px 0; }
+}
+
+/* Main menu — single column by default, two columns on short
+ * landscape so the eight buttons fit without scrolling. */
+.main-menu-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.main-menu-footer {
+  margin-top: 14px;
+  opacity: 0.7;
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .main-menu .main-menu-title { margin-bottom: 8px !important; }
+  .main-menu-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    max-width: 560px;
+    width: 100%;
+  }
+  .main-menu-stats { margin-top: 8px !important; font-size: 10px !important; }
+  .main-menu-footer { margin-top: 6px; font-size: 9px; }
 }
 
 .hud-root {
@@ -651,6 +719,43 @@
   .archetype-portrait {
     height: 80px;
   }
+}
+
+/* iPhone landscape — three cards must share a ~390 px viewport height.
+ * Drop the portrait, shrink stat font, tighten dividers so a card +
+ * "Begin" button fits inside ~310 px of usable height. The starting-
+ * relic block stays because it's the only thing differentiating the
+ * three archetypes once the stats compress. */
+@media (max-height: 500px) {
+  .archetype-header { margin-bottom: 6px !important; }
+  .archetype-grid {
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .archetype-card {
+    min-height: 0;
+    gap: 3px;
+  }
+  .archetype-card h3 {
+    font-size: 13px;
+    margin: 0 0 2px;
+    letter-spacing: 0.12em;
+  }
+  .archetype-card .stat-line {
+    font-size: 9px;
+    letter-spacing: 0.10em;
+  }
+  .archetype-card .pixel-tag {
+    font-size: 8px;
+    padding: 2px 6px;
+  }
+  .archetype-card .help-text {
+    font-size: 9px;
+    line-height: 1.35;
+    margin: 2px 0 !important;
+  }
+  .archetype-portrait { height: 56px; }
+  .archetype-card .pixel-divider { margin: 4px 0; }
 }
 
 .archetype-card {
