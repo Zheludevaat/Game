@@ -1,7 +1,16 @@
 export type SfxName =
   | 'menu' | 'attack' | 'dash' | 'spell' | 'enemyHit' | 'playerHit'
   | 'chest' | 'shrine' | 'descend' | 'bossWarn' | 'bossDeath' | 'pickup'
-  | 'doorLock' | 'doorOpen';
+  | 'doorLock' | 'doorOpen' | 'crit';
+
+interface VoiceSpec {
+  type: OscillatorType;
+  freq: number;
+  end: number;
+  attack: number;
+  decay: number;
+  peak: number;
+}
 
 export type CinematicMood = 'cosmos' | 'descent' | 'boss' | 'ascent';
 
@@ -223,45 +232,115 @@ export class AudioSystem {
     this.ambientNodes = [];
   }
 
-  sfx(name: SfxName): void {
+  /** Schedule a stack of oscillator voices, each with its own envelope,
+   *  all summed into sfxGain. The single-osc shortcut becomes
+   *  playLayered([oneVoice]) — and the four "big" SFX get genuine 2-3
+   *  voice chords so impacts have body, mid-snap, and high ting. */
+  private playLayered(layers: VoiceSpec[]): void {
     if (!this.unlocked || !this.ctx) return;
     const ctx = this.ctx;
     const now = ctx.currentTime;
+    for (const v of layers) {
+      const env = ctx.createGain();
+      env.gain.value = 0;
+      env.connect(this.sfxGain);
+      const osc = ctx.createOscillator();
+      osc.type = v.type;
+      osc.frequency.setValueAtTime(v.freq, now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(1, v.end), now + v.attack + v.decay);
+      osc.connect(env);
+      env.gain.setValueAtTime(0, now);
+      env.gain.linearRampToValueAtTime(v.peak, now + v.attack);
+      env.gain.exponentialRampToValueAtTime(0.001, now + v.attack + v.decay);
+      osc.start(now);
+      osc.stop(now + v.attack + v.decay + 0.05);
+    }
+  }
+
+  /** Brief filtered noise burst — adds "transient" / impact texture
+   *  that single sines/squares can't reach. Used to thicken player /
+   *  enemy hits and the dash whoosh. */
+  private playNoiseBurst(duration: number, peak: number, filterFreq: number): void {
+    if (!this.unlocked || !this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const len = Math.max(0.02, duration);
+    const buffer = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * len)), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = filterFreq;
+    filter.Q.value = 1.2;
     const env = ctx.createGain();
     env.gain.value = 0;
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(peak, now + 0.004);
+    env.gain.exponentialRampToValueAtTime(0.001, now + len);
+    src.connect(filter);
+    filter.connect(env);
     env.connect(this.sfxGain);
-    const osc = ctx.createOscillator();
-    osc.connect(env);
+    src.start(now);
+    src.stop(now + len + 0.02);
+  }
 
-    const setup = (
-      type: OscillatorType, freq: number, end: number,
-      attack: number, decay: number, peak: number,
-    ): void => {
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, now);
-      osc.frequency.exponentialRampToValueAtTime(Math.max(1, end), now + attack + decay);
-      env.gain.setValueAtTime(0, now);
-      env.gain.linearRampToValueAtTime(peak, now + attack);
-      env.gain.exponentialRampToValueAtTime(0.001, now + attack + decay);
-      osc.start(now);
-      osc.stop(now + attack + decay + 0.05);
-    };
-
+  sfx(name: SfxName): void {
+    if (!this.unlocked || !this.ctx) return;
     switch (name) {
-      case 'attack':    setup('square',   400, 120, 0.005, 0.15, 0.25); break;
-      case 'dash':      setup('triangle', 220, 80,  0.005, 0.20, 0.20); break;
-      case 'spell':     setup('sawtooth', 700, 220, 0.005, 0.30, 0.20); break;
-      case 'enemyHit':  setup('square',   180, 60,  0.005, 0.18, 0.25); break;
-      case 'playerHit': setup('sawtooth', 120, 40,  0.005, 0.25, 0.30); break;
-      case 'chest':     setup('triangle', 500, 900, 0.01,  0.30, 0.25); break;
-      case 'shrine':    setup('sine',     880, 1320,0.02,  0.50, 0.20); break;
-      case 'descend':   setup('triangle', 110, 55,  0.05,  0.80, 0.30); break;
-      case 'bossWarn':  setup('sawtooth', 90,  220, 0.02,  0.70, 0.30); break;
-      case 'bossDeath': setup('sawtooth', 600, 80,  0.05,  1.20, 0.35); break;
-      case 'pickup':    setup('sine',     900,1320, 0.005, 0.12, 0.20); break;
-      case 'doorLock':  setup('sawtooth', 100, 50,  0.01,  0.20, 0.25); break;
-      case 'doorOpen':  setup('sine',     440, 880, 0.02,  0.30, 0.20); break;
-      case 'menu':      setup('sine',     660, 990, 0.01,  0.15, 0.10); break;
+      // --- Four big SFX — layered voices for body + snap + ting ---
+      case 'enemyHit':
+        // Low square thump body + mid square snap + high triangle ting.
+        this.playLayered([
+          { type: 'square',   freq: 90,  end: 50,  attack: 0.003, decay: 0.10, peak: 0.18 },
+          { type: 'square',   freq: 200, end: 80,  attack: 0.003, decay: 0.16, peak: 0.18 },
+          { type: 'triangle', freq: 1100,end: 600, attack: 0.003, decay: 0.10, peak: 0.10 },
+        ]);
+        this.playNoiseBurst(0.08, 0.10, 1400);
+        break;
+      case 'playerHit':
+        // Heavy sawtooth body + mid grind + filtered noise impact.
+        this.playLayered([
+          { type: 'sawtooth', freq: 70,  end: 30,  attack: 0.003, decay: 0.20, peak: 0.22 },
+          { type: 'sawtooth', freq: 320, end: 120, attack: 0.003, decay: 0.22, peak: 0.18 },
+        ]);
+        this.playNoiseBurst(0.14, 0.16, 900);
+        break;
+      case 'spell':
+        // Existing sawtooth sweep + low body + airy harmonic above.
+        this.playLayered([
+          { type: 'sawtooth', freq: 700, end: 220, attack: 0.005, decay: 0.30, peak: 0.18 },
+          { type: 'sine',     freq: 1400,end: 440, attack: 0.005, decay: 0.32, peak: 0.07 },
+          { type: 'triangle', freq: 175, end: 110, attack: 0.005, decay: 0.34, peak: 0.10 },
+        ]);
+        break;
+      case 'pickup':
+        // Original sine sweep + low body thump + high shimmer.
+        this.playLayered([
+          { type: 'sine',     freq: 900, end: 1320,attack: 0.005, decay: 0.12, peak: 0.18 },
+          { type: 'triangle', freq: 220, end: 200, attack: 0.005, decay: 0.10, peak: 0.10 },
+          { type: 'sine',     freq: 1760,end: 2200,attack: 0.005, decay: 0.18, peak: 0.06 },
+        ]);
+        break;
+      // --- Crit — bright two-voice gold ping ---
+      case 'crit':
+        this.playLayered([
+          { type: 'sine', freq: 1760, end: 2640, attack: 0.002, decay: 0.18, peak: 0.18 },
+          { type: 'sine', freq: 2640, end: 3520, attack: 0.002, decay: 0.14, peak: 0.10 },
+        ]);
+        break;
+      // --- Remaining 9 SFX stay as single-voice envelopes ---
+      case 'attack':    this.playLayered([{ type: 'square',   freq: 400, end: 120, attack: 0.005, decay: 0.15, peak: 0.25 }]); break;
+      case 'dash':      this.playLayered([{ type: 'triangle', freq: 220, end: 80,  attack: 0.005, decay: 0.20, peak: 0.20 }]); this.playNoiseBurst(0.12, 0.06, 1800); break;
+      case 'chest':     this.playLayered([{ type: 'triangle', freq: 500, end: 900, attack: 0.01,  decay: 0.30, peak: 0.25 }]); break;
+      case 'shrine':    this.playLayered([{ type: 'sine',     freq: 880, end: 1320,attack: 0.02,  decay: 0.50, peak: 0.20 }]); break;
+      case 'descend':   this.playLayered([{ type: 'triangle', freq: 110, end: 55,  attack: 0.05,  decay: 0.80, peak: 0.30 }]); break;
+      case 'bossWarn':  this.playLayered([{ type: 'sawtooth', freq: 90,  end: 220, attack: 0.02,  decay: 0.70, peak: 0.30 }]); break;
+      case 'bossDeath': this.playLayered([{ type: 'sawtooth', freq: 600, end: 80,  attack: 0.05,  decay: 1.20, peak: 0.35 }]); break;
+      case 'doorLock':  this.playLayered([{ type: 'sawtooth', freq: 100, end: 50,  attack: 0.01,  decay: 0.20, peak: 0.25 }]); break;
+      case 'doorOpen':  this.playLayered([{ type: 'sine',     freq: 440, end: 880, attack: 0.02,  decay: 0.30, peak: 0.20 }]); break;
+      case 'menu':      this.playLayered([{ type: 'sine',     freq: 660, end: 990, attack: 0.01,  decay: 0.15, peak: 0.10 }]); break;
     }
   }
 }

@@ -416,6 +416,9 @@ export class GameEngine {
   private comboLastHitT = 0;
   /** Pulse animation timer for the HUD combo tag (decays toward 0). */
   private comboPulse = 0;
+  /** Crit-flash overlay timer — set on each crit, decays each frame.
+   *  Drives the brief full-screen white snap in render(). */
+  private critFlashT = 0;
   private static readonly COMBO_WINDOW = 1.2;
   private static readonly COMBO_MAX = 5;
   /** Parry window — dashStartT + this many seconds. */
@@ -428,6 +431,14 @@ export class GameEngine {
   private tutorialDidMove = false;
   private tutorialDidAttack = false;
   private tutorialDidDash = false;
+  /** Track the three follow-up prompts (spell / interact / combo). They
+   *  fire conditionally after the first three are done. */
+  private tutorialDidSpell = false;
+  private tutorialDidInteract = false;
+  private tutorialSawCombo = false;
+  /** Wall-clock the combo first crossed 3 — used to hold the combo
+   *  prompt visible briefly before fading. */
+  private tutorialComboShownAt = -1;
   private tutorialStartPos: Vec = { x: 0, y: 0 };
 
   /** Wall-clock time spent inside this run (seconds; ticks only while playing). */
@@ -477,12 +488,17 @@ export class GameEngine {
     this.comboCount = 0;
     this.comboLastHitT = 0;
     this.comboPulse = 0;
+    this.critFlashT = 0;
     this.runTimer = 0;
     // Tutorial fires only on the very first run ever — gated by meta flag.
     this.tutorialActive = !this.meta.seenTutorial;
     this.tutorialDidMove = false;
     this.tutorialDidAttack = false;
     this.tutorialDidDash = false;
+    this.tutorialDidSpell = false;
+    this.tutorialDidInteract = false;
+    this.tutorialSawCombo = false;
+    this.tutorialComboShownAt = -1;
     this.summary.essenceCollected = 0;
     this.summary.coinsCollected = 0;
     this.summary.relicsFound = [];
@@ -1101,10 +1117,35 @@ export class GameEngine {
     p.spellCooldown = Math.max(0, p.spellCooldown - dt);
     p.mp = Math.min(p.maxMp, p.mp + p.manaRegen * dt);
     if (this.comboPulse > 0) this.comboPulse = Math.max(0, this.comboPulse - dt);
+    if (this.critFlashT > 0) this.critFlashT = Math.max(0, this.critFlashT - dt);
 
-    // Tutorial bake-off — once all three are done, deactivate + ask host
-    // to persist the seenTutorial flag so we never show it again.
-    if (this.tutorialActive && this.tutorialDidMove && this.tutorialDidAttack && this.tutorialDidDash) {
+    // Cosmetic Lamp Aura — drop a faint sphere-accent sparkle every
+    // ~0.22 s so the upgrade leaves a visible wake behind the player.
+    if (this.meta.cosmeticLampAura && !this.reducedParticles) {
+      const period = 0.22;
+      const phase = this.timeAlive % period;
+      const lastPhase = (this.timeAlive - dt) % period;
+      if (phase < lastPhase) {
+        const accent = sphereForFloor(this.floor.number).accent;
+        this.particles.emit({
+          x: p.pos.x + (Math.random() - 0.5) * 4,
+          y: p.pos.y + 2,
+          vx: (Math.random() - 0.5) * 8,
+          vy: -8 - Math.random() * 6,
+          life: 0.7, maxLife: 0.7, size: 1.2, colour: accent, drag: 0.93,
+        });
+      }
+    }
+
+    // Tutorial bake-off — once all six prompts have been satisfied,
+    // deactivate + ask host to persist the seenTutorial flag so we
+    // never show any of them again. The combo prompt is optional — if
+    // the player has played past 4 minutes without ever chaining 3 hits,
+    // they don't need the tutorial held open for it.
+    const fundamentalsDone = this.tutorialDidMove && this.tutorialDidAttack && this.tutorialDidDash;
+    const followUpsDone = this.tutorialDidSpell && this.tutorialDidInteract;
+    const comboSeenOrTimedOut = this.tutorialSawCombo || this.timeAlive > 240;
+    if (this.tutorialActive && fundamentalsDone && followUpsDone && comboSeenOrTimedOut) {
       this.tutorialActive = false;
       this.meta.seenTutorial = true;
       this.cbs.onTutorialComplete?.();
@@ -1441,6 +1482,7 @@ export class GameEngine {
   private castSpell(): void {
     const p = this.player;
     const sp = SPELLS[p.spells[p.spellIdx]];
+    if (this.tutorialActive) this.tutorialDidSpell = true;
     const fx = p.facing.x || 1, fy = p.facing.y;
     const fl = Math.hypot(fx, fy) || 1;
     const dir = { x: fx / fl, y: fy / fl };
@@ -1502,6 +1544,7 @@ export class GameEngine {
   private tryInteract(): void {
     const p = this.player;
     const room = this.currentRoom;
+    if (this.tutorialActive) this.tutorialDidInteract = true;
     // Stairs
     if (room.type === 'exit' && this.isNearCenter(p.pos)) {
       this.descend();
@@ -2556,9 +2599,11 @@ export class GameEngine {
     let dmg = rawDmg;
     let isCrit = false;
 
-    // Crit roll — luck stat finally pays out. Base 1% + 1.5%/luck point.
+    // Crit roll — luck stat finally pays out. Base 3 % + 2 %/luck point.
+    // Bumped from 1 % + 1.5 %/point so crits actually surface per fight;
+    // the old baseline had a 20-hit Magus seeing zero crits 40 % of the time.
     if (fromPlayer && canCrit) {
-      const chance = Math.max(0, (1 + 1.5 * this.player.luck) / 100);
+      const chance = Math.max(0, (3 + 2 * this.player.luck) / 100);
       if (Math.random() < chance) {
         isCrit = true;
         dmg *= 1.8;
@@ -2581,10 +2626,23 @@ export class GameEngine {
     e.pos.y += ny * knockStrength * 0.02;
     if (isCrit) {
       this.spawnCritDamageNumber(e.pos.x, e.pos.y - 14, dmg);
-      this.camera.shakeT = Math.max(this.camera.shakeT, 0.18);
-      this.camera.shakeMag = Math.max(this.camera.shakeMag, 3);
+      this.camera.shakeT = Math.max(this.camera.shakeT, 0.22);
+      this.camera.shakeMag = Math.max(this.camera.shakeMag, 3.5);
+      // Brief full-screen white flash + dedicated audio ping so a crit
+      // reads instantly even if the damage number scrolls past quickly.
+      this.critFlashT = 0.08;
+      audio.sfx('crit');
       if (!this.reducedParticles) {
-        this.particles.burst(e.pos.x, e.pos.y - 4, 14, { colour: '#fff7d6', life: 0.5, maxLife: 0.5, drag: 0.84 });
+        this.particles.burst(e.pos.x, e.pos.y - 4, 18, { colour: '#fff7d6', life: 0.55, maxLife: 0.55, drag: 0.84 });
+        // Expanding gold ring — telegraphs the crit even from across the room.
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          this.particles.emit({
+            x: e.pos.x, y: e.pos.y - 4,
+            vx: Math.cos(a) * 140, vy: Math.sin(a) * 140,
+            life: 0.26, maxLife: 0.26, size: 1.6, colour: '#ffe6a3', drag: 0.78,
+          });
+        }
       }
     } else {
       this.spawnDamageNumber(e.pos.x, e.pos.y - 10, `${dmg}`, '#ffd97a');
@@ -2689,6 +2747,12 @@ export class GameEngine {
     }
     this.comboLastHitT = this.timeAlive;
     this.comboPulse = 0.4;
+    // Tutorial: surface the combo prompt the first time the chain ticks
+    // to 3 so a new player understands what the "×N" tag means.
+    if (this.tutorialActive && !this.tutorialSawCombo && this.comboCount >= 3) {
+      this.tutorialSawCombo = true;
+      this.tutorialComboShownAt = this.timeAlive;
+    }
   }
 
   private spawnCritDamageNumber(x: number, y: number, dmg: number): void {
@@ -2797,9 +2861,55 @@ export class GameEngine {
     p.hp -= dmg;
     p.iframes = 0.7;
     p.flash = 0.15;
-    this.camera.shakeT = 0.3; this.camera.shakeMag = 3;
+    // Hit-pause scales with damage — small chip hits stutter briefly,
+    // big swings freeze the world for 0.10 s so the impact lands. Only
+    // damaging hits trigger this; the 5-dmg floor stops DoT ticks from
+    // perpetually freezing the frame.
+    if (dmg >= 5) {
+      this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + (dmg >= 12 ? 0.10 : 0.06));
+    }
+    // Camera shake scales with damage fraction — a 4 dmg chip is a 3 px
+    // nudge, a 20 dmg slam yanks the camera 6 px.
+    const dmgFrac = Math.min(1, dmg / Math.max(8, p.maxHp * 0.20));
+    this.camera.shakeT = Math.max(this.camera.shakeT, 0.30 + dmgFrac * 0.25);
+    this.camera.shakeMag = Math.max(this.camera.shakeMag, 3 + dmgFrac * 4);
     audio.sfx('playerHit');
     this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `${dmg}`, '#e23a4a');
+    // Visual response — sphere-tinted crimson burst at the player so
+    // taking damage reads as an EVENT, not just a number popping. Mirror
+    // of the damageEnemy burst on the inverse side of the exchange.
+    if (!this.reducedParticles) {
+      const accent = sphereForFloor(this.floor.number).accent;
+      // Crimson gore — visceral
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 70 + Math.random() * 50;
+        this.particles.emit({
+          x: p.pos.x, y: p.pos.y - 4,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.35, maxLife: 0.35, size: 1.4, colour: '#e23a4a', drag: 0.88,
+        });
+      }
+      // Sphere-accent glints layered over — the room theme bleeds in.
+      for (let i = 0; i < 6; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 50 + Math.random() * 40;
+        this.particles.emit({
+          x: p.pos.x, y: p.pos.y - 4,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.32, maxLife: 0.32, size: 1.2, colour: accent, drag: 0.88,
+        });
+      }
+      // Bright impact ring — small white pop so the hit reads instantly.
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        this.particles.emit({
+          x: p.pos.x, y: p.pos.y - 4,
+          vx: Math.cos(a) * 100, vy: Math.sin(a) * 100,
+          life: 0.18, maxLife: 0.18, size: 1.3, colour: '#ffffff', drag: 0.8,
+        });
+      }
+    }
     // Damage breaks the combo chain.
     this.comboCount = 0;
   }
@@ -3316,6 +3426,34 @@ export class GameEngine {
     vg.addColorStop(1, 'rgba(0,0,0,0.7)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
+
+    // Low-HP red vignette — pulses on top of the normal vignette when
+    // the player drops below 25 % HP so the danger reads peripherally
+    // even when the player is staring at the centre of the action.
+    // Skipped during the death sequence so the crimson doesn't fight
+    // the dark fade.
+    if (!this.dead && this.player) {
+      const hpFrac = this.player.maxHp > 0 ? this.player.hp / this.player.maxHp : 1;
+      if (hpFrac < 0.25 && hpFrac > 0) {
+        const danger = Math.min(1, (0.25 - hpFrac) / 0.25); // 0..1 as HP -> 0
+        const pulse = 0.55 + 0.45 * Math.sin(this.timeAlive * 4.2);
+        const a = 0.30 + 0.45 * danger * pulse;
+        const rv = ctx.createRadialGradient(VIRTUAL_W / 2, VIRTUAL_H / 2, VIRTUAL_H * 0.20, VIRTUAL_W / 2, VIRTUAL_H / 2, VIRTUAL_H * 0.70);
+        rv.addColorStop(0, 'rgba(226, 58, 74, 0)');
+        rv.addColorStop(1, `rgba(226, 58, 74, ${a})`);
+        ctx.fillStyle = rv;
+        ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
+      }
+    }
+
+    // Crit white flash — one-frame full-screen overlay that decays in
+    // ~0.08 s. Painted on top of the lighting + vignette so it reads as
+    // a "shutter snap" of impact, not a fog.
+    if (this.critFlashT > 0) {
+      const a = Math.min(1, this.critFlashT / 0.08);
+      ctx.fillStyle = `rgba(255, 247, 214, ${0.08 * a})`;
+      ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
+    }
 
     // Death sequence — lamp extinguishes. Iris closes around the body
     // and the world drifts toward black so the GameOver screen lands
@@ -3946,6 +4084,16 @@ export class GameEngine {
     if (this.dyingT < 0) {
       const p = this.player;
       this.paintLight(p.pos.x, p.pos.y - 6, 56, '244, 210, 122', 0.38);
+      // Cosmetic: Lamp Aura. Purchased from Meta Progression for 30
+      // essence — adds a sphere-tinted outer halo + a gentle breathing
+      // pulse on top of the base lamp so the upgrade is felt during
+      // every step of the descent.
+      if (this.meta.cosmeticLampAura) {
+        const sphereAccentRgb = hexToRgbString(sphereForFloor(this.floor.number).accent);
+        const breathe = 0.7 + 0.3 * Math.sin(this.timeAlive * 1.8);
+        this.paintLight(p.pos.x, p.pos.y - 6, 84, sphereAccentRgb, 0.22 * breathe);
+        this.paintLight(p.pos.x, p.pos.y - 6, 30, '255, 230, 163', 0.18 * breathe);
+      }
     }
 
     // Unopened chests glow gently to draw the eye.
@@ -4308,17 +4456,28 @@ export class GameEngine {
       const tFromStart = 1 - a;
       const scale = tFromStart < 0.3 ? 1.0 + (0.3 - tFromStart) * 2 : 1.0;
       const text = ((d as DamageNumber & { text?: string }).text ?? `${d.value}`);
+      const isCrit = !!(d as DamageNumber & { crit?: boolean }).crit;
       const big = text.startsWith('-') || /^\d+$/.test(text);
-      const baseSize = big ? 11 : 9;
+      // Crit text is ~40 % larger so it pops above the regular shower.
+      const baseSize = isCrit ? 15 : (big ? 11 : 9);
       ctx.font = `bold ${Math.round(baseSize * scale)}px "Iowan Old Style","Georgia",serif`;
       ctx.globalAlpha = a;
+      // Crit gets a warm gold glow behind the body — drawn before the
+      // black halo so the order is: glow → shadow → text.
+      if (isCrit) {
+        ctx.shadowColor = 'rgba(255, 217, 122, 0.95)';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = 'rgba(255, 247, 214, 0.55)';
+        ctx.fillText(text, Math.round(d.x), Math.round(d.y));
+        ctx.shadowBlur = 0;
+      }
       // soft halo
       ctx.fillStyle = 'rgba(0,0,0,0.85)';
       ctx.fillText(text, Math.round(d.x) + 1, Math.round(d.y) + 1);
       ctx.fillText(text, Math.round(d.x) - 1, Math.round(d.y) + 1);
       ctx.fillText(text, Math.round(d.x) + 1, Math.round(d.y) - 1);
       ctx.fillText(text, Math.round(d.x) - 1, Math.round(d.y) - 1);
-      ctx.fillStyle = d.colour;
+      ctx.fillStyle = isCrit ? '#fff7d6' : d.colour;
       ctx.fillText(text, Math.round(d.x), Math.round(d.y));
     }
     ctx.globalAlpha = 1;
@@ -4416,9 +4575,30 @@ export class GameEngine {
   private computeTutorialPrompts(): string[] {
     if (!this.tutorialActive) return [];
     const out: string[] = [];
+    // Phase 1 — the three movement / combat fundamentals.
     if (!this.tutorialDidMove)   out.push('Hold direction to move');
     if (!this.tutorialDidAttack) out.push('Press J / A to strike');
     if (!this.tutorialDidDash)   out.push('Press Space / B to dash');
+    // Phase 2 — only after the basics are done. Spell prompt fires once
+    // the player has been swinging for a moment, so they discover MP.
+    const basicsDone = this.tutorialDidMove && this.tutorialDidAttack && this.tutorialDidDash;
+    if (basicsDone && !this.tutorialDidSpell) out.push('Press L / X for a spell');
+    // Interact prompt — gate on entering a room with a chest, shrine
+    // or stairs so we only mention it when it matters.
+    const room = this.currentRoom;
+    const hasInteractable = room && (
+      (room.hasChest && !room.chestOpened) ||
+      (room.hasShrine && !room.shrineUsed) ||
+      room.type === 'exit'
+    );
+    if (basicsDone && !this.tutorialDidInteract && hasInteractable) {
+      out.push('Press E / Y to interact');
+    }
+    // Combo prompt — surfaces the first time the ×N tag actually
+    // appears, holds for ~4 s, then fades.
+    if (this.tutorialSawCombo && this.timeAlive - this.tutorialComboShownAt < 4) {
+      out.push('Combo — chain hits for bonus damage');
+    }
     return out;
   }
 
