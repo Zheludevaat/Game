@@ -3418,10 +3418,14 @@ export class GameEngine {
 
     ctx.restore();
 
-    // Vignette
-    const vg = ctx.createRadialGradient(VIRTUAL_W / 2, VIRTUAL_H / 2, VIRTUAL_H * 0.25, VIRTUAL_W / 2, VIRTUAL_H / 2, VIRTUAL_H * 0.7);
+    // Vignette — keeps the cinematic edge fall-off but softened so the
+    // room corners (doors, hazards, pickups along the wall) stay
+    // visible. Original 0.7 alpha killed visibility along the bottom
+    // half of the screen on iPhone landscape; 0.45 keeps the mood
+    // without obscuring playable space.
+    const vg = ctx.createRadialGradient(VIRTUAL_W / 2, VIRTUAL_H / 2, VIRTUAL_H * 0.35, VIRTUAL_W / 2, VIRTUAL_H / 2, VIRTUAL_H * 0.85);
     vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,0.7)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.45)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
 
@@ -4055,13 +4059,24 @@ export class GameEngine {
     const t = this.timeAlive;
     const flick = (seed: number): number => 0.86 + 0.14 * Math.sin(t * 6 + seed * 1.7);
 
-    // Multiply layer — pulls the room toward shadow. Lifted from the
-    // original rgb(70, 56, 110) which crushed the floor to near-black
-    // and made gameplay hard to read on small screens. The new tint
-    // keeps the moody purple-grey while preserving floor detail.
+    // Multiply layer — pulls the room toward dusk but never to black.
+    // Tuned so a base floor (~17 % brightness) lands at ~10 % after
+    // multiplication, which the ambient additive pass below then lifts
+    // back into readable territory. Earlier values crushed the dark
+    // corners; this preserves atmosphere without losing the floor.
     ctx.save();
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = 'rgb(118, 100, 150)';
+    ctx.fillStyle = 'rgb(155, 138, 180)';
+    ctx.fillRect(0, 0, ROOM_W, ROOM_H);
+    ctx.restore();
+
+    // Ambient additive fill — a faint global lift so areas with no
+    // direct light source are still visible. Without this, the dark
+    // corners of the room go effectively black and the player loses
+    // doors / pickups / hazards they should be able to see.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(120, 100, 160, 0.16)`;
     ctx.fillRect(0, 0, ROOM_W, ROOM_H);
     ctx.restore();
 
@@ -4069,26 +4084,25 @@ export class GameEngine {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
 
-    // Wall torches — same positions as drawRoom's torch loop. Reach
-    // bumped so torchlight actually meets the player's lamp mid-room.
+    // Wall torches — same positions as drawRoom's torch loop. Bigger
+    // reach + brighter cores so torchlight actually meets the player's
+    // lamp at mid-room, instead of the floor going dark between them.
     for (let i = 1; i <= 4; i++) {
       const lx = (ROOM_W / 5) * i;
       const ly = 28;
       const f = flick(i);
-      // Warm core
-      this.paintLight(lx, ly, 96, '255, 220, 160', 0.48 * f);
-      // Sphere-accent halo — bleeds the room hue into the torchlight
-      this.paintLight(lx, ly, 140, sphereRgb, 0.16 * f);
+      this.paintLight(lx, ly, 110, '255, 220, 160', 0.55 * f);
+      this.paintLight(lx, ly, 160, sphereRgb, 0.18 * f);
     }
 
     // The player carries a small lamp — softens the void around them.
-    // Bigger radius + higher alpha so the play area around the initiate
-    // is genuinely readable, not just a thin pool of light.
+    // Sized to comfortably cover the immediate fighting radius (~90 px)
+    // so the player can ALWAYS see what's about to swing at them.
     if (this.dyingT < 0) {
       const p = this.player;
-      this.paintLight(p.pos.x, p.pos.y - 6, 78, '255, 230, 170', 0.52);
+      this.paintLight(p.pos.x, p.pos.y - 6, 96, '255, 230, 170', 0.58);
       // Tight hot core right at the lamp itself.
-      this.paintLight(p.pos.x, p.pos.y - 6, 30, '255, 247, 214', 0.35);
+      this.paintLight(p.pos.x, p.pos.y - 6, 36, '255, 247, 214', 0.40);
       // Cosmetic: Lamp Aura. Purchased from Meta Progression for 30
       // essence — adds a sphere-tinted outer halo + a gentle breathing
       // pulse on top of the base lamp so the upgrade is felt during

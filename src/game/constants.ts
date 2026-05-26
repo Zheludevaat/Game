@@ -22,12 +22,16 @@ export const STORAGE_KEYS = {
 
 export const PALETTE = {
   bg: '#02010a',
-  floor: '#1a1124',
-  floor2: '#221636',
-  floorCrack: '#0e0820',
-  wall: '#3b265c',
-  wallTop: '#5b3a86',
-  wallDark: '#1a0f2c',
+  // Floor tones lifted from #1a1124/#221636 (originally 10–14 %
+  // brightness — pitch-black after the room's multiply pass crushed
+  // them another ~50 %). New values sit at ~17–21 % so the floor
+  // texture stays readable even outside any direct light pool.
+  floor: '#251843',
+  floor2: '#2e1f4e',
+  floorCrack: '#150b2a',
+  wall: '#4d3270',
+  wallTop: '#6d489c',
+  wallDark: '#1f1430',
   gold: '#f4d27a',
   gold2: '#c8983f',
   gold3: '#7a5a1a',
