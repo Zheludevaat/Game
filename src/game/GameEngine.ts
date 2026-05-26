@@ -232,6 +232,20 @@ function wardenDefFromVisual(visualKey: string): BossDef | null {
   return null;
 }
 
+// Per-enemy telegraph colour — used by the wind-up flash so a
+// saturnKnight reads as "violet about to slam" instead of generic orange.
+function enemyTelegraphColour(type: string): string {
+  switch (type) {
+    case 'lesserShade':    return '226, 58, 74';   // crimson
+    case 'mercuryImp':     return '108, 246, 229'; // teal
+    case 'saltGolem':      return '244, 210, 122'; // bone gold
+    case 'lunarWisp':      return '205, 214, 220'; // pale silver
+    case 'saturnKnight':   return '155, 108, 255'; // violet
+    case 'serpentOfBrass': return '200, 152, 63';  // brass
+    default:               return '244, 130, 60';  // fallback warm orange
+  }
+}
+
 // Hex `#rrggbb` → `"r, g, b"` (an rgba() inner triple).
 function hexToRgbString(hex: string): string {
   let h = hex.replace('#', '');
@@ -286,6 +300,16 @@ interface DeathFx {
   duration: number;   // total animation length
 }
 
+/** A boss attack telegraph + delayed fire. The renderer draws each
+ * pending action's optional `render(ctx, t01)` during the wind-up so the
+ * player has a chance to read and dodge before the damage lands. */
+interface DelayedAction {
+  t: number;
+  duration: number;
+  fire: () => void;
+  render?: (ctx: CanvasRenderingContext2D, t01: number) => void;
+}
+
 export class GameEngine {
   private canvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
@@ -335,6 +359,9 @@ export class GameEngine {
   private deathFx: DeathFx[] = [];
   // Kronos signature: time-stop suspends most updates until this time.
   private timeStopUntil = 0;
+  // Boss telegraphs — wind-up actions render their own marker for the
+  // duration, then fire() once the timer elapses.
+  private delayedActions: DelayedAction[] = [];
 
   constructor(cbs: EngineCallbacks) {
     this.cbs = cbs;
@@ -372,6 +399,7 @@ export class GameEngine {
     this.timeStopUntil = 0;
     this.hitPauseUntil = 0;
     this.deathFx = [];
+    this.delayedActions = [];
     this.summary.essenceCollected = 0;
     this.summary.coinsCollected = 0;
     this.summary.relicsFound = [];
@@ -876,6 +904,7 @@ export class GameEngine {
       this.updateProjectiles(dt);
       this.updatePickups(dt);
       this.updateSigils(dt);
+      this.updateDelayedActions(dt);
     } else if (inTimeStop) {
       // During time-stop sigils still tick their delay so the player
       // can read what's pending — but they can't fire.
@@ -1538,37 +1567,56 @@ export class GameEngine {
     audio.sfx('bossWarn');
   }
 
-  /** Hermes — Quicksilver teleport. Boss vanishes, reappears at a
-   * random distant point, and an after-image at the old spot fires
-   * a single bolt at the player. */
+  /** Hermes — Quicksilver teleport. 0.5s wind-up at his current spot
+   * (player can read it), then he teleports to a random distant point
+   * and an after-image bolt fires from the OLD position toward where
+   * the player WAS at the moment of teleport — dodgeable by stepping. */
   private hermesMercurialStep(e: Enemy): void {
     const oldX = e.pos.x;
     const oldY = e.pos.y;
-    // Teleport — pick a point at least 100 away from player and inside bounds
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const nx = ROOM_MARGIN + 24 + Math.random() * (ROOM_W - ROOM_MARGIN * 2 - 48);
-      const ny = ROOM_MARGIN + 24 + Math.random() * (ROOM_H - ROOM_MARGIN * 2 - 48);
-      const d = Math.hypot(this.player.pos.x - nx, this.player.pos.y - ny);
-      if (d > 100) { e.pos.x = nx; e.pos.y = ny; break; }
-    }
-    // Burst at the old position
-    if (!this.reducedParticles) {
-      this.particles.burst(oldX, oldY, 22, { colour: '#6cf6e5', life: 0.5, maxLife: 0.5, drag: 0.85 });
-      this.particles.burst(e.pos.x, e.pos.y, 22, { colour: '#a4faf0', life: 0.5, maxLife: 0.5, drag: 0.85 });
-    }
-    // After-image bolt fires from the OLD location toward the player
-    const aimDx = this.player.pos.x - oldX;
-    const aimDy = this.player.pos.y - oldY;
-    const aimL = Math.hypot(aimDx, aimDy) || 1;
-    this.projectiles.push({
-      id: nid(),
-      pos: { x: oldX, y: oldY },
-      vel: { x: (aimDx / aimL) * 220, y: (aimDy / aimL) * 220 },
-      life: 2, radius: 5, damage: 12,
-      fromPlayer: false, pierce: 0, homing: false,
-      colour: '#a4faf0', trailColour: '#1f8a86',
-    });
     audio.sfx('dash');
+    this.delayedActions.push({
+      t: 0,
+      duration: 0.55,
+      render: (ctx, t01) => {
+        // Growing quicksilver swirl at the boss's current position
+        const r = 12 + t01 * 22;
+        ctx.fillStyle = `rgba(108, 246, 229, ${0.18 + 0.35 * t01})`;
+        ctx.beginPath(); ctx.arc(oldX, oldY, r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `rgba(164, 250, 240, ${0.6 + 0.4 * t01})`;
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 3; i++) {
+          const a = this.timeAlive * 6 + i * (Math.PI * 2 / 3);
+          ctx.beginPath();
+          ctx.arc(oldX, oldY, r - 4 - i * 2, a, a + 1.6);
+          ctx.stroke();
+        }
+      },
+      fire: () => {
+        // Teleport — pick a point at least 100 away from player
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const nx = ROOM_MARGIN + 24 + Math.random() * (ROOM_W - ROOM_MARGIN * 2 - 48);
+          const ny = ROOM_MARGIN + 24 + Math.random() * (ROOM_H - ROOM_MARGIN * 2 - 48);
+          const d = Math.hypot(this.player.pos.x - nx, this.player.pos.y - ny);
+          if (d > 100) { e.pos.x = nx; e.pos.y = ny; break; }
+        }
+        if (!this.reducedParticles) {
+          this.particles.burst(oldX, oldY, 22, { colour: '#6cf6e5', life: 0.5, maxLife: 0.5, drag: 0.85 });
+          this.particles.burst(e.pos.x, e.pos.y, 22, { colour: '#a4faf0', life: 0.5, maxLife: 0.5, drag: 0.85 });
+        }
+        const aimDx = this.player.pos.x - oldX;
+        const aimDy = this.player.pos.y - oldY;
+        const aimL = Math.hypot(aimDx, aimDy) || 1;
+        this.projectiles.push({
+          id: nid(),
+          pos: { x: oldX, y: oldY },
+          vel: { x: (aimDx / aimL) * 220, y: (aimDy / aimL) * 220 },
+          life: 2, radius: 5, damage: 12,
+          fromPlayer: false, pierce: 0, homing: false,
+          colour: '#a4faf0', trailColour: '#1f8a86',
+        });
+      },
+    });
   }
 
   /** Aphrodite — A 3-second sigil drops where the player is standing.
@@ -1590,61 +1638,115 @@ export class GameEngine {
     audio.sfx('shrine');
   }
 
-  /** Helios — A long beam projectile fires across the room toward the
-   * player's CURRENT position. (Telegraphed-feel via slow speed.) */
+  /** Helios — three solar lances. 0.7s aim-line telegraph (player can
+   * see exactly where each lance will fire and step out of it), then
+   * the lances fly. Damage is high; dodge IS the mechanic. */
   private heliosSolarLance(e: Enemy): void {
-    const aimDx = this.player.pos.x - e.pos.x;
-    const aimDy = this.player.pos.y - e.pos.y;
-    const aimL = Math.hypot(aimDx, aimDy) || 1;
-    // Fire 3 lances in a slight spread for arena coverage.
+    // Aim is snapshotted at TELEGRAPH TIME — the player has the full
+    // 0.7s to step out of the beams. Fairer than a "live-aim" lock.
+    const startX = e.pos.x;
+    const startY = e.pos.y;
+    const aimDx = this.player.pos.x - startX;
+    const aimDy = this.player.pos.y - startY;
     const baseAng = Math.atan2(aimDy, aimDx);
-    for (let i = -1; i <= 1; i++) {
-      const a = baseAng + i * 0.18;
-      this.projectiles.push({
-        id: nid(),
-        pos: { x: e.pos.x, y: e.pos.y },
-        vel: { x: Math.cos(a) * 160, y: Math.sin(a) * 160 },
-        life: 3, radius: 6, damage: 14,
-        fromPlayer: false, pierce: 0, homing: false,
-        colour: '#ffe6a3', trailColour: '#f4d27a',
-      });
-    }
-    void aimL;
     audio.sfx('bossWarn');
+    this.delayedActions.push({
+      t: 0,
+      duration: 0.75,
+      render: (ctx, t01) => {
+        // Three thin aim-lines, brightness ramps with t01
+        ctx.lineWidth = 1 + t01 * 1.5;
+        for (let i = -1; i <= 1; i++) {
+          const a = baseAng + i * 0.18;
+          const ex = startX + Math.cos(a) * 600;
+          const ey = startY + Math.sin(a) * 600;
+          ctx.strokeStyle = `rgba(255, 230, 163, ${0.25 + 0.6 * t01})`;
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(ex, ey);
+          ctx.stroke();
+        }
+        // Pulsing core at the boss to signal "about to fire"
+        ctx.fillStyle = `rgba(255, 247, 214, ${0.4 + 0.5 * t01})`;
+        ctx.beginPath();
+        ctx.arc(startX, startY, 6 + t01 * 4, 0, Math.PI * 2);
+        ctx.fill();
+      },
+      fire: () => {
+        // Re-anchor at the boss's CURRENT position (it may have drifted),
+        // but use the SNAPSHOT angles so the player's positional dodge
+        // remains correct.
+        for (let i = -1; i <= 1; i++) {
+          const a = baseAng + i * 0.18;
+          this.projectiles.push({
+            id: nid(),
+            pos: { x: e.pos.x, y: e.pos.y },
+            vel: { x: Math.cos(a) * 220, y: Math.sin(a) * 220 },
+            life: 3, radius: 6, damage: 14,
+            fromPlayer: false, pierce: 0, homing: false,
+            colour: '#ffe6a3', trailColour: '#f4d27a',
+          });
+        }
+        audio.sfx('spell');
+      },
+    });
   }
 
-  /** Ares — Boss dashes across the room toward the player. Slash trail
-   * uses fast-decaying projectiles so the path remains briefly hazardous. */
+  /** Ares — Charge & Sever. 0.5s wind-up showing the dash path as a
+   * thick crimson rail; player can step perpendicular to dodge.
+   * Then Ares dashes; the rail becomes a chain of damaging hazards. */
   private aresChargeAndSever(e: Enemy): void {
-    const aimDx = this.player.pos.x - e.pos.x;
-    const aimDy = this.player.pos.y - e.pos.y;
+    const fromX = e.pos.x;
+    const fromY = e.pos.y;
+    const aimDx = this.player.pos.x - fromX;
+    const aimDy = this.player.pos.y - fromY;
     const aimL = Math.hypot(aimDx, aimDy) || 1;
     const ux = aimDx / aimL;
     const uy = aimDy / aimL;
-    // Jump the boss forward a fixed amount
-    const dashDist = 140;
-    const fromX = e.pos.x;
-    const fromY = e.pos.y;
-    e.pos.x = clamp(e.pos.x + ux * dashDist, ROOM_MARGIN + 12, ROOM_W - ROOM_MARGIN - 12);
-    e.pos.y = clamp(e.pos.y + uy * dashDist, ROOM_MARGIN + 16, ROOM_H - ROOM_MARGIN - 12);
-    // Slash trail — chain of small projectiles along the path
-    const steps = 7;
-    for (let i = 1; i <= steps; i++) {
-      const t = i / (steps + 1);
-      this.projectiles.push({
-        id: nid(),
-        pos: { x: fromX + ux * dashDist * t, y: fromY + uy * dashDist * t },
-        vel: { x: 0, y: 0 },
-        life: 0.7, radius: 8, damage: 11,
-        fromPlayer: false, pierce: 99, homing: false,
-        colour: '#e23a4a', trailColour: '#ff7a5a',
-      });
-    }
-    if (!this.reducedParticles) {
-      this.particles.burst(e.pos.x, e.pos.y, 20, { colour: '#ff7a5a', life: 0.45, maxLife: 0.45, drag: 0.85 });
-    }
-    this.camera.shakeT = 0.2; this.camera.shakeMag = 3;
-    audio.sfx('dash');
+    const dashDist = 160;
+    const toX = clamp(fromX + ux * dashDist, ROOM_MARGIN + 12, ROOM_W - ROOM_MARGIN - 12);
+    const toY = clamp(fromY + uy * dashDist, ROOM_MARGIN + 16, ROOM_H - ROOM_MARGIN - 12);
+    audio.sfx('bossWarn');
+    this.delayedActions.push({
+      t: 0,
+      duration: 0.55,
+      render: (ctx, t01) => {
+        // Crimson rail along the planned dash. Brightens as time runs out.
+        ctx.strokeStyle = `rgba(226, 58, 74, ${0.35 + 0.55 * t01})`;
+        ctx.lineWidth = 8 + t01 * 6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.stroke();
+        // Sigil at the destination so the player reads the endpoint
+        ctx.fillStyle = `rgba(226, 58, 74, ${0.5 * t01})`;
+        ctx.beginPath();
+        ctx.arc(toX, toY, 10 + t01 * 4, 0, Math.PI * 2);
+        ctx.fill();
+      },
+      fire: () => {
+        e.pos.x = toX;
+        e.pos.y = toY;
+        const steps = 7;
+        for (let i = 1; i <= steps; i++) {
+          const t = i / (steps + 1);
+          this.projectiles.push({
+            id: nid(),
+            pos: { x: fromX + (toX - fromX) * t, y: fromY + (toY - fromY) * t },
+            vel: { x: 0, y: 0 },
+            life: 0.55, radius: 8, damage: 11,
+            fromPlayer: false, pierce: 99, homing: false,
+            colour: '#e23a4a', trailColour: '#ff7a5a',
+          });
+        }
+        if (!this.reducedParticles) {
+          this.particles.burst(e.pos.x, e.pos.y, 20, { colour: '#ff7a5a', life: 0.45, maxLife: 0.45, drag: 0.85 });
+        }
+        this.camera.shakeT = 0.2; this.camera.shakeMag = 3;
+        audio.sfx('dash');
+      },
+    });
   }
 
   /** Zeus — Five lightning sigils mark random tiles around the player. */
@@ -1680,6 +1782,136 @@ export class GameEngine {
       this.particles.burst(e.pos.x, e.pos.y, 30, { colour: '#9b6cff', life: 1.2, maxLife: 1.2, drag: 0.9 });
     }
     audio.sfx('bossWarn');
+  }
+
+  /** Procedural per-Warden motif painted OVER the base sprite so each
+   * sphere's boss has a unique silhouette. The motifs are small canvas
+   * glyphs (no new pixel art), drawn in the sphere accent colour. */
+  private drawWardenMotif(e: Enemy): void {
+    const ctx = this.ctx;
+    const def = wardenDefFromVisual(e.visualKey);
+    if (!def) return;
+    const t = this.timeAlive;
+    const cx = e.pos.x;
+    const headY = e.pos.y - e.height;     // top of sprite
+    const bodyY = e.pos.y - e.height / 2;
+    ctx.save();
+    switch (e.visualKey) {
+      case 'seleneBoss': {
+        // Crescent moon arc above-left of her head
+        const r = 11, mx = cx - 14, my = headY - 12;
+        ctx.fillStyle = `rgba(255, 247, 214, ${0.7 + 0.2 * Math.sin(t * 2)})`;
+        ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath(); ctx.arc(mx + 4, my - 1, r - 1, 0, Math.PI * 2); ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+        break;
+      }
+      case 'hermesBoss': {
+        // Two snake curves either side — a caduceus shape
+        const baseY = bodyY;
+        ctx.strokeStyle = `rgba(108, 246, 229, ${0.7 + 0.2 * Math.sin(t * 4)})`;
+        ctx.lineWidth = 2;
+        for (const side of [-1, 1]) {
+          ctx.beginPath();
+          for (let k = 0; k <= 12; k++) {
+            const yy = baseY - 14 + k * 2.5;
+            const xx = cx + side * (10 + Math.sin(k * 0.9 + t * 4) * 4);
+            if (k === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+          }
+          ctx.stroke();
+        }
+        // Wings at the top — two short triangles
+        ctx.fillStyle = `rgba(164, 250, 240, 0.85)`;
+        ctx.beginPath();
+        ctx.moveTo(cx - 4, headY); ctx.lineTo(cx - 14, headY - 6); ctx.lineTo(cx - 4, headY - 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + 4, headY); ctx.lineTo(cx + 14, headY - 6); ctx.lineTo(cx + 4, headY - 2);
+        ctx.fill();
+        break;
+      }
+      case 'aphroditeBoss': {
+        // A small rose-petal cluster spinning slowly near her chest
+        ctx.translate(cx, bodyY);
+        ctx.rotate(t * 0.6);
+        for (let i = 0; i < 5; i++) {
+          ctx.rotate((Math.PI * 2) / 5);
+          ctx.fillStyle = `rgba(255, 155, 193, ${0.75})`;
+          ctx.beginPath();
+          ctx.ellipse(0, -7, 3.2, 5.2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#ffd0e3';
+        ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'heliosBoss': {
+        // Sunburst crown of 8 rays above his head
+        ctx.fillStyle = `rgba(255, 230, 163, ${0.85})`;
+        const cy = headY - 4;
+        ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2 + t * 0.3;
+          const len = 10 + Math.abs(Math.sin(t * 3 + i)) * 2;
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(a);
+          ctx.fillStyle = `rgba(255, 247, 214, ${0.9})`;
+          ctx.fillRect(-1, -len, 2, len * 0.7);
+          ctx.restore();
+        }
+        break;
+      }
+      case 'aresBoss': {
+        // A small sword + cross-guard floating above the shoulder
+        ctx.translate(cx + 12, headY - 4);
+        ctx.rotate(Math.PI / 5 + Math.sin(t * 1.4) * 0.08);
+        ctx.fillStyle = '#cdd6dc';
+        ctx.fillRect(-1, -12, 2, 18);                   // blade
+        ctx.fillStyle = '#7a5a1a';
+        ctx.fillRect(-4, 4, 8, 2);                       // crossguard
+        ctx.fillStyle = '#e23a4a';
+        ctx.fillRect(-1, 6, 2, 5);                       // hilt
+        break;
+      }
+      case 'zeusBoss': {
+        // Animated lightning bolt to one side
+        ctx.strokeStyle = `rgba(255, 247, 214, ${0.65 + 0.35 * Math.sin(t * 8)})`;
+        ctx.lineWidth = 2;
+        const off = cx + 14;
+        const base = headY + 2;
+        ctx.beginPath();
+        ctx.moveTo(off,     base);
+        ctx.lineTo(off + 4, base + 6);
+        ctx.lineTo(off + 1, base + 8);
+        ctx.lineTo(off + 5, base + 16);
+        ctx.lineTo(off + 2, base + 18);
+        ctx.lineTo(off + 6, base + 26);
+        ctx.stroke();
+        break;
+      }
+      case 'kronosBoss': {
+        // Hourglass icon floating above his head
+        const hx = cx, hy = headY - 8;
+        ctx.fillStyle = `rgba(155, 108, 255, ${0.85})`;
+        ctx.beginPath();
+        ctx.moveTo(hx - 6, hy - 6);
+        ctx.lineTo(hx + 6, hy - 6);
+        ctx.lineTo(hx,     hy);
+        ctx.lineTo(hx + 6, hy + 6);
+        ctx.lineTo(hx - 6, hy + 6);
+        ctx.lineTo(hx,     hy);
+        ctx.closePath();
+        ctx.fill();
+        // Sand falling (animated)
+        ctx.fillStyle = `rgba(244, 210, 122, ${0.8})`;
+        const sandY = hy - 4 + ((t * 12) % 8);
+        ctx.fillRect(hx, sandY, 1, 2);
+        break;
+      }
+    }
+    ctx.restore();
   }
 
   private wardenRadialBurst(e: Enemy): void {
@@ -1874,12 +2106,14 @@ export class GameEngine {
     e.pos.x += nx * knockStrength * 0.02;
     e.pos.y += ny * knockStrength * 0.02;
     this.spawnDamageNumber(e.pos.x, e.pos.y - 10, `${Math.round(dmg)}`, '#ffd97a');
-    // Brief hit-pause on damage landing — only on meaty hits (heavy weapons
-    // and spells that take serious chunks). Avoid stuttering on tiny dagger
-    // pokes by gating on damage threshold.
-    if (dmg >= 8) {
-      this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + 0.04);
-    }
+    // Brief hit-pause on damage landing. Every hit gets a 2-frame
+    // pause for "punch" feel; big hits get 4 frames. Avoid stacking
+    // beyond timeAlive + 0.06 so multi-hits don't lock the world.
+    const pauseDur = dmg >= 8 ? 0.05 : 0.025;
+    this.hitPauseUntil = Math.min(
+      this.timeAlive + 0.06,
+      Math.max(this.hitPauseUntil, this.timeAlive + pauseDur),
+    );
     if (!this.reducedParticles) {
       for (let i = 0; i < 4; i++) {
         this.particles.emit({
@@ -1888,15 +2122,20 @@ export class GameEngine {
           life: 0.3, maxLife: 0.3, size: 1.5, colour: '#e23a4a', drag: 0.9,
         });
       }
-      // Knockback dust — "kicked up" at the point of impact, opposite to
-      // the direction the enemy was launched.
+      // Knockback dust — "kicked up" at the actual point of impact,
+      // launched perpendicular to the knockback direction (sideways
+      // splash, not straight back along the punch axis).
       if (knockStrength > 60) {
+        // Perpendicular unit vectors: rotate (nx, ny) by ±90°
+        const perpX = -ny;
+        const perpY = nx;
         for (let i = 0; i < 4; i++) {
+          const side = i % 2 === 0 ? 1 : -1;
           this.particles.emit({
-            x: prevX - nx * 4, y: prevY - ny * 4,
-            vx: -nx * (40 + Math.random() * 40) + (Math.random() - 0.5) * 20,
-            vy: -ny * (40 + Math.random() * 40) + (Math.random() - 0.5) * 20,
-            life: 0.28, maxLife: 0.28, size: 1.3, colour: '#1a0f2c', drag: 0.85,
+            x: prevX, y: prevY,
+            vx: perpX * side * (30 + Math.random() * 30) - nx * 10,
+            vy: perpY * side * (30 + Math.random() * 30) - ny * 10,
+            life: 0.32, maxLife: 0.32, size: 1.3, colour: '#1a0f2c', drag: 0.86,
           });
         }
       }
@@ -2174,6 +2413,27 @@ export class GameEngine {
     }
   }
 
+  private updateDelayedActions(dt: number): void {
+    for (let i = this.delayedActions.length - 1; i >= 0; i--) {
+      const a = this.delayedActions[i];
+      a.t += dt;
+      if (a.t >= a.duration) {
+        try { a.fire(); } catch { /* never crash combat */ }
+        this.delayedActions.splice(i, 1);
+      }
+    }
+  }
+
+  private drawDelayedActionTelegraphs(): void {
+    for (const a of this.delayedActions) {
+      if (!a.render) continue;
+      const t01 = Math.min(1, a.t / a.duration);
+      this.ctx.save();
+      try { a.render(this.ctx, t01); } catch { /* skip */ }
+      this.ctx.restore();
+    }
+  }
+
   // --- render -------------------------------------------------------------
 
   private render(): void {
@@ -2218,6 +2478,7 @@ export class GameEngine {
     this.drawChests();
     this.drawStairsIfExit();
     this.drawSigils();
+    this.drawDelayedActionTelegraphs();
     this.drawPickups();
     this.drawEnemiesAll();
     this.drawPlayer();
@@ -2301,9 +2562,12 @@ export class GameEngine {
       const x = (ROOM_W / 5) * i;
       drawTorch(ctx, x - 2, 18, torchT + i * 0.5, torchTint);
     }
-    // boss specific decoration: seven lamps
+    // Boss decoration: seven lamps ringing the arena. Sphere-tinted —
+    // the Warden's own sphere accent burns in each lamp, matching the
+    // torches on the wall above.
     if (this.currentRoom.type === 'boss') {
       const cx = ROOM_W / 2, cy = ROOM_H / 2;
+      const lampRgb = hexToRgbString(sphere.accent);
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
         const px = cx + Math.cos(a) * 110;
@@ -2311,11 +2575,11 @@ export class GameEngine {
         ctx.fillStyle = '#3b265c';
         ctx.fillRect(px - 2, py, 4, 6);
         const flick = 0.6 + Math.sin(torchT * 4 + i) * 0.3;
-        ctx.fillStyle = `rgba(244, 210, 122, ${flick})`;
+        ctx.fillStyle = `rgba(${lampRgb}, ${flick})`;
         ctx.beginPath();
         ctx.arc(px, py - 4, 4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#ffe6a3';
+        ctx.fillStyle = '#ffffff';
         ctx.beginPath();
         ctx.arc(px, py - 4, 1.5, 0, Math.PI * 2);
         ctx.fill();
@@ -2641,16 +2905,22 @@ export class GameEngine {
       // shadow
       this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
       this.ctx.fillRect(e.pos.x - e.radius, e.pos.y + e.radius - 1, e.radius * 2, 2);
+      // Per-Warden procedural motif — drawn over the base sprite so each
+      // sphere's boss has a unique silhouette even though they share the
+      // same body matrix.
+      if (e.isBoss) this.drawWardenMotif(e);
       // boss telegraph
       if (e.isBoss && e.cooldown < 0.5 && e.cooldown > 0) {
         this.ctx.fillStyle = `rgba(226, 58, 74, ${0.2 + 0.4 * Math.sin(this.timeAlive * 20)})`;
         this.ctx.fillRect(e.pos.x - e.width, e.pos.y - 16, e.width * 2, 2);
       }
-      // non-boss telegraph: heavy contact attackers flash their accent
-      // colour during the wind-up window (cooldown is between 0.1 and 0.5).
+      // non-boss telegraph — colour matches the enemy's own palette,
+      // not a uniform orange. saturnKnight glows violet, mercuryImp teal,
+      // saltGolem white-bone, etc.
       if (!e.isBoss && e.contactDamage > 6 && e.cooldown < 0.5 && e.cooldown > 0.1) {
         const pulse = 0.5 + 0.5 * Math.sin(this.timeAlive * 18);
-        this.ctx.fillStyle = `rgba(244, 130, 60, ${0.18 + 0.22 * pulse})`;
+        const col = enemyTelegraphColour(e.type);
+        this.ctx.fillStyle = `rgba(${col}, ${0.18 + 0.22 * pulse})`;
         this.ctx.fillRect(e.pos.x - e.radius - 1, e.pos.y - e.radius - 1, (e.radius + 1) * 2, (e.radius + 1) * 2);
       }
     }
