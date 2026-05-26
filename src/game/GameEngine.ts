@@ -3289,7 +3289,7 @@ export class GameEngine {
       // Ghost renders fully whited-out so the trail reads as a motion
       // echo rather than a duplicate body. flash = 1 forces drawInitiate
       // to override every visible palette entry with white.
-      drawInitiate(this.ctx, g.x - 7, g.y - 14, 1, g.facing, g.walkPhase, 1);
+      drawInitiate(this.ctx, g.x - 7, g.y - 15, 1, g.facing, g.walkPhase, 1);
       this.ctx.restore();
     }
   }
@@ -3312,7 +3312,7 @@ export class GameEngine {
       this.ctx.fillRect(p.pos.x - 6, p.pos.y + 3, 12, 2);
       // Sprite slumps down ~3 px and a faint white flash overlays.
       const slump = Math.round(t * 3);
-      drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 14 + slump, 1, p.facing, 0, Math.min(0.4, t));
+      drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 15 + slump, 1, p.facing, 0, Math.min(0.4, t));
       this.ctx.restore();
       // Soft halo around the dying body
       if (!this.reducedParticles) {
@@ -3332,7 +3332,7 @@ export class GameEngine {
     // shadow
     this.ctx.fillStyle = 'rgba(0,0,0,0.45)';
     this.ctx.fillRect(p.pos.x - 6, p.pos.y + 3, 12, 2);
-    drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 14, 1, p.facing, p.walkPhase, p.flash);
+    drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 15, 1, p.facing, p.walkPhase, p.flash);
     // Weapon (held in player's hand when idle, animated during attack)
     this.drawPlayerWeapon();
     // iframe shimmer — outline pulse

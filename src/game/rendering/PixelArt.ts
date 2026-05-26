@@ -38,30 +38,33 @@ export function drawSprite(
 
 // --- Procedural sprites -----------------------------------------------------
 
-// Hooded initiate, 14 wide × 16 tall.
+// Hooded initiate, 14 wide × 17 tall.
 // Legend:
 //   o = outline (deep indigo)
 //   h = hood / cloak primary
-//   H = hood highlight
-//   s = cloak shadow
+//   H = hood highlight (lighter inner)
+//   K = hood crest peak
 //   f = face shadow (under hood)
+//   F = face skin (warm pale)
 //   e = eye glow (teal)
 //   r = robe body
 //   R = robe highlight
-//   t = trim / sash
+//   t = sash / belt
+//   c = chest sigil (gold heart-of-lamp)
 //   g = gold trim
 //   b = boot
 const initiate: PixelMatrix = [
-  '....oooooo....',
-  '...ohHHHHho...',
-  '..oHhhhhhhHo..',
-  '..ohffefefho..',
-  '..ohfffffffo..',
-  '...ohhhhhho...',
-  '..ohrrtttrho..',
-  '.ohrrrtttrrho.',
-  '.ohRrrtttrrRo.',
-  '.ohRrrrrrrrRo.',
+  '.....KKKK.....',
+  '....KhhhhK....',
+  '...KhHHHHhK...',
+  '..KhHHffHHhK..',
+  '.KhHffFFffHhK.',
+  '.KhHfFeeFfHhK.',
+  '..KhfFFFFfhK..',
+  '...KhhrrhhK...',
+  '..ohrrrcrrho..',
+  '.ohRrrcgcrrRo.',
+  '.ohRrrrcrrrRo.',
   '..ohRrrrrrRo..',
   '..ohgggggggo..',
   '...orrrrrro...',
@@ -73,15 +76,17 @@ const initiate: PixelMatrix = [
 const initiatePalette: Record<string, string | null> = {
   '.': null,
   o: '#06030f',
+  K: '#100728',     // hood outline / crest
   h: '#1f1142',
   H: '#3a225f',
-  s: '#0e0824',
-  f: '#08030f',
-  e: '#6cf6e5',
+  f: '#06020c',     // face shadow
+  F: '#c89a72',     // face skin (warm pale)
+  e: '#6cf6e5',     // eye glow
   r: '#2a1656',
   R: '#3d2273',
   t: '#1a0b2c',
-  g: '#f4d27a',
+  c: '#7a4a22',     // chest-sigil setting (dark gold)
+  g: '#f4d27a',     // gold trim + sigil heart
   b: '#0a0420',
 };
 
@@ -111,20 +116,22 @@ export interface EnemyVisual {
 }
 
 export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
-  // Lesser Shade — a wraith. 12×11
+  // Lesser Shade — a wraith. 12×12. Tall hooded ghost with two
+  // burning eyes and a wisp tail trailing into smoke.
   lesserShade: {
     rows: [
       '....oooo....',
-      '..ooddddoo..',
-      '.odDDDDDDdo.',
-      'odDDrDDrDDdo',
-      'odDDDDDDDDdo',
-      'odDddwwddDdo',
-      '.odDdddddDdo',
-      '..odDddddDdo',
-      '...oddddddo.',
-      '....offfo...',
-      '.....oo.....',
+      '...oDDDDo...',
+      '..oDDDDDDo..',
+      '.oDdddddDo..',
+      'oDdrddddrDo.',
+      'oDdrwddwrDo.',
+      'oDddddddDo..',
+      '.oDdddddDo..',
+      '..oDddddo...',
+      '..oDdddDo...',
+      '...odDdo....',
+      '....of.o....',
     ],
     palette: {
       '.': null,
@@ -132,7 +139,7 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       d: '#1c0c30',
       D: '#321456',
       r: '#e23a4a',
-      w: '#6cf6e5',
+      w: '#ffd0d6',
       f: '#0a0420',
     },
   },
@@ -188,28 +195,29 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       d: '#08030f',
     },
   },
-  // Lunar Wisp — small glowing orb-creature. 11×11
+  // Lunar Wisp — pale moon-fragment with a single dark-side crescent.
+  // 11×11. The dark crescent gives it a clear "moon-phase" silhouette.
   lunarWisp: {
     rows: [
       '...ovvvo...',
-      '..ovbbbvo..',
-      '.ovbWWWbvo.',
-      'ovbWwwwWbvo',
-      'ovbWwbbwWbo',
-      'ovbWwwwwWbo',
-      'ovbWWwwWWbo',
-      '.ovbWWWbvo.',
-      '..ovbbbvo..',
-      '...ovvvo...',
-      '....o.o....',
+      '..ovWWWvo..',
+      '.ovWwwwbvo.',
+      'ovWwwwbbvo.',
+      'ovWwwwbbvo.',
+      'ovWWwwbbvo.',
+      'ovWwwwbbvo.',
+      'ovWwwwbvo..',
+      '.ovWwwbvo..',
+      '..ovWvvo...',
+      '...o.oo....',
     ],
     palette: {
       '.': null,
       o: '#1a0b2c',
       v: '#9b6cff',
       b: '#3a1d70',
-      W: '#f5efd8',
-      w: '#ffffff',
+      W: '#ffffff',
+      w: '#cdd6dc',
     },
   },
   // Saturn Knight — armoured. 13×14
@@ -239,21 +247,23 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       g: '#f4d27a',
     },
   },
-  // Serpent of Brass — long brass coil. 18×12
+  // Serpent of Brass — coiled snake with a clear head (left), one
+  // burning red eye, a fanged jaw, scaled body coil, and a tapered
+  // tail. 18×12.
   serpentOfBrass: {
     rows: [
-      '......oooo........',
-      '....oobbbboo......',
-      '..oobyyyybboo.....',
-      '.obbYYyywYYbbo....',
-      'obbyyyyyyybbbo....',
-      'obyyyyyyyyybbo.oo.',
-      '.obyyyyyyyyybobyo.',
-      '..obyyyyyyyybbyyo.',
-      '....obyyyyyyybbbo.',
-      '......obbyyyyyyyo.',
-      '........obbbbbboo.',
-      '..........oooo....',
+      '..oooo............',
+      '.oYYYYo...........',
+      'oYYyyYYo..oooo....',
+      'oYwyYyYo.obYYbo...',
+      'oYyfyfYo.obYyybo..',
+      '.oYyyYo.obYyyyybo.',
+      '..oYYo.obYyyyyyybo',
+      '...oo.obYyyyyyyybo',
+      '......obYyyyyyybo.',
+      '.......obYyyyybo..',
+      '........obYyybo...',
+      '.........oboboo...',
     ],
     palette: {
       '.': null,
@@ -261,7 +271,8 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       b: '#3a2410',
       y: '#c8983f',
       Y: '#f4d27a',
-      w: '#e23a4a',
+      w: '#e23a4a',     // burning eye
+      f: '#fff7d6',     // fang highlight
     },
   },
   // Warden of the Seven Lamps — generic boss (kept for legacy / debug).
