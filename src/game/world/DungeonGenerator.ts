@@ -288,5 +288,10 @@ function pickShrineKind(rng: RNG): import('../GameTypes').ShrineKind {
     'calcination', 'dissolution', 'separation', 'conjunction',
     'fermentation', 'distillation', 'coagulation',
   ];
+  // 12 % chance each for the new special altars — kept rare so the
+  // canonical seven Operations stay the dominant flavour.
+  const roll = rng.next();
+  if (roll < 0.12) return 'cursed';
+  if (roll < 0.24) return 'library';
   return kinds[rng.int(0, kinds.length)];
 }

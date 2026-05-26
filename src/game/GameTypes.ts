@@ -186,7 +186,9 @@ export type ShrineKind =
   | 'conjunction'
   | 'fermentation'
   | 'distillation'
-  | 'coagulation';
+  | 'coagulation'
+  | 'cursed'
+  | 'library';
 
 export interface Floor {
   number: number;

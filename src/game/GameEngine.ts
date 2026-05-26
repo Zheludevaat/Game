@@ -1608,6 +1608,8 @@ export class GameEngine {
       fermentation:{ name: 'Fermentation',effect: '+2 Luck',     downside: 'Take 8 corruption damage' },
       distillation:{ name: 'Distillation',effect: 'Fully restore mana', downside: '-12 Coins' },
       coagulation: { name: 'Coagulation', effect: '+2 Armor',    downside: 'Dash slower' },
+      cursed:      { name: 'Cursed Altar', effect: '+12 Attack, +2 Crit Luck', downside: '-25% Max Health, -2 Armor' },
+      library:     { name: 'Library Tome', effect: 'Unlock a codex page, +6 Spell Power', downside: 'Costs 10 Essence' },
     };
     this.pendingShrine = { kind, ...map[kind] };
   }
@@ -1653,6 +1655,27 @@ export class GameEngine {
         case 'coagulation':
           p.armor += 2;
           break;
+        case 'cursed':
+          p.attack += 12;
+          p.luck += 2;
+          p.maxHp = Math.max(20, Math.floor(p.maxHp * 0.75));
+          p.hp = Math.min(p.hp, p.maxHp);
+          p.armor = Math.max(0, p.armor - 2);
+          break;
+        case 'library': {
+          // Unlock a random un-owned codex page + permanent spell-power
+          // bump. Essence cost models the "donation."
+          p.essence = Math.max(0, p.essence - 10);
+          p.spellPower += 6;
+          // Use the existing unlockCodex system — pick from the import.
+          const owned = new Set(this.meta.unlockedCodex);
+          const candidates = CODEX.filter((c) => !owned.has(c.id));
+          if (candidates.length > 0) {
+            const c = candidates[Math.floor(Math.random() * candidates.length)];
+            this.unlockCodex(c.id);
+          }
+          break;
+        }
       }
       room.shrineUsed = true;
       audio.sfx('shrine');
@@ -4332,11 +4355,14 @@ export class GameEngine {
       if (d < 28) prompts.push('Press Interact to commune');
     }
 
+    // Brass Ear relic — reveals every room on the minimap. (Still requires
+    // physical traversal to enter them; this only lifts the fog.)
+    const revealAll = p.relics.includes('brassEar');
     const roomCells = this.floor.rooms.map((r) => ({
       gx: r.grid.x,
       gy: r.grid.y,
       type: r.type as RoomType,
-      discovered: r.discovered,
+      discovered: revealAll || r.discovered,
       current: r.id === this.currentRoom.id,
     }));
 
