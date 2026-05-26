@@ -254,3 +254,160 @@ export function drawDistantLamp(
   ctx.fillStyle = `rgba(255, 247, 214, ${alpha})`;
   ctx.fillRect(x, y - 2, 1, 1);
 }
+
+// ─── Initiate, worm's-eye / heroic from below ─────────────────────────
+// 22 × 30. Lit from below by a brazier — bottom of robe / boots bright,
+// face deep in hood-shadow with eye glow.
+
+const initiateHeroicPalette: Record<string, string | null> = {
+  '.': null,
+  o: '#04020a',
+  h: '#1f1142',
+  H: '#3a225f',
+  i: '#5b3a86',
+  f: '#0a0420',
+  e: '#6cf6e5',
+  E: '#a4faf0',
+  c: '#1a0b2c',
+  C: '#2a1656',
+  r: '#3d2273',
+  R: '#5b3a86',
+  g: '#f4d27a',
+  G: '#ffe6a3',
+  b: '#1a0824',
+};
+
+const initiateHeroicFromBelow: PixelMatrix = [
+  '........oooooo........',
+  '......ooHHHHHHoo......',
+  '.....oHHhhhhhHHo......',
+  '....oHhhhhhhhhHo......',
+  '...oHhhffffffhhHo.....',
+  '..oHhhffffffffhho.....',
+  '..oHhhffeefeffhho.....',
+  '..oHhfffeefefffhho....',
+  '..oHhffffffffffho.....',
+  '..oHhhffffffffhho.....',
+  '...oHhhhffffhhho......',
+  '....ohhhhhhhhho.......',
+  '.....oiiiiiiio........',
+  '....orrRRRRRrro.......',
+  '...orrRRRRRRRrro......',
+  '..orrRRgGGgRRrrro.....',
+  '..orrRRRRRRRRrrro.....',
+  '.orrRRRRRRRRRRrrro....',
+  '.orRRRRRRRRRRRRRro....',
+  '.orRRRRRRRRRRRRRro....',
+  '..orrRRRRRRRRrrro.....',
+  '..orrRRRRRRRRrrro.....',
+  '...orrRRrRRrRrro......',
+  '....orrr...rrro.......',
+  '....orr.....rro.......',
+  '....obb.....bbo.......',
+  '....oob.....boo.......',
+  '.....oo.....oo........',
+];
+
+export function drawInitiateHeroic(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+  eyeGlow: number,
+): void {
+  const pal = { ...initiateHeroicPalette };
+  const t = Math.max(0, Math.min(1, eyeGlow));
+  pal.e = `rgb(${Math.round(108 + 56 * t)}, 246, ${Math.round(229 + 11 * t)})`;
+  drawSprite(ctx, initiateHeroicFromBelow, pal, Math.floor(x), Math.floor(y), scale, false);
+}
+
+// ─── Hands holding a dagger — close-up ───────────────────────────────
+
+const handsDaggerPalette: Record<string, string | null> = {
+  '.': null,
+  o: '#04020a',
+  h: '#cdb59a',
+  H: '#e6cdaf',
+  s: '#0a0420',
+  S: '#2a1656',
+  R: '#3d2273',
+  g: '#3a2410',
+  G: '#7a5a1a',
+  c: '#cdd6dc',
+  C: '#ffffff',
+  r: '#e23a4a',
+};
+
+const handsDagger: PixelMatrix = [
+  '......................',
+  '.ssooooo......ooooss..',
+  'sSSRRRRRoo..ooRRRRRSSs',
+  'sSRRRhhho....oHhhhRRSs',
+  'sSRhHhHHHogggcccCCCCcg',
+  'sSRhhhhHHogGccccCCcCcg',
+  '.SRRRhhhoogGcccccccccg',
+  '.sRRRRhhoogGcccrcccccg',
+  '.osSRRRRhoogcccccccccg',
+  '..osssRRoocccccccccccg',
+  '...oooooo.ooooooooooog',
+  '......................',
+  '......................',
+  '......................',
+];
+
+export function drawHandsDagger(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+): void {
+  drawSprite(ctx, handsDagger, handsDaggerPalette, Math.floor(x), Math.floor(y), scale, false);
+}
+
+// ─── Falling Initiate seen from above ─────────────────────────────────
+
+const initiateFallingPalette: Record<string, string | null> = {
+  '.': null,
+  o: '#04020a',
+  h: '#1f1142',
+  H: '#3a225f',
+  c: '#1a0b2c',
+  C: '#2a1656',
+  g: '#f4d27a',
+};
+
+const initiateFalling: PixelMatrix = [
+  '.....oooo.....',
+  '....oHHHHo....',
+  '...oHhhhhHo...',
+  '..oHhhhhhhHo..',
+  '..ohhhhhhhho..',
+  '...occccccco..',
+  '..occccccccoo.',
+  '.occcCCCCcccco',
+  'occcCCCCCCCcco',
+  'occccCCCCCCcco',
+  'oCcccCCggCCcco',
+  'occccCCCCCCcco',
+  '.occccCCCCccc.',
+  '.occcccccccco.',
+  '..occcccccco..',
+  '..occcccccco..',
+  '...occccccc...',
+  '....occcco....',
+  '....occcco....',
+  '.....occo.....',
+  '..............',
+  '..............',
+];
+
+export function drawInitiateFalling(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+  spin: number,
+): void {
+  ctx.save();
+  ctx.translate(Math.floor(x + 7 * scale), Math.floor(y + 11 * scale));
+  ctx.rotate(spin);
+  drawSprite(ctx, initiateFalling, initiateFallingPalette, -7 * scale, -11 * scale, scale, false);
+  ctx.restore();
+}

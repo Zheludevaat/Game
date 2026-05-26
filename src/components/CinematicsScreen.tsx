@@ -9,6 +9,7 @@ import { PixelPanel } from './PixelPanel';
 import { useMenuNav } from './useMenuNav';
 import { bossIntroBeats } from '../game/data/cutscenes';
 import { TABULA_CINEMATIC } from '../game/data/cinematicTabula';
+import { NEW_GAME_CINEMATIC } from '../game/data/cinematicNewGame';
 import { SPHERES, SphereId } from '../game/data/spheres';
 
 interface Props { onBack: () => void; }
@@ -30,10 +31,19 @@ const ITEMS: CinematicItem[] = [
   {
     id: 'pre-menu',
     title: 'Tabula Smaragdina',
-    subtitle: 'Opening film — 5 shots, ~25s',
+    subtitle: 'Opening film — 6 shots, ~28s',
     shots: TABULA_CINEMATIC,
     accent: '#f4d27a',
     chapter: 'I — OPENING',
+    format: 'film',
+  },
+  {
+    id: 'new-game',
+    title: 'The Gate Opens',
+    subtitle: 'New-run film — 5 shots, ~28s',
+    shots: NEW_GAME_CINEMATIC,
+    accent: '#6cf6e5',
+    chapter: 'II — THE DESCENT BEGINS',
     format: 'film',
   },
   // Boss intros — currently card-style. Will be converted to film as
