@@ -184,6 +184,13 @@ export function App(): JSX.Element {
       if (!canvas) return;
       const input = new InputManager();
       inputRef.current = input;
+      // Push the current settings.gamepadMap into the fresh InputManager
+      // immediately — otherwise it loads from STORAGE_KEYS.gamepadMap which
+      // can be stale (or default) if the user remapped from the main menu
+      // before a run ever started. The mappingIsCustom flag is set on this
+      // call which also prevents any auto-Switch preset from silently
+      // overriding the player's choices on the next gamepad reconnect.
+      input.setMapping(settings.gamepadMap);
       const engine = new GameEngine({
         onHud: setHud,
         onPause: () => setScreen('pause'),
@@ -237,7 +244,7 @@ export function App(): JSX.Element {
         runSeed,
       });
     }, 30);
-  }, [meta, settings.reducedParticles]);
+  }, [meta, settings.reducedParticles, settings.gamepadMap]);
 
   const stopRun = useCallback(() => {
     const engine = engineRef.current;
