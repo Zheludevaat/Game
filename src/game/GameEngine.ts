@@ -9,6 +9,12 @@ import { getArchetype } from './data/archetypes';
 import { RELICS, RELIC_IDS } from './data/relics';
 import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
 import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
+import {
+  STATUS_CONFIG, StatusEffect, StatusEffectKind,
+  applyStatusEffect, tickStatusEffects, hasStatus, absorbWithShield,
+  speedMultiplierFromStatus,
+} from './data/statusEffects';
+import type { AppliesStatus } from './data/statusEffects';
 import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
@@ -51,6 +57,12 @@ export interface HudSnapshot {
   // For minimap
   rooms: { gx: number; gy: number; type: RoomType; discovered: boolean; current: boolean }[];
   pendingShrine?: { name: string; effect: string; downside: string };
+  /** Current combo counter (0 = no chain). Capped at 5. */
+  combo: number;
+  /** Pulse animation timer (0..0.4) — used to scale the HUD tag on increment. */
+  comboPulse: number;
+  /** Player status snapshot (for the HUD effect strip). */
+  playerStatus: { kind: StatusEffectKind; remaining: number; stacks: number }[];
   // For game over
   alive: boolean;
 }
@@ -123,6 +135,10 @@ interface PlayerState {
   spellIdx: number;
   attackHitsLeft: number;       // remaining hits in a multi-hit weapon swing
   attackHitTimer: number;       // time until next hit in a multi-hit swing
+  /** Active status effects (burn / poison / slow / stun / shield / regen). */
+  status: StatusEffect[];
+  /** Wall-clock (engine timeAlive) at the last dash launch — used by parry. */
+  dashStartT: number;
 }
 
 interface Enemy {
@@ -151,6 +167,8 @@ interface Enemy {
   phaseTimer?: number;
   pattern?: number;
   ai?: AIState;
+  /** Active status effects on this enemy. */
+  status: StatusEffect[];
 }
 
 interface AIState {
@@ -377,6 +395,17 @@ export class GameEngine {
   private dashTrail: { x: number; y: number; facing: Vec; walkPhase: number; t: number }[] = [];
   private dashTrailAccum = 0;
 
+  // Combo meter — successive hits within 1.2s pile a multiplier.
+  // Resets on damage taken or 1.5s idle. Cap at 5.
+  private comboCount = 0;
+  private comboLastHitT = 0;
+  /** Pulse animation timer for the HUD combo tag (decays toward 0). */
+  private comboPulse = 0;
+  private static readonly COMBO_WINDOW = 1.2;
+  private static readonly COMBO_MAX = 5;
+  /** Parry window — dashStartT + this many seconds. */
+  private static readonly PARRY_WINDOW = 0.15;
+
   constructor(cbs: EngineCallbacks) {
     this.cbs = cbs;
     this.summary = {
@@ -418,6 +447,9 @@ export class GameEngine {
     this.gameOverFired = false;
     this.dashTrail = [];
     this.dashTrailAccum = 0;
+    this.comboCount = 0;
+    this.comboLastHitT = 0;
+    this.comboPulse = 0;
     this.summary.essenceCollected = 0;
     this.summary.coinsCollected = 0;
     this.summary.relicsFound = [];
@@ -497,6 +529,8 @@ export class GameEngine {
       spellIdx: 0,
       attackHitsLeft: 0,
       attackHitTimer: 0,
+      status: [],
+      dashStartT: -1,
     };
     this.grantRelic(a.startingRelic, true);
     this.summary.weaponsFound.push(a.startingWeapon ?? STARTER_WEAPON);
@@ -800,6 +834,7 @@ export class GameEngine {
       contactDamage: 6, flash: 0, attackTimer: 0,
       state: 'chase', cooldown: 0, facing: { x: 1, y: 0 },
       ai: {},
+      status: [],
     };
     switch (type) {
       case 'lesserShade':
@@ -965,6 +1000,18 @@ export class GameEngine {
     p.attackCooldown = Math.max(0, p.attackCooldown - dt);
     p.spellCooldown = Math.max(0, p.spellCooldown - dt);
     p.mp = Math.min(p.maxMp, p.mp + p.manaRegen * dt);
+    if (this.comboPulse > 0) this.comboPulse = Math.max(0, this.comboPulse - dt);
+
+    // Tick status effects on the player. Regen heals via callback; burn /
+    // poison return summed damage that we apply through damagePlayer
+    // (bypassing iframes — DoT can't be tank-ignored by mashing dash).
+    const dotDmg = tickStatusEffects(p, dt, this.timeAlive, (heal) => this.healPlayer(heal));
+    if (dotDmg > 0) this.applyDotToPlayer(Math.round(dotDmg));
+
+    // Drop the combo if too long has passed since the last hit landed.
+    if (this.comboCount > 0 && this.timeAlive - this.comboLastHitT > 1.5) {
+      this.comboCount = 0;
+    }
 
     // Dash
     if (p.dashTimer > 0) {
@@ -1016,6 +1063,9 @@ export class GameEngine {
       p.dashDir = dir;
       p.dashCooldown = p.dashCdMax;
       p.iframes = Math.max(p.iframes, DASH_DURATION + 0.05);
+      // Stamp the dash launch for parry detection. First PARRY_WINDOW
+      // seconds of any dash can reflect incoming damage.
+      p.dashStartT = this.timeAlive;
       audio.sfx('dash');
       // Seed the trail with the launch position so the ghost reads
       // immediately on the first frame of the dash.
@@ -1217,7 +1267,10 @@ export class GameEngine {
       while (da >  Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
       if (Math.abs(da) > w.arcHalf) continue;
-      this.damageEnemy(e, dmg, { x: dx, y: dy }, w.knockback);
+      this.damageEnemy(e, dmg, { x: dx, y: dy }, w.knockback, {
+        fromPlayer: true,
+        appliesStatus: w.appliesStatus,
+      });
     }
     audio.sfx('attack');
 
@@ -1278,7 +1331,7 @@ export class GameEngine {
       // Place a sigil where the player faces (within sigilRange)
       const sx = p.pos.x + dir.x * (sp.sigilRange ?? 60);
       const sy = p.pos.y + dir.y * (sp.sigilRange ?? 60);
-      this.sigils.push({
+      const sigil: SigilHazard = {
         pos: { x: sx, y: sy },
         timer: 0,
         delay: sp.sigilDelay ?? 0.5,
@@ -1287,7 +1340,9 @@ export class GameEngine {
         fromPlayer: true,
         radius: sp.radius,
         colour: sp.projColour,
-      });
+      };
+      (sigil as SigilHazard & { appliesStatus?: AppliesStatus }).appliesStatus = sp.appliesStatus;
+      this.sigils.push(sigil);
       audio.sfx('spell');
       return;
     }
@@ -1312,8 +1367,9 @@ export class GameEngine {
         trailColour: sp.trailColour,
       };
       // Mark visual kind on the projectile via a side channel
-      (proj as Projectile & { visual?: string; explodeRadius?: number }).visual = sp.projVisual;
-      (proj as Projectile & { visual?: string; explodeRadius?: number }).explodeRadius = sp.explodeRadius;
+      (proj as Projectile & { visual?: string; explodeRadius?: number; appliesStatus?: AppliesStatus }).visual = sp.projVisual;
+      (proj as Projectile & { visual?: string; explodeRadius?: number; appliesStatus?: AppliesStatus }).explodeRadius = sp.explodeRadius;
+      (proj as Projectile & { visual?: string; explodeRadius?: number; appliesStatus?: AppliesStatus }).appliesStatus = sp.appliesStatus;
       this.projectiles.push(proj);
     }
     audio.sfx('spell');
@@ -1490,11 +1546,28 @@ export class GameEngine {
       e.flash = Math.max(0, e.flash - dt);
       e.cooldown = Math.max(0, e.cooldown - dt);
       e.attackTimer = Math.max(0, e.attackTimer - dt);
+      // Tick statuses first — burn/poison damage applied here; stun
+      // skips AI for the rest of this frame; slow scales movement below.
+      const dotDmg = tickStatusEffects(e, dt, this.timeAlive);
+      if (dotDmg > 0) {
+        e.hp -= dotDmg;
+        if (Math.round(dotDmg) > 0) {
+          this.spawnDamageNumber(e.pos.x + (Math.random() - 0.5) * 6, e.pos.y - 6, `${Math.round(dotDmg)}`, '#ff7a3a');
+        }
+        if (e.hp <= 0) { this.killEnemy(e, i); continue; }
+      }
       const toP = { x: p.pos.x - e.pos.x, y: p.pos.y - e.pos.y };
       const d = Math.hypot(toP.x, toP.y);
       const n = d > 0 ? { x: toP.x / d, y: toP.y / d } : { x: 0, y: 0 };
       e.facing = n;
 
+      // Stunned enemies skip movement + attack logic but still take
+      // damage and tick statuses. They get a yellow halo via the
+      // status-icon render path.
+      if (hasStatus(e, 'stun')) {
+        // Still apply contact damage check + bounds clamp below the switch.
+        // Just bypass the AI behaviour.
+      } else
       switch (e.type) {
         case 'lesserShade':
           this.moveTowards(e, n, e.speed, dt);
@@ -1594,7 +1667,9 @@ export class GameEngine {
       // contact damage
       const collideR = e.radius + PLAYER_RADIUS;
       if (d < collideR) {
-        this.damagePlayer(e.contactDamage);
+        if (!this.tryParry({ kind: 'enemy', enemy: e })) {
+          this.damagePlayer(e.contactDamage);
+        }
         // knockback
         e.pos.x -= n.x * 4;
         e.pos.y -= n.y * 4;
@@ -2078,8 +2153,12 @@ export class GameEngine {
   }
 
   private moveTowards(e: Enemy, dir: Vec, speed: number, dt: number): void {
-    e.pos.x += dir.x * speed * dt;
-    e.pos.y += dir.y * speed * dt;
+    // Slow / stun bake into a single speed multiplier — stun returns 0,
+    // slow returns 0.55, default 1. Keeps individual AI cases ignorant.
+    const sm = speedMultiplierFromStatus(e);
+    if (sm <= 0) return;
+    e.pos.x += dir.x * speed * sm * dt;
+    e.pos.y += dir.y * speed * sm * dt;
   }
 
   private killEnemy(e: Enemy, idx: number): void {
@@ -2215,9 +2294,34 @@ export class GameEngine {
     if (delta > 0) this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 8, `+${delta}`, '#6cf6e5');
   }
 
-  private damageEnemy(e: Enemy, dmg: number, knock: Vec, knockStrength: number): void {
+  private damageEnemy(
+    e: Enemy,
+    rawDmg: number,
+    knock: Vec,
+    knockStrength: number,
+    opts?: { fromPlayer?: boolean; appliesStatus?: AppliesStatus; canCrit?: boolean },
+  ): void {
+    const fromPlayer = opts?.fromPlayer !== false;
+    const canCrit = opts?.canCrit !== false;
+    let dmg = rawDmg;
+    let isCrit = false;
+
+    // Crit roll — luck stat finally pays out. Base 1% + 1.5%/luck point.
+    if (fromPlayer && canCrit) {
+      const chance = Math.max(0, (1 + 1.5 * this.player.luck) / 100);
+      if (Math.random() < chance) {
+        isCrit = true;
+        dmg *= 1.8;
+      }
+    }
+    // Combo damage bonus — +8% per existing combo count.
+    if (fromPlayer && this.comboCount > 0) {
+      dmg *= 1 + this.comboCount * 0.08;
+    }
+
+    dmg = Math.max(1, Math.round(dmg));
     e.hp -= dmg;
-    e.flash = 0.12;
+    e.flash = isCrit ? 0.2 : 0.12;
     const dirLen = Math.hypot(knock.x, knock.y) || 1;
     const nx = knock.x / dirLen;
     const ny = knock.y / dirLen;
@@ -2225,7 +2329,16 @@ export class GameEngine {
     const prevY = e.pos.y;
     e.pos.x += nx * knockStrength * 0.02;
     e.pos.y += ny * knockStrength * 0.02;
-    this.spawnDamageNumber(e.pos.x, e.pos.y - 10, `${Math.round(dmg)}`, '#ffd97a');
+    if (isCrit) {
+      this.spawnCritDamageNumber(e.pos.x, e.pos.y - 14, dmg);
+      this.camera.shakeT = Math.max(this.camera.shakeT, 0.18);
+      this.camera.shakeMag = Math.max(this.camera.shakeMag, 3);
+      if (!this.reducedParticles) {
+        this.particles.burst(e.pos.x, e.pos.y - 4, 14, { colour: '#fff7d6', life: 0.5, maxLife: 0.5, drag: 0.84 });
+      }
+    } else {
+      this.spawnDamageNumber(e.pos.x, e.pos.y - 10, `${dmg}`, '#ffd97a');
+    }
     // Brief hit-pause on damage landing. Every hit gets a 2-frame
     // pause for "punch" feel; big hits get 4 frames. Avoid stacking
     // beyond timeAlive + 0.06 so multi-hits don't lock the world.
@@ -2286,18 +2399,148 @@ export class GameEngine {
         }
       }
     }
+
+    // Status application — roll once per hit per source.
+    if (fromPlayer && opts?.appliesStatus && e.hp > 0) {
+      const as = opts.appliesStatus;
+      if (Math.random() < as.chance) {
+        const newlyApplied = applyStatusEffect(e, as.kind, this.timeAlive, {
+          duration: as.duration,
+          magnitude: as.magnitude,
+        });
+        if (newlyApplied && !this.reducedParticles) {
+          const cfg = STATUS_CONFIG[as.kind];
+          this.particles.burst(e.pos.x, e.pos.y - 6, 8, {
+            colour: cfg.colour, life: 0.5, maxLife: 0.5, drag: 0.86,
+          });
+        }
+      }
+    }
+
+    // Combo bump — every player-source hit that did damage extends the chain.
+    if (fromPlayer && canCrit) {
+      this.bumpCombo();
+    }
+  }
+
+  private bumpCombo(): void {
+    if (this.timeAlive - this.comboLastHitT > GameEngine.COMBO_WINDOW) {
+      this.comboCount = 1;
+    } else {
+      this.comboCount = Math.min(GameEngine.COMBO_MAX, this.comboCount + 1);
+    }
+    this.comboLastHitT = this.timeAlive;
+    this.comboPulse = 0.4;
+  }
+
+  private spawnCritDamageNumber(x: number, y: number, dmg: number): void {
+    const id = nid();
+    this.damageNumbers.push({
+      id, x, y,
+      vx: (Math.random() - 0.5) * 14,
+      vy: -42 - Math.random() * 20,
+      life: 1.1, maxLife: 1.1,
+      value: dmg, colour: '#ffe9a3',
+    });
+    // Stamp the "CRIT" prefix via the side-channel text field, marked as crit
+    // for bigger / brighter rendering in drawDamageNumbers.
+    (this.damageNumbers[this.damageNumbers.length - 1] as DamageNumber & { text?: string; crit?: boolean })
+      .text = `CRIT ${dmg}`;
+    (this.damageNumbers[this.damageNumbers.length - 1] as DamageNumber & { text?: string; crit?: boolean })
+      .crit = true;
+  }
+
+  /** DoT damage on the player — bypasses iframes and reduced armor. */
+  private applyDotToPlayer(raw: number): void {
+    const p = this.player;
+    if (this.dead || raw <= 0) return;
+    const reduced = absorbWithShield(p, raw);
+    if (reduced <= 0) return;
+    const dmg = Math.max(1, Math.round(reduced - p.armor * 0.5));
+    p.hp -= dmg;
+    p.flash = Math.max(p.flash, 0.08);
+    this.spawnDamageNumber(p.pos.x + (Math.random() - 0.5) * 6, p.pos.y - 8, `${dmg}`, '#ff7a3a');
+  }
+
+  /** Attempt to parry an incoming hit. If the player is within the
+   *  parry window of a dash, consume the hit, stun the source, and
+   *  (for projectiles) reflect it. Returns true if the hit was eaten. */
+  private tryParry(src: { kind: 'enemy'; enemy: Enemy } | { kind: 'projectile'; projectile: Projectile } | { kind: 'sigil' }): boolean {
+    const p = this.player;
+    if (this.dead) return false;
+    if (p.dashTimer <= 0) return false;
+    if (this.timeAlive - p.dashStartT > GameEngine.PARRY_WINDOW) return false;
+    // Sigils are area effects — too forgiving to parry; skip.
+    if (src.kind === 'sigil') return false;
+
+    audio.sfx('shrine');
+    if (!this.reducedParticles) {
+      this.particles.burst(p.pos.x, p.pos.y - 4, 24, {
+        colour: '#ffe6a3', life: 0.6, maxLife: 0.6, drag: 0.85,
+      });
+      // Bright white ring — every parry gets a satisfying flash.
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const sp = 130;
+        this.particles.emit({
+          x: p.pos.x, y: p.pos.y - 4,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.22, maxLife: 0.22, size: 1.4, colour: '#ffffff', drag: 0.8,
+        });
+      }
+    }
+    this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'PARRY', '#ffe6a3');
+    p.iframes = Math.max(p.iframes, 0.3);
+    this.camera.shakeT = Math.max(this.camera.shakeT, 0.22);
+    this.camera.shakeMag = Math.max(this.camera.shakeMag, 3.5);
+
+    if (src.kind === 'enemy') {
+      // Stun the offender; small backward shove.
+      applyStatusEffect(src.enemy, 'stun', this.timeAlive, { duration: 0.8 });
+      const dx = src.enemy.pos.x - p.pos.x;
+      const dy = src.enemy.pos.y - p.pos.y;
+      const len = Math.hypot(dx, dy) || 1;
+      src.enemy.pos.x += (dx / len) * 12;
+      src.enemy.pos.y += (dy / len) * 12;
+    } else {
+      // Reflect: flip ownership + invert velocity so it sails back.
+      const pr = src.projectile;
+      pr.fromPlayer = true;
+      pr.vel.x *= -1.4;
+      pr.vel.y *= -1.4;
+      pr.colour = '#ffe6a3';
+      pr.trailColour = '#f4d27a';
+    }
+
+    // Combo gets a chunky bump on parry — the skill-expression reward.
+    this.bumpCombo();
+    this.bumpCombo();
+    return true;
   }
 
   private damagePlayer(raw: number): void {
     const p = this.player;
     if (p.iframes > 0 || this.dead) return;
-    const dmg = Math.max(1, Math.round(raw - p.armor));
+    // Shield absorbs first; if anything punches through, armor reduces it.
+    const through = absorbWithShield(p, raw);
+    if (through <= 0) {
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'SHIELD', '#6cf6e5');
+      if (!this.reducedParticles) {
+        this.particles.burst(p.pos.x, p.pos.y - 4, 10, {
+          colour: '#6cf6e5', life: 0.4, maxLife: 0.4, drag: 0.86,
+        });
+      }
+      return;
+    }
+    const dmg = Math.max(1, Math.round(through - p.armor));
     p.hp -= dmg;
     p.iframes = 0.7;
     p.flash = 0.15;
     this.camera.shakeT = 0.3; this.camera.shakeMag = 3;
     audio.sfx('playerHit');
     this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `${dmg}`, '#e23a4a');
+    // Damage breaks the combo chain.
+    this.comboCount = 0;
   }
 
   private updateProjectiles(dt: number): void {
@@ -2331,10 +2574,13 @@ export class GameEngine {
 
       if (pr.fromPlayer) {
         // hit enemies
+        const prStatus = (pr as Projectile & { appliesStatus?: AppliesStatus }).appliesStatus;
         for (const e of this.enemies) {
           const d = Math.hypot(e.pos.x - pr.pos.x, e.pos.y - pr.pos.y);
           if (d < pr.radius + e.radius) {
-            this.damageEnemy(e, pr.damage, { x: pr.vel.x, y: pr.vel.y }, 90);
+            this.damageEnemy(e, pr.damage, { x: pr.vel.x, y: pr.vel.y }, 90, {
+              fromPlayer: true, appliesStatus: prStatus,
+            });
             const explodeR = (pr as Projectile & { explodeRadius?: number }).explodeRadius ?? 0;
             // Every spell impact gets a small burst + shake so the hit reads
             // as an event, not just a number popping up.
@@ -2349,7 +2595,9 @@ export class GameEngine {
                 if (e2 === e) continue;
                 const dd = Math.hypot(e2.pos.x - pr.pos.x, e2.pos.y - pr.pos.y);
                 if (dd < explodeR + e2.radius) {
-                  this.damageEnemy(e2, pr.damage * 0.6, { x: e2.pos.x - pr.pos.x, y: e2.pos.y - pr.pos.y }, 70);
+                  this.damageEnemy(e2, pr.damage * 0.6, { x: e2.pos.x - pr.pos.x, y: e2.pos.y - pr.pos.y }, 70, {
+                    fromPlayer: true, appliesStatus: prStatus, canCrit: false,
+                  });
                 }
               }
               this.particles.burst(pr.pos.x, pr.pos.y, 26, { colour: pr.colour, life: 0.6, maxLife: 0.6, drag: 0.85 });
@@ -2371,6 +2619,10 @@ export class GameEngine {
         }
         const d = Math.hypot(this.player.pos.x - pr.pos.x, this.player.pos.y - pr.pos.y);
         if (d < pr.radius + PLAYER_RADIUS) {
+          if (this.tryParry({ kind: 'projectile', projectile: pr })) {
+            // Reflected — leave the projectile in the world, now owned by the player.
+            continue;
+          }
           this.damagePlayer(pr.damage);
           this.projectiles.splice(i, 1);
         }
@@ -2507,10 +2759,13 @@ export class GameEngine {
         const colour = s.colour ?? '#e23a4a';
         if (s.fromPlayer) {
           // damage all enemies in radius
+          const sStatus = (s as SigilHazard & { appliesStatus?: AppliesStatus }).appliesStatus;
           for (const e of this.enemies) {
             const d = Math.hypot(e.pos.x - s.pos.x, e.pos.y - s.pos.y);
             if (d < radius + e.radius) {
-              this.damageEnemy(e, s.damage, { x: e.pos.x - s.pos.x, y: e.pos.y - s.pos.y }, 60);
+              this.damageEnemy(e, s.damage, { x: e.pos.x - s.pos.x, y: e.pos.y - s.pos.y }, 60, {
+                fromPlayer: true, appliesStatus: sStatus,
+              });
             }
           }
         } else {
@@ -3158,6 +3413,16 @@ export class GameEngine {
         this.ctx.fillStyle = `rgba(${col}, ${0.18 + 0.22 * pulse})`;
         this.ctx.fillRect(e.pos.x - e.radius - 1, e.pos.y - e.radius - 1, (e.radius + 1) * 2, (e.radius + 1) * 2);
       }
+      // Status-effect icons floating above the head — one tiny coloured
+      // pip per kind. Stacked horizontally so the row reads at a glance.
+      if (e.status.length > 0) {
+        const headY = e.pos.y - e.height - 8;
+        let ox = e.pos.x - (e.status.length * 5);
+        for (const s of e.status) {
+          this.drawStatusPip(ox, headY, s);
+          ox += 6;
+        }
+      }
     }
     // Dissolving death effects — sprite expands and fades.
     for (const fx of this.deathFx) {
@@ -3179,6 +3444,30 @@ export class GameEngine {
       this.ctx.translate(-cx, -cy);
       drawEnemy(this.ctx, fx.visualKey, dx, dy, scale, 0.6 * (1 - tNorm), fx.facing.x < 0, fx.isBoss ? undefined : floorTint);
       this.ctx.restore();
+    }
+  }
+
+  /** A tiny status-effect pip drawn above an entity's head. Solid colour
+   *  square with a 1-px ring; stacks count rendered as a small notch on the
+   *  bottom edge. Position is the centre of the pip. */
+  private drawStatusPip(cx: number, cy: number, s: StatusEffect): void {
+    const cfg = STATUS_CONFIG[s.kind];
+    const ctx = this.ctx;
+    // Subtle pulse — every status throbs to read "this is active."
+    const pulse = 0.7 + 0.3 * Math.sin(this.timeAlive * 7 + s.kind.charCodeAt(0));
+    ctx.fillStyle = cfg.colour;
+    ctx.globalAlpha = pulse;
+    ctx.fillRect(cx - 2, cy - 2, 5, 5);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(cx - 2, cy - 2, 5, 1);
+    ctx.fillRect(cx - 2, cy + 2, 5, 1);
+    ctx.fillRect(cx - 2, cy - 2, 1, 5);
+    ctx.fillRect(cx + 2, cy - 2, 1, 5);
+    // Stack-count notch (burn / poison go up to 3-4 stacks).
+    if (s.stacks > 1) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx + 1, cy + 3, s.stacks, 1);
     }
   }
 
@@ -3667,6 +3956,9 @@ export class GameEngine {
         effect: this.pendingShrine.effect,
         downside: this.pendingShrine.downside,
       } : undefined,
+      combo: this.comboCount,
+      comboPulse: this.comboPulse,
+      playerStatus: p.status.map((s) => ({ kind: s.kind, remaining: s.remaining, stacks: s.stacks })),
       alive: !this.dead,
     });
   }

@@ -2,6 +2,7 @@ import { HudSnapshot } from '../game/GameEngine';
 import { RELICS } from '../game/data/relics';
 import { WEAPONS } from '../game/data/weapons';
 import { SPELLS } from '../game/data/spells';
+import { STATUS_CONFIG } from '../game/data/statusEffects';
 import { InputManager } from '../game/input/InputManager';
 
 interface Props { hud: HudSnapshot; input?: InputManager | null }
@@ -30,11 +31,13 @@ export function HUD({ hud, input }: Props): JSX.Element {
           <span className="gold-text">$ {hud.coins}</span> &nbsp;·&nbsp;
           <span className="gold-text">⚷ {hud.keys}</span>
         </div>
+        <PlayerStatusStrip status={hud.playerStatus} />
         <LoadoutStrip hud={hud} />
       </div>
 
       <div className="hud-top-right">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+          {hud.combo >= 2 && <ComboTag count={hud.combo} pulse={hud.comboPulse} />}
           <button
             type="button"
             className="hud-pause-btn"
@@ -181,6 +184,57 @@ function LoadoutStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ComboTag({ count, pulse }: { count: number; pulse: number }): JSX.Element {
+  // Scale grows briefly on increment then settles. pulse decays 0.4→0 in-engine.
+  const scale = 1 + pulse * 0.6;
+  return (
+    <div
+      style={{
+        fontFamily: "'Press Start 2P', monospace, sans-serif",
+        fontSize: 14,
+        color: '#ffe6a3',
+        letterSpacing: '0.12em',
+        textShadow: '0 0 6px rgba(244, 210, 122, 0.85)',
+        transform: `scale(${scale.toFixed(2)})`,
+        transformOrigin: 'right center',
+        transition: 'transform 0.18s cubic-bezier(.2,.7,.2,1)',
+      }}
+    >
+      ×{count}
+    </div>
+  );
+}
+
+function PlayerStatusStrip({ status }: { status: HudSnapshot['playerStatus'] }): JSX.Element | null {
+  if (!status || status.length === 0) return null;
+  return (
+    <div style={{ marginTop: 6, display: 'flex', gap: 4 }}>
+      {status.map((s) => {
+        const cfg = STATUS_CONFIG[s.kind];
+        return (
+          <div
+            key={s.kind}
+            title={`${s.kind} (${s.remaining.toFixed(1)}s${s.stacks > 1 ? `, ×${s.stacks}` : ''})`}
+            style={{
+              minWidth: 22,
+              padding: '1px 4px',
+              fontSize: 9,
+              color: '#0d0717',
+              background: cfg.colour,
+              border: '1px solid rgba(0,0,0,0.35)',
+              letterSpacing: '0.1em',
+              textAlign: 'center',
+              opacity: 0.92,
+            }}
+          >
+            {cfg.glyph}{s.stacks > 1 ? s.stacks : ''}
+          </div>
+        );
+      })}
     </div>
   );
 }

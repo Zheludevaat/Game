@@ -1,4 +1,5 @@
 import { GamepadMap } from './input/controlMappings';
+import { AppliesStatus } from './data/statusEffects';
 
 export type ArchetypeId = 'magus' | 'hermit' | 'star';
 
@@ -68,6 +69,8 @@ export interface WeaponDef {
   arcHalf: number;
   knockback: number;
   hits: number;
+  /** Optional status effect applied on melee hit. */
+  appliesStatus?: AppliesStatus;
   // visual
   swingColour: string;
   hiltColour: string;
@@ -105,6 +108,8 @@ export interface SpellDef {
   explodeRadius: number;
   sigilDelay?: number;
   sigilRange?: number;
+  /** Optional status effect applied on projectile / sigil hit. */
+  appliesStatus?: AppliesStatus;
   projColour: string;
   trailColour: string;
   projVisual: SpellVisual;
