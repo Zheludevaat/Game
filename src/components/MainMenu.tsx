@@ -69,11 +69,15 @@ export function MainMenu(p: Props): JSX.Element {
         s.y -= 0.2 * s.z;
         if (s.y < 0) { s.y = H; s.x = Math.random() * W; }
       }
-      // Seven lamps row — positioned well above the title block, never overlapping it
+      // Seven lamps row — positioned well above the title block, never overlapping it.
+      // Skipped entirely on short landscape (iPhone) where the row
+      // bled into the title text; the candle decor is cosmetic only.
+      const skipLamps = H < 500;
       const cx = W / 2;
       const cy = Math.max(48, H * 0.08);
       const spacing = Math.min(72, Math.max(40, W / 12));
       for (let i = 0; i < 7; i++) {
+        if (skipLamps) break;
         const x = cx + (i - 3) * spacing;
         const flick = 0.7 + Math.sin(now * 3 + i * 0.9) * 0.3;
         // halo

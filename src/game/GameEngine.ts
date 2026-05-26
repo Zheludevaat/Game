@@ -3347,20 +3347,18 @@ export class GameEngine {
     const canvas = this.canvas;
     ctx.imageSmoothingEnabled = false;
 
-    // Aspect-fill ("cover") instead of aspect-fit. The game always fills
-    // the entire viewport — no black letterbox bars. Off-axis virtual
-    // pixels get cropped by the canvas, but the player is camera-centred
-    // so the cropped edges are far from the action. Reads more
-    // "fullscreen" on iPhone landscape where 16:9 would leave thick
-    // side bars.
+    // Aspect-fit (contain) — whole virtual viewport always visible.
+    // Earlier we used aspect-fill, which on iPhone landscape (~2.17:1)
+    // cropped 43 px of the 270 px-tall virtual frame and hid the top
+    // and bottom doors. Side bars are filled with abyss-dark below so
+    // the "letterbox" reads as part of the dungeon, not interface chrome.
     const sx = canvas.width / VIRTUAL_W;
     const sy = canvas.height / VIRTUAL_H;
-    const scale = Math.max(1, Math.max(sx, sy));
+    const scale = Math.max(1, Math.min(sx, sy));
     const offX = Math.floor((canvas.width - VIRTUAL_W * scale) / 2);
     const offY = Math.floor((canvas.height - VIRTUAL_H * scale) / 2);
 
-    // No letterbox — but clear the canvas to abyss-dark in case a future
-    // change reintroduces gaps. Bars would no longer be a problem.
+    // Abyss-dark fill — covers any letterbox bars introduced by fit.
     ctx.fillStyle = '#02010a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -4057,11 +4055,13 @@ export class GameEngine {
     const t = this.timeAlive;
     const flick = (seed: number): number => 0.86 + 0.14 * Math.sin(t * 6 + seed * 1.7);
 
-    // Multiply layer — pulls the room toward shadow. Slight cool tint
-    // so the darkness reads as stone-night, not flat black.
+    // Multiply layer — pulls the room toward shadow. Lifted from the
+    // original rgb(70, 56, 110) which crushed the floor to near-black
+    // and made gameplay hard to read on small screens. The new tint
+    // keeps the moody purple-grey while preserving floor detail.
     ctx.save();
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = 'rgb(70, 56, 110)';
+    ctx.fillStyle = 'rgb(118, 100, 150)';
     ctx.fillRect(0, 0, ROOM_W, ROOM_H);
     ctx.restore();
 
@@ -4069,21 +4069,26 @@ export class GameEngine {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
 
-    // Wall torches — same positions as drawRoom's torch loop.
+    // Wall torches — same positions as drawRoom's torch loop. Reach
+    // bumped so torchlight actually meets the player's lamp mid-room.
     for (let i = 1; i <= 4; i++) {
       const lx = (ROOM_W / 5) * i;
       const ly = 28;
       const f = flick(i);
       // Warm core
-      this.paintLight(lx, ly, 78, '255, 220, 160', 0.42 * f);
+      this.paintLight(lx, ly, 96, '255, 220, 160', 0.48 * f);
       // Sphere-accent halo — bleeds the room hue into the torchlight
-      this.paintLight(lx, ly, 110, sphereRgb, 0.14 * f);
+      this.paintLight(lx, ly, 140, sphereRgb, 0.16 * f);
     }
 
     // The player carries a small lamp — softens the void around them.
+    // Bigger radius + higher alpha so the play area around the initiate
+    // is genuinely readable, not just a thin pool of light.
     if (this.dyingT < 0) {
       const p = this.player;
-      this.paintLight(p.pos.x, p.pos.y - 6, 56, '244, 210, 122', 0.38);
+      this.paintLight(p.pos.x, p.pos.y - 6, 78, '255, 230, 170', 0.52);
+      // Tight hot core right at the lamp itself.
+      this.paintLight(p.pos.x, p.pos.y - 6, 30, '255, 247, 214', 0.35);
       // Cosmetic: Lamp Aura. Purchased from Meta Progression for 30
       // essence — adds a sphere-tinted outer halo + a gentle breathing
       // pulse on top of the base lamp so the upgrade is felt during
@@ -4288,23 +4293,129 @@ export class GameEngine {
     const ctx = this.ctx;
     const len = w.length;
     const th = w.thickness;
-    // grip (1/3 of length back from origin)
+    // Grip + crossguard are the shared chassis — every weapon has them.
     ctx.fillStyle = w.hiltColour;
     ctx.fillRect(-3, -1, 4, 2);
-    // crossguard
     ctx.fillStyle = w.accentColour;
     ctx.fillRect(0, -2, 2, 5);
-    // blade — outline + body + highlight
-    ctx.fillStyle = '#04020a';
-    ctx.fillRect(1, -Math.ceil(th / 2) - 1, len + 1, th + 2);
-    ctx.fillStyle = w.bladeColour;
-    ctx.fillRect(2, -Math.floor(th / 2), len - 1, th);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(2, -Math.floor(th / 2), len - 2, 1);
-    // accent stripe
-    ctx.fillStyle = w.accentColour;
-    ctx.fillRect(len - 3, 0, 2, 1);
-    // glow halo during animation
+    // Blade shape branches per weapon id so the wielded sprite reads
+    // as "axe" / "trident" / "sickle" rather than a generic rectangle.
+    switch (w.id) {
+      case 'boneCleaver':
+      case 'sunDisc':
+        // Wide-head axe / disc — body taper, then a broad head at the tip.
+        ctx.fillStyle = '#04020a';
+        ctx.fillRect(1, -2, len * 0.55, 4);
+        ctx.fillRect(len * 0.55, -Math.ceil(th / 2) - 2, len * 0.45 + 2, th + 4);
+        ctx.fillStyle = w.bladeColour;
+        ctx.fillRect(2, -1, len * 0.55 - 1, 2);
+        ctx.fillRect(len * 0.55 + 1, -Math.floor(th / 2) - 1, len * 0.45 - 1, th + 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(2, -1, len * 0.55 - 1, 1);
+        ctx.fillStyle = w.accentColour;
+        ctx.fillRect(len - 2, -Math.floor(th / 2), 2, 1);
+        break;
+      case 'ashenGreatsword':
+        // Thicker blade body with a notched tip — reads as massive.
+        ctx.fillStyle = '#04020a';
+        ctx.fillRect(1, -Math.ceil(th / 2) - 2, len + 2, th + 4);
+        ctx.fillStyle = w.bladeColour;
+        ctx.fillRect(2, -Math.floor(th / 2) - 1, len - 1, th + 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(2, -Math.floor(th / 2) - 1, len - 2, 1);
+        ctx.fillStyle = w.accentColour;
+        // Fuller groove down the centre.
+        ctx.fillRect(4, 0, len - 6, 1);
+        break;
+      case 'tridentOfBrass':
+        // Three prongs at the tip — main central blade flanked by two
+        // shorter side spikes.
+        ctx.fillStyle = '#04020a';
+        ctx.fillRect(1, -1, len + 1, 3);
+        ctx.fillStyle = w.bladeColour;
+        ctx.fillRect(2, 0, len - 1, 1);
+        // Side prongs.
+        ctx.fillRect(len - 5, -3, 2, 3);
+        ctx.fillRect(len - 5, 1, 2, 3);
+        ctx.fillStyle = w.accentColour;
+        ctx.fillRect(len - 2, -1, 2, 3);
+        break;
+      case 'ironHalberd':
+        // Long shaft + axe-head perpendicular near the tip.
+        ctx.fillStyle = '#04020a';
+        ctx.fillRect(1, 0, len + 1, 2);
+        ctx.fillRect(len - 7, -4, 5, 6);
+        ctx.fillStyle = w.bladeColour;
+        ctx.fillRect(2, 0, len - 1, 1);
+        ctx.fillRect(len - 6, -3, 3, 5);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(len - 6, -3, 3, 1);
+        ctx.fillStyle = w.accentColour;
+        ctx.fillRect(len - 2, 0, 2, 1);
+        break;
+      case 'twinSickles':
+        // Curved scimitar-like blade — wider toward the tip, slight hook.
+        ctx.fillStyle = '#04020a';
+        ctx.fillRect(1, -2, len * 0.7, 3);
+        ctx.fillRect(len * 0.7, -3, len * 0.3 + 1, 4);
+        ctx.fillStyle = w.bladeColour;
+        ctx.fillRect(2, -1, len * 0.7 - 1, 2);
+        ctx.fillRect(len * 0.7 + 1, -2, len * 0.3 - 1, 3);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(2, -1, len - 2, 1);
+        break;
+      case 'serpentCoil':
+        // Segmented whip — alternating bands along the length.
+        ctx.fillStyle = '#04020a';
+        ctx.fillRect(1, -1, len + 1, 3);
+        ctx.fillStyle = w.bladeColour;
+        for (let i = 0; i < 4; i++) {
+          ctx.fillRect(2 + i * 4, 0, 3, 1);
+        }
+        ctx.fillStyle = w.accentColour;
+        for (let i = 0; i < 4; i++) {
+          ctx.fillRect(2 + i * 4 + 3, 0, 1, 1);
+        }
+        break;
+      case 'ironHook':
+        // Slim shaft + barbed hook at the tip pointing back.
+        ctx.fillStyle = '#04020a';
+        ctx.fillRect(1, 0, len + 1, 2);
+        ctx.fillRect(len - 4, -3, 3, 2);
+        ctx.fillStyle = w.bladeColour;
+        ctx.fillRect(2, 0, len - 1, 1);
+        ctx.fillRect(len - 3, -2, 2, 1);
+        ctx.fillStyle = w.accentColour;
+        ctx.fillRect(len - 2, -2, 1, 3);
+        break;
+      case 'crystallizedTear':
+        // Diamond-shaped frozen blade — widest at the centre, tapers.
+        ctx.fillStyle = '#04020a';
+        for (let i = 0; i < len; i++) {
+          const half = Math.round(((1 - Math.abs((i / len) - 0.5) * 2) * th * 0.7) + 0.5);
+          ctx.fillRect(2 + i, -half, 1, half * 2 + 1);
+        }
+        ctx.fillStyle = w.bladeColour;
+        for (let i = 0; i < len; i++) {
+          const half = Math.max(0, Math.round(((1 - Math.abs((i / len) - 0.5) * 2) * th * 0.7) - 0.5));
+          ctx.fillRect(2 + i, -half, 1, half * 2 + 1);
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(2 + Math.floor(len * 0.4), 0, Math.ceil(len * 0.2), 1);
+        break;
+      default:
+        // Generic blade — used by tarnishedDagger and any future weapon.
+        ctx.fillStyle = '#04020a';
+        ctx.fillRect(1, -Math.ceil(th / 2) - 1, len + 1, th + 2);
+        ctx.fillStyle = w.bladeColour;
+        ctx.fillRect(2, -Math.floor(th / 2), len - 1, th);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(2, -Math.floor(th / 2), len - 2, 1);
+        ctx.fillStyle = w.accentColour;
+        ctx.fillRect(len - 3, 0, 2, 1);
+        break;
+    }
+    // Glow halo during animation — every weapon picks up the swing colour.
     if (glowAlpha > 0) {
       ctx.globalAlpha = glowAlpha;
       ctx.fillStyle = w.swingColour;
@@ -4513,6 +4624,31 @@ export class GameEngine {
       const d = dist(p.pos, { x: ROOM_W / 2, y: ROOM_H / 2 - 8 });
       if (d < 28) prompts.push('Press Interact to commune');
     }
+    // Nearby weapon / spell / relic pickup — surface a stat preview so
+    // the player can decide whether to swap before stepping on it.
+    // Magnet pulls coins / essence / hp / mp automatically; we only
+    // gate on the items that REPLACE current equipment.
+    for (const pk of this.pickups) {
+      if (pk.kind !== 'weapon' && pk.kind !== 'spell' && pk.kind !== 'relic') continue;
+      const d = dist(p.pos, pk.pos);
+      if (d > 36) continue;
+      if (pk.kind === 'weapon' && pk.weapon) {
+        const w = WEAPONS[pk.weapon];
+        const dmg = Math.round(p.attack * p.damageMul * w.damageMul);
+        const rate = (1 / Math.max(0.01, w.cooldown)).toFixed(1);
+        const status = w.appliesStatus ? `· ${w.appliesStatus.kind}` : '';
+        prompts.push(`${w.name} — ${dmg} dmg · ${rate}/s · ${w.swingType} ${status}`);
+      } else if (pk.kind === 'spell' && pk.spell) {
+        const sp = SPELLS[pk.spell];
+        const dmg = Math.round(p.spellPower * p.damageMul * sp.damageMul);
+        const status = sp.appliesStatus ? `· ${sp.appliesStatus.kind}` : '';
+        prompts.push(`${sp.name} — ${dmg} dmg · ${sp.manaCost} MP ${status}`);
+      } else if (pk.kind === 'relic' && pk.relic) {
+        const r = RELICS[pk.relic];
+        prompts.push(`${r.name} — ${r.description}`);
+      }
+      break; // one tooltip at a time even if multiple pickups overlap
+    }
 
     // Brass Ear relic — reveals every room on the minimap. (Still requires
     // physical traversal to enter them; this only lifts the fog.)
@@ -4574,15 +4710,45 @@ export class GameEngine {
 
   private computeTutorialPrompts(): string[] {
     if (!this.tutorialActive) return [];
+    // Per-input prompt vocab so a touch player never gets "Press J" — the
+    // game shows the controls they actually have. InputManager.getMethod
+    // updates as soon as a touch / key / pad input fires, so the prompts
+    // re-tag in-place if a player swaps from one input to another.
+    const method = this.input.getMethod();
+    const labels = (() => {
+      switch (method) {
+        case 'touch': return {
+          move: 'Drag the joystick to move',
+          attack: 'Tap ATTACK to strike',
+          dash: 'Tap DASH to roll',
+          spell: 'Tap SPELL to cast',
+          interact: 'Tap USE to interact',
+        };
+        case 'controller': return {
+          move: 'Use the left stick to move',
+          attack: 'Press A / X to strike',
+          dash: 'Press B / O to dash',
+          spell: 'Press X / □ for a spell',
+          interact: 'Press Y / △ to interact',
+        };
+        default: return {
+          move: 'Hold WASD or arrows to move',
+          attack: 'Press J to strike',
+          dash: 'Press Space to dash',
+          spell: 'Press L for a spell',
+          interact: 'Press E to interact',
+        };
+      }
+    })();
     const out: string[] = [];
     // Phase 1 — the three movement / combat fundamentals.
-    if (!this.tutorialDidMove)   out.push('Hold direction to move');
-    if (!this.tutorialDidAttack) out.push('Press J / A to strike');
-    if (!this.tutorialDidDash)   out.push('Press Space / B to dash');
+    if (!this.tutorialDidMove)   out.push(labels.move);
+    if (!this.tutorialDidAttack) out.push(labels.attack);
+    if (!this.tutorialDidDash)   out.push(labels.dash);
     // Phase 2 — only after the basics are done. Spell prompt fires once
     // the player has been swinging for a moment, so they discover MP.
     const basicsDone = this.tutorialDidMove && this.tutorialDidAttack && this.tutorialDidDash;
-    if (basicsDone && !this.tutorialDidSpell) out.push('Press L / X for a spell');
+    if (basicsDone && !this.tutorialDidSpell) out.push(labels.spell);
     // Interact prompt — gate on entering a room with a chest, shrine
     // or stairs so we only mention it when it matters.
     const room = this.currentRoom;
@@ -4592,7 +4758,7 @@ export class GameEngine {
       room.type === 'exit'
     );
     if (basicsDone && !this.tutorialDidInteract && hasInteractable) {
-      out.push('Press E / Y to interact');
+      out.push(labels.interact);
     }
     // Combo prompt — surfaces the first time the ×N tag actually
     // appears, holds for ~4 s, then fades.
