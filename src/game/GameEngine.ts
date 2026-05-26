@@ -371,6 +371,11 @@ export class GameEngine {
   private dyingT = -1;
   private dyingDuration = 1.6;
   private gameOverFired = false;
+  // Dash afterimage trail — snapshots of the player taken while
+  // dashing. Render them BEFORE the player so the latest position
+  // sits on top of fading ghosts.
+  private dashTrail: { x: number; y: number; facing: Vec; walkPhase: number; t: number }[] = [];
+  private dashTrailAccum = 0;
 
   constructor(cbs: EngineCallbacks) {
     this.cbs = cbs;
@@ -411,6 +416,8 @@ export class GameEngine {
     this.delayedActions = [];
     this.dyingT = -1;
     this.gameOverFired = false;
+    this.dashTrail = [];
+    this.dashTrailAccum = 0;
     this.summary.essenceCollected = 0;
     this.summary.coinsCollected = 0;
     this.summary.relicsFound = [];
@@ -929,6 +936,7 @@ export class GameEngine {
     this.updateDamageNumbers(dt);
     this.updateDeathFx(dt);
     this.updateDying(dt);
+    this.updateDashTrail(dt);
 
     if (this.floorBanner) {
       this.floorBanner.t += dt;
@@ -1009,6 +1017,43 @@ export class GameEngine {
       p.dashCooldown = p.dashCdMax;
       p.iframes = Math.max(p.iframes, DASH_DURATION + 0.05);
       audio.sfx('dash');
+      // Seed the trail with the launch position so the ghost reads
+      // immediately on the first frame of the dash.
+      this.dashTrailAccum = 0;
+      this.dashTrail.push({
+        x: p.pos.x, y: p.pos.y,
+        facing: { x: p.facing.x, y: p.facing.y },
+        walkPhase: p.walkPhase, t: 0,
+      });
+      // Burst of dash particles from the launch point — directional
+      // smear opposite the dash heading.
+      if (!this.reducedParticles) {
+        for (let i = 0; i < 10; i++) {
+          const sp = 50 + Math.random() * 40;
+          this.particles.emit({
+            x: p.pos.x, y: p.pos.y - 4,
+            vx: -dir.x * sp + (Math.random() - 0.5) * 30,
+            vy: -dir.y * sp + (Math.random() - 0.5) * 30,
+            life: 0.32, maxLife: 0.32, size: 1.4,
+            colour: i % 2 ? '#9ad4ff' : '#ffffff', drag: 0.86,
+          });
+        }
+      }
+    }
+
+    // While the dash is active, sample an afterimage every ~30 ms so
+    // the trail reads as a smooth motion-streak. Each ghost ages out
+    // over 0.28 s with linear alpha fade.
+    if (p.dashTimer > 0) {
+      this.dashTrailAccum += dt;
+      if (this.dashTrailAccum >= 0.03) {
+        this.dashTrailAccum = 0;
+        this.dashTrail.push({
+          x: p.pos.x, y: p.pos.y,
+          facing: { x: p.facing.x, y: p.facing.y },
+          walkPhase: p.walkPhase, t: 0,
+        });
+      }
     }
 
     if ((s.attackPressed || s.attackHeld) && p.attackCooldown <= 0) {
@@ -2340,18 +2385,53 @@ export class GameEngine {
       pk.life -= dt;
       if (pk.life <= 0) { this.pickups.splice(i, 1); continue; }
       const d = Math.hypot(p.pos.x - pk.pos.x, p.pos.y - pk.pos.y);
-      // Magnet
-      const magnet = 36;
+      // Magnet — extended for coin/essence so they snake toward the
+      // player from further away. Relics still require deliberate pickup.
+      const magnet = pk.kind === 'coin' || pk.kind === 'essence' ? 56 : 36;
       if (d < magnet && pk.kind !== 'relic') {
         const dx = p.pos.x - pk.pos.x, dy = p.pos.y - pk.pos.y;
         const len = Math.hypot(dx, dy) || 1;
-        pk.pos.x += (dx / len) * 80 * dt;
-        pk.pos.y += (dy / len) * 80 * dt;
+        // Pull strength ramps up as the player gets closer — gentle
+        // float at the edge of magnet range, hard snap when adjacent.
+        const closeness = 1 - d / magnet;
+        const pull = 60 + 140 * closeness;
+        pk.pos.x += (dx / len) * pull * dt;
+        pk.pos.y += (dy / len) * pull * dt;
+      }
+      // Idle shimmer — small sparkle every ~0.45 s seeded by pickup id
+      // so each pickup blinks on its own phase. Skipped for relics
+      // (they already have an altar halo) and reduced-particles mode.
+      if (!this.reducedParticles && pk.kind !== 'relic' && pk.kind !== 'weapon' && pk.kind !== 'spell') {
+        const period = 0.45;
+        const phase = (pk.id * 0.137) % period;
+        const slot = Math.floor((this.timeAlive + phase) / period);
+        const lastSlot = Math.floor((this.timeAlive - dt + phase) / period);
+        if (slot !== lastSlot) {
+          const col = this.pickupSparkleColour(pk.kind);
+          const a = Math.random() * Math.PI * 2;
+          this.particles.emit({
+            x: pk.pos.x + Math.cos(a) * 4,
+            y: pk.pos.y + Math.sin(a) * 4 - 2,
+            vx: 0, vy: -10,
+            life: 0.45, maxLife: 0.45, size: 1.2, colour: col, drag: 0.92,
+          });
+        }
       }
       if (d < 10) {
         this.applyPickup(pk);
         this.pickups.splice(i, 1);
       }
+    }
+  }
+
+  private pickupSparkleColour(kind: Pickup['kind']): string {
+    switch (kind) {
+      case 'coin':    return '#f4d27a';
+      case 'essence': return '#9b6cff';
+      case 'hp':      return '#ff7a8a';
+      case 'mp':      return '#9b6cff';
+      case 'key':     return '#6cf6e5';
+      default:        return '#f4d27a';
     }
   }
 
@@ -2362,15 +2442,18 @@ export class GameEngine {
       case 'coin':
         p.coins += pk.value;
         this.summary.coinsCollected += pk.value;
+        if (pk.value >= 3) this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${pk.value}`, '#f4d27a');
         break;
       case 'essence': {
         const gained = Math.max(1, Math.round(pk.value * essBonus));
         p.essence += gained;
         this.summary.essenceCollected += gained;
+        if (gained >= 2) this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${gained}`, '#9b6cff');
         break;
       }
       case 'key':
         p.keys += pk.value;
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'KEY', '#6cf6e5');
         break;
       case 'hp':
         this.healPlayer(pk.value);
@@ -2390,6 +2473,28 @@ export class GameEngine {
         break;
     }
     audio.sfx('pickup');
+    // Celebratory micro-burst at the player — every pickup gets a
+    // tiny "yes, I got it" puff so the moment lands. Burst colour
+    // matches the pickup kind. Relic/weapon/spell get extra weight
+    // because those are the rare drops.
+    if (!this.reducedParticles) {
+      const col = this.pickupSparkleColour(pk.kind);
+      const isRare = pk.kind === 'relic' || pk.kind === 'weapon' || pk.kind === 'spell';
+      this.particles.burst(p.pos.x, p.pos.y - 6, isRare ? 24 : 10, {
+        colour: col, life: 0.55, maxLife: 0.55, drag: 0.86,
+      });
+      // Small ring of white sparks for the "snap" — every pickup,
+      // regardless of kind, gets the bright micro-flash.
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const sp = 70;
+        this.particles.emit({
+          x: p.pos.x, y: p.pos.y - 6,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.18, maxLife: 0.18, size: 1.2, colour: '#ffffff', drag: 0.8,
+        });
+      }
+    }
   }
 
   private updateSigils(dt: number): void {
@@ -2514,6 +2619,13 @@ export class GameEngine {
     }
   }
 
+  private updateDashTrail(dt: number): void {
+    for (let i = this.dashTrail.length - 1; i >= 0; i--) {
+      this.dashTrail[i].t += dt;
+      if (this.dashTrail[i].t > 0.28) this.dashTrail.splice(i, 1);
+    }
+  }
+
   private updateDelayedActions(dt: number): void {
     for (let i = this.delayedActions.length - 1; i >= 0; i--) {
       const a = this.delayedActions[i];
@@ -2587,6 +2699,12 @@ export class GameEngine {
     this.particles.draw(ctx);
     this.drawDamageNumbers();
     this.drawRoomClearEffects();
+
+    // Dynamic dungeon lighting — multiplies a dark tint over the whole
+    // room, then punches additive light wells at torches / the player /
+    // pickups / chests / boss-lamps so the world reads as lit by its
+    // own torches instead of evenly bright.
+    this.drawLighting();
 
     // Time-stop visual — violet tint + tight central pulse during freeze
     if (this.timeAlive < this.timeStopUntil) {
@@ -3064,8 +3182,122 @@ export class GameEngine {
     }
   }
 
+  /** Paints a soft radial gradient stop centred at (x,y) using the
+   * canvas's current composite operation. Used by drawLighting to add
+   * additive light wells over the multiplied darkness. */
+  private paintLight(x: number, y: number, r: number, rgb: string, alpha: number): void {
+    const g = this.ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${rgb}, ${alpha})`);
+    g.addColorStop(1, `rgba(${rgb}, 0)`);
+    this.ctx.fillStyle = g;
+    this.ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  private drawLighting(): void {
+    const ctx = this.ctx;
+    const sphere = sphereForFloor(this.floor.number);
+    const sphereRgb = hexToRgbString(sphere.accent);
+    const t = this.timeAlive;
+    const flick = (seed: number): number => 0.86 + 0.14 * Math.sin(t * 6 + seed * 1.7);
+
+    // Multiply layer — pulls the room toward shadow. Slight cool tint
+    // so the darkness reads as stone-night, not flat black.
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgb(70, 56, 110)';
+    ctx.fillRect(0, 0, ROOM_W, ROOM_H);
+    ctx.restore();
+
+    // Additive light wells punched into the darkness.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Wall torches — same positions as drawRoom's torch loop.
+    for (let i = 1; i <= 4; i++) {
+      const lx = (ROOM_W / 5) * i;
+      const ly = 28;
+      const f = flick(i);
+      // Warm core
+      this.paintLight(lx, ly, 78, '255, 220, 160', 0.42 * f);
+      // Sphere-accent halo — bleeds the room hue into the torchlight
+      this.paintLight(lx, ly, 110, sphereRgb, 0.14 * f);
+    }
+
+    // The player carries a small lamp — softens the void around them.
+    if (this.dyingT < 0) {
+      const p = this.player;
+      this.paintLight(p.pos.x, p.pos.y - 6, 56, '244, 210, 122', 0.38);
+    }
+
+    // Unopened chests glow gently to draw the eye.
+    const room = this.currentRoom;
+    if (room.hasChest && !room.chestOpened) {
+      this.paintLight(ROOM_W / 2, ROOM_H / 2, 36, '244, 210, 122', 0.28);
+    }
+
+    // Pickups — every coin/essence/key/hp/mp casts its own micro-glow
+    // so the floor feels populated even before you walk over them.
+    for (const pk of this.pickups) {
+      switch (pk.kind) {
+        case 'coin':    this.paintLight(pk.pos.x, pk.pos.y, 22, '244, 210, 122', 0.45); break;
+        case 'essence': this.paintLight(pk.pos.x, pk.pos.y, 24, '155, 108, 255', 0.45); break;
+        case 'hp':      this.paintLight(pk.pos.x, pk.pos.y, 26, '255, 122, 138', 0.45); break;
+        case 'mp':      this.paintLight(pk.pos.x, pk.pos.y, 26, '155, 108, 255', 0.45); break;
+        case 'key':     this.paintLight(pk.pos.x, pk.pos.y, 26, '108, 246, 229', 0.45); break;
+        case 'relic':   this.paintLight(pk.pos.x, pk.pos.y, 40, '244, 210, 122', 0.55); break;
+        case 'weapon':  this.paintLight(pk.pos.x, pk.pos.y, 36, '244, 210, 122', 0.45); break;
+        case 'spell':   this.paintLight(pk.pos.x, pk.pos.y, 36, '155, 108, 255', 0.45); break;
+      }
+    }
+
+    // Boss arena — the seven lamps light the floor in their sphere hue.
+    if (this.currentRoom.type === 'boss') {
+      const cx = ROOM_W / 2, cy = ROOM_H / 2;
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
+        const lx = cx + Math.cos(a) * 110;
+        const ly = cy + Math.sin(a) * 80;
+        this.paintLight(lx, ly, 60, sphereRgb, 0.32 * flick(i * 3));
+      }
+    }
+
+    // Shrine glow — pulsing gold so the altar reads as sanctified.
+    if (this.currentRoom.hasShrine && !this.currentRoom.shrineUsed) {
+      const pulse = 0.85 + 0.15 * Math.sin(t * 3);
+      this.paintLight(ROOM_W / 2, ROOM_H / 2 + 8, 50, '244, 210, 122', 0.32 * pulse);
+    }
+
+    // Active spell projectiles cast a tiny light each — sells the
+    // "magic is luminous" feel without per-frame allocation.
+    for (const pr of this.projectiles) {
+      if (!pr.fromPlayer) continue;
+      const rgb = hexToRgbString(pr.colour);
+      this.paintLight(pr.pos.x, pr.pos.y, 22, rgb, 0.42);
+    }
+
+    ctx.restore();
+  }
+
+  private drawDashTrail(): void {
+    if (this.dashTrail.length === 0) return;
+    for (const g of this.dashTrail) {
+      const tNorm = Math.min(1, g.t / 0.28);
+      const alpha = (1 - tNorm) * 0.55;
+      if (alpha <= 0.02) continue;
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha;
+      // Ghost renders fully whited-out so the trail reads as a motion
+      // echo rather than a duplicate body. flash = 1 forces drawInitiate
+      // to override every visible palette entry with white.
+      drawInitiate(this.ctx, g.x - 7, g.y - 14, 1, g.facing, g.walkPhase, 1);
+      this.ctx.restore();
+    }
+  }
+
   private drawPlayer(): void {
     const p = this.player;
+    // Dash afterimages — drawn first so the live sprite sits on top.
+    this.drawDashTrail();
     // Death sequence: fade + collapse the sprite so the body
     // "extinguishes" in place. After the final pop (~82 % through) the
     // sprite hides entirely so the embers carry the moment.
