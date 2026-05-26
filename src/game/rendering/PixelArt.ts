@@ -508,13 +508,32 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
   },
 };
 
+function parseHexRgb(hex: string): [number, number, number] | null {
+  if (!hex || hex[0] !== '#' || hex.length !== 7) return null;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+  return [r, g, b];
+}
+
+function mixHexToward(hex: string, target: [number, number, number], t: number): string {
+  const rgb = parseHexRgb(hex);
+  if (!rgb) return hex;
+  const r = Math.round(rgb[0] * (1 - t) + target[0] * t);
+  const g = Math.round(rgb[1] * (1 - t) + target[1] * t);
+  const b = Math.round(rgb[2] * (1 - t) + target[2] * t);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
 export function drawEnemy(
   ctx: CanvasRenderingContext2D,
   visualKey: string,
   x: number, y: number,
   scale: number,
   flash: number,
-  flipX = false
+  flipX = false,
+  tintHex?: string,
 ): void {
   const vis = ENEMY_VISUALS[visualKey];
   if (!vis) return;
@@ -522,6 +541,17 @@ export function drawEnemy(
   if (flash > 0) {
     for (const k of Object.keys(pal)) {
       if (pal[k]) pal[k] = '#ffffff';
+    }
+  } else if (tintHex) {
+    // Mix the sphere accent into every visible palette entry so the
+    // enemy reads as belonging to the current floor's hue without
+    // losing its own silhouette.
+    const target = parseHexRgb(tintHex);
+    if (target) {
+      for (const k of Object.keys(pal)) {
+        const v = pal[k];
+        if (v) pal[k] = mixHexToward(v, target, 0.22);
+      }
     }
   }
   drawSprite(ctx, vis.rows, pal, Math.floor(x), Math.floor(y), scale, flipX);

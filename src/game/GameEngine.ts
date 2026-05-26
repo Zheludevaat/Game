@@ -296,6 +296,7 @@ interface DeathFx {
   width: number;
   height: number;
   radius: number;
+  isBoss: boolean;
   t: number;          // elapsed seconds since death
   duration: number;   // total animation length
 }
@@ -362,6 +363,14 @@ export class GameEngine {
   // Boss telegraphs — wind-up actions render their own marker for the
   // duration, then fire() once the timer elapses.
   private delayedActions: DelayedAction[] = [];
+  // Death sequence: when the player dies, hold the camera on the body
+  // for ~1.6s of "lamp extinguishing" before onGameOver fires. The
+  // engine keeps drawing the world; only player input + damage are
+  // blocked. dyingT starts at -1 (not dying); 0 → dyingDuration is the
+  // visible sequence. onGameOver fires once when dyingT crosses end.
+  private dyingT = -1;
+  private dyingDuration = 1.6;
+  private gameOverFired = false;
 
   constructor(cbs: EngineCallbacks) {
     this.cbs = cbs;
@@ -400,6 +409,8 @@ export class GameEngine {
     this.hitPauseUntil = 0;
     this.deathFx = [];
     this.delayedActions = [];
+    this.dyingT = -1;
+    this.gameOverFired = false;
     this.summary.essenceCollected = 0;
     this.summary.coinsCollected = 0;
     this.summary.relicsFound = [];
@@ -878,17 +889,20 @@ export class GameEngine {
     this.timeAlive += dt;
 
     const s = this.input.state;
-    if (s.pausePressed) { this.cbs.onPause(); return; }
-    if (s.mapPressed) { this.cbs.onOpenMap(); return; }
+    if (s.pausePressed && !this.dead) { this.cbs.onPause(); return; }
+    if (s.mapPressed && !this.dead) { this.cbs.onOpenMap(); return; }
 
-    if (this.dead) return;
-
-    if (this.pendingShrine) {
-      // Shrine modal active — block movement, wait for confirm/cancel
-      if (s.uiConfirm || s.interactPressed) this.confirmShrine(true);
-      if (s.uiCancel) this.confirmShrine(false);
-    } else {
-      this.updatePlayer(dt, s);
+    // Gameplay update — frozen during the death sequence so the world
+    // holds its breath while the lamp goes out. The cinematic tick
+    // (particles, camera shake, embers, dying timer) keeps running below.
+    if (!this.dead) {
+      if (this.pendingShrine) {
+        // Shrine modal active — block movement, wait for confirm/cancel
+        if (s.uiConfirm || s.interactPressed) this.confirmShrine(true);
+        if (s.uiCancel) this.confirmShrine(false);
+      } else {
+        this.updatePlayer(dt, s);
+      }
     }
 
     // Hit-pause: freeze the world (enemies / projectiles / pickups /
@@ -898,25 +912,23 @@ export class GameEngine {
     // tick so the moment lands.
     const inHitPause = this.timeAlive < this.hitPauseUntil;
     const inTimeStop = this.timeAlive < this.timeStopUntil;
-    const worldFrozen = inHitPause || inTimeStop;
+    const worldFrozen = inHitPause || inTimeStop || this.dead;
     if (!worldFrozen) {
       this.updateEnemies(dt);
       this.updateProjectiles(dt);
       this.updatePickups(dt);
       this.updateSigils(dt);
       this.updateDelayedActions(dt);
-    } else if (inTimeStop) {
-      // During time-stop sigils still tick their delay so the player
-      // can read what's pending — but they can't fire.
-      // (Empty — let the freeze be total. Subtle motion would defeat the
-      // visual impact.)
     }
 
-    this.handleRoomTransition();
+    if (!this.dead) this.handleRoomTransition();
     this.updateCamera(dt);
-    if (!worldFrozen) this.particles.update(dt);
+    // Particles always tick — the death sequence emits embers + halos
+    // that need to drift even while gameplay is frozen.
+    if (!worldFrozen || this.dead) this.particles.update(dt);
     this.updateDamageNumbers(dt);
     this.updateDeathFx(dt);
+    this.updateDying(dt);
 
     if (this.floorBanner) {
       this.floorBanner.t += dt;
@@ -1067,12 +1079,74 @@ export class GameEngine {
   private die(): void {
     if (this.dead) return;
     this.dead = true;
+    this.dyingT = 0;
     // The soul is dissolved and prepares for rebirth (palingenesia).
     this.unlockCodex('death.palingenesia');
-    this.cbs.onGameOver({
-      ...this.summary,
-      bestFloor: Math.max(this.summary.bestFloor, this.summary.floorReached),
-    });
+    // Big death-blow shake — the lamp goes out with weight.
+    this.camera.shakeT = Math.max(this.camera.shakeT, 0.6);
+    this.camera.shakeMag = Math.max(this.camera.shakeMag, 4);
+    // Initial impact burst — gold + accent halo radiating from the body.
+    const accent = sphereForFloor(this.floor.number).accent;
+    if (!this.reducedParticles) {
+      this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 40, {
+        colour: accent, life: 1.0, maxLife: 1.0, drag: 0.88,
+      });
+      this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 24, {
+        colour: '#f4d27a', life: 1.4, maxLife: 1.4, drag: 0.9,
+      });
+    }
+    audio.sfx('playerHit');
+    // onGameOver is fired once dyingT crosses dyingDuration.
+  }
+
+  /** Tick the death sequence — periodic embers / final flash. */
+  private updateDying(dt: number): void {
+    if (this.dyingT < 0) return;
+    const prev = this.dyingT;
+    this.dyingT += dt;
+    // Every ~0.25s, spit a few embers upward from the body.
+    if (!this.reducedParticles) {
+      const stepPrev = Math.floor(prev / 0.22);
+      const stepNow = Math.floor(this.dyingT / 0.22);
+      if (stepNow > stepPrev) {
+        const p = this.player;
+        for (let i = 0; i < 6; i++) {
+          const a = -Math.PI / 2 + (Math.random() - 0.5) * 0.9;
+          const sp = 30 + Math.random() * 30;
+          this.particles.emit({
+            x: p.pos.x + (Math.random() - 0.5) * 6,
+            y: p.pos.y - 6,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+            life: 0.6, maxLife: 0.6, size: 1.2,
+            colour: i % 2 ? '#f4d27a' : '#ffffff', drag: 0.92,
+          });
+        }
+      }
+    }
+    // Final beat — at ~80% of the duration, white flash + sphere accent
+    // burst so the body "extinguishes" with a soft pop.
+    if (prev < this.dyingDuration * 0.82 && this.dyingT >= this.dyingDuration * 0.82) {
+      const p = this.player;
+      this.camera.shakeT = Math.max(this.camera.shakeT, 0.3);
+      this.camera.shakeMag = Math.max(this.camera.shakeMag, 2.4);
+      if (!this.reducedParticles) {
+        const accent = sphereForFloor(this.floor.number).accent;
+        this.particles.burst(p.pos.x, p.pos.y - 6, 36, {
+          colour: '#ffffff', life: 0.7, maxLife: 0.7, drag: 0.86,
+        });
+        this.particles.burst(p.pos.x, p.pos.y - 6, 22, {
+          colour: accent, life: 1.0, maxLife: 1.0, drag: 0.9,
+        });
+      }
+      audio.sfx('bossDeath');
+    }
+    if (!this.gameOverFired && this.dyingT >= this.dyingDuration) {
+      this.gameOverFired = true;
+      this.cbs.onGameOver({
+        ...this.summary,
+        bestFloor: Math.max(this.summary.bestFloor, this.summary.floorReached),
+      });
+    }
   }
 
   private performMelee(): void {
@@ -1975,6 +2049,7 @@ export class GameEngine {
       width: e.width,
       height: e.height,
       radius: e.radius,
+      isBoss: !!e.isBoss,
       t: 0,
       duration: e.isBoss ? 0.55 : e.isMiniBoss ? 0.45 : 0.35,
     });
@@ -2115,6 +2190,8 @@ export class GameEngine {
       Math.max(this.hitPauseUntil, this.timeAlive + pauseDur),
     );
     if (!this.reducedParticles) {
+      const accent = sphereForFloor(this.floor.number).accent;
+      // Red gore sparkle — visceral "this enemy is wounded" cue.
       for (let i = 0; i < 4; i++) {
         this.particles.emit({
           x: e.pos.x, y: e.pos.y,
@@ -2122,9 +2199,33 @@ export class GameEngine {
           life: 0.3, maxLife: 0.3, size: 1.5, colour: '#e23a4a', drag: 0.9,
         });
       }
+      // Sphere-accent glint sparkles — every hit reads as belonging to
+      // the current floor's hue, layered over the gore so the room
+      // theme bleeds into combat feedback.
+      for (let i = 0; i < 4; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 60 + Math.random() * 40;
+        this.particles.emit({
+          x: e.pos.x, y: e.pos.y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.28, maxLife: 0.28, size: 1.2, colour: accent, drag: 0.88,
+        });
+      }
+      // Impact ring — 8 small particles flung radially outward from
+      // the strike point, giving every hit a brief expanding flash.
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const sp = 110;
+        this.particles.emit({
+          x: e.pos.x, y: e.pos.y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.18, maxLife: 0.18, size: 1.4, colour: '#ffffff', drag: 0.78,
+        });
+      }
       // Knockback dust — "kicked up" at the actual point of impact,
       // launched perpendicular to the knockback direction (sideways
-      // splash, not straight back along the punch axis).
+      // splash, not straight back along the punch axis). Tinted with
+      // the sphere accent so the dust reads as belonging to the room.
       if (knockStrength > 60) {
         // Perpendicular unit vectors: rotate (nx, ny) by ±90°
         const perpX = -ny;
@@ -2135,7 +2236,7 @@ export class GameEngine {
             x: prevX, y: prevY,
             vx: perpX * side * (30 + Math.random() * 30) - nx * 10,
             vy: perpY * side * (30 + Math.random() * 30) - ny * 10,
-            life: 0.32, maxLife: 0.32, size: 1.3, colour: '#1a0f2c', drag: 0.86,
+            life: 0.32, maxLife: 0.32, size: 1.3, colour: accent, drag: 0.86,
           });
         }
       }
@@ -2513,6 +2614,16 @@ export class GameEngine {
     vg.addColorStop(1, 'rgba(0,0,0,0.7)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
+
+    // Death sequence — lamp extinguishes. Iris closes around the body
+    // and the world drifts toward black so the GameOver screen lands
+    // on a fully dark canvas.
+    if (this.dyingT >= 0) {
+      const t = Math.min(1, this.dyingT / this.dyingDuration);
+      const darkness = Math.min(0.92, t * 0.95);
+      ctx.fillStyle = `rgba(0, 0, 0, ${darkness})`;
+      ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
+    }
 
     // Floor transition
     if (this.floorTransition) {
@@ -2896,12 +3007,18 @@ export class GameEngine {
   }
 
   private drawEnemiesAll(): void {
+    // Per-floor sphere accent — applied to non-boss enemies so each
+    // floor's roster reads visually distinct even when sharing sprites.
+    // Bosses skip the tint because their Warden palettes are already
+    // sphere-keyed and we want them to "pop" against the room.
+    const floorTint = sphereForFloor(this.floor.number).accent;
     for (const e of this.enemies) {
       const sz = getEnemySize(e.visualKey);
       const scale = 2;
       const dx = e.pos.x - (sz.w * scale) / 2;
       const dy = e.pos.y - (sz.h * scale) + e.radius + 1;
-      drawEnemy(this.ctx, e.visualKey, dx, dy, scale, e.flash, e.facing.x < 0);
+      const tint = e.isBoss ? undefined : floorTint;
+      drawEnemy(this.ctx, e.visualKey, dx, dy, scale, e.flash, e.facing.x < 0, tint);
       // shadow
       this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
       this.ctx.fillRect(e.pos.x - e.radius, e.pos.y + e.radius - 1, e.radius * 2, 2);
@@ -2942,13 +3059,44 @@ export class GameEngine {
       this.ctx.translate(cx, cy);
       this.ctx.scale(grow, grow);
       this.ctx.translate(-cx, -cy);
-      drawEnemy(this.ctx, fx.visualKey, dx, dy, scale, 0.6 * (1 - tNorm), fx.facing.x < 0);
+      drawEnemy(this.ctx, fx.visualKey, dx, dy, scale, 0.6 * (1 - tNorm), fx.facing.x < 0, fx.isBoss ? undefined : floorTint);
       this.ctx.restore();
     }
   }
 
   private drawPlayer(): void {
     const p = this.player;
+    // Death sequence: fade + collapse the sprite so the body
+    // "extinguishes" in place. After the final pop (~82 % through) the
+    // sprite hides entirely so the embers carry the moment.
+    if (this.dyingT >= 0) {
+      const t = Math.min(1, this.dyingT / this.dyingDuration);
+      if (t >= 0.82) return;
+      const alpha = 1 - t / 0.82;
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha;
+      // shadow (faded with the body)
+      this.ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      this.ctx.fillRect(p.pos.x - 6, p.pos.y + 3, 12, 2);
+      // Sprite slumps down ~3 px and a faint white flash overlays.
+      const slump = Math.round(t * 3);
+      drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 14 + slump, 1, p.facing, 0, Math.min(0.4, t));
+      this.ctx.restore();
+      // Soft halo around the dying body
+      if (!this.reducedParticles) {
+        const r = 14 + t * 18;
+        const accent = sphereForFloor(this.floor.number).accent;
+        this.ctx.save();
+        this.ctx.globalAlpha = (1 - t) * 0.35;
+        this.ctx.strokeStyle = accent;
+        this.ctx.lineWidth = 1.4;
+        this.ctx.beginPath();
+        this.ctx.arc(p.pos.x, p.pos.y - 4, r, 0, Math.PI * 2);
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
+      return;
+    }
     // shadow
     this.ctx.fillStyle = 'rgba(0,0,0,0.45)';
     this.ctx.fillRect(p.pos.x - 6, p.pos.y + 3, 12, 2);
