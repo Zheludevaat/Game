@@ -11,6 +11,7 @@ import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
 import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
 import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
+import { BOSSES, BossDef, BossPattern } from './data/bosses';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
 import {
@@ -126,7 +127,11 @@ interface PlayerState {
 
 interface Enemy {
   id: number;
-  type: 'lesserShade' | 'mercuryImp' | 'saltGolem' | 'lunarWisp' | 'saturnKnight' | 'serpentOfBrass' | 'wardenBoss';
+  type:
+    | 'lesserShade' | 'mercuryImp' | 'saltGolem' | 'lunarWisp'
+    | 'saturnKnight' | 'serpentOfBrass' | 'wardenBoss'
+    | 'seleneBoss' | 'hermesBoss' | 'aphroditeBoss' | 'heliosBoss'
+    | 'aresBoss' | 'zeusBoss' | 'kronosBoss';
   visualKey: string;
   pos: Vec;
   vel: Vec;
@@ -189,6 +194,10 @@ interface SigilHazard {
   fromPlayer?: boolean;
   radius?: number;
   colour?: string;
+  /** If set, only entities BETWEEN safeRadius and radius take damage.
+   * Used for Selene's tidal-pulse — safe zone in the middle, danger ring
+   * expanding outward. */
+  safeRadius?: number;
 }
 
 export interface EngineConfig {
@@ -207,6 +216,37 @@ const DASH_DURATION = 0.18;
 
 let nextEntityId = 1;
 const nid = (): number => nextEntityId++;
+
+// Kronos time-stop. While `timeStopUntil > timeAlive` we freeze
+// enemies + projectiles + sigils + ambient particles — the player
+// can still move at half speed, can't dash, and the world goes still.
+// Reset on every new run via `mount`.
+
+// Reverse-lookup BossDef from its visualKey. The engine identifies
+// Wardens by visualKey on Enemy (e.g. 'seleneBoss'); the BossDef holds
+// stats + attack patterns.
+function wardenDefFromVisual(visualKey: string): BossDef | null {
+  for (const id of Object.keys(BOSSES) as SphereId[]) {
+    if (BOSSES[id].visualKey === visualKey) return BOSSES[id];
+  }
+  return null;
+}
+
+// Hex `#rrggbb` → `"r, g, b"` (an rgba() inner triple).
+function hexToRgbString(hex: string): string {
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
+  return `${(n >> 16) & 0xff}, ${(n >> 8) & 0xff}, ${n & 0xff}`;
+}
+
+// Convert a sphere's hex accent into the format drawTorch wants.
+// Inner core stays white-hot regardless; this just tints the outer
+// flame layers and the wall halo so each floor's torches read distinct.
+function makeTorchTint(sphere: { accent: string }): { rgb: string; halo: string } {
+  const rgb = hexToRgbString(sphere.accent);
+  return { rgb, halo: `rgba(${rgb}, 0.35)` };
+}
 
 interface FloorTransition {
   t: number;
@@ -233,6 +273,17 @@ interface DamageNumber {
   maxLife: number;
   value: number;
   colour: string;
+}
+
+interface DeathFx {
+  visualKey: string;
+  pos: Vec;
+  facing: Vec;
+  width: number;
+  height: number;
+  radius: number;
+  t: number;          // elapsed seconds since death
+  duration: number;   // total animation length
 }
 
 export class GameEngine {
@@ -277,6 +328,13 @@ export class GameEngine {
   private timeAlive = 0;
   private dead = false;
   private hudTimer = 0;
+  // Combat juice: hit-pause freezes update for a few frames on big hits
+  private hitPauseUntil = 0;
+  // Death-fade fx: when an enemy dies, schedule a brief dissolve animation
+  // instead of letting the sprite vanish instantly.
+  private deathFx: DeathFx[] = [];
+  // Kronos signature: time-stop suspends most updates until this time.
+  private timeStopUntil = 0;
 
   constructor(cbs: EngineCallbacks) {
     this.cbs = cbs;
@@ -311,6 +369,9 @@ export class GameEngine {
     this.summary.enemiesDefeated = 0;
     this.summary.bossesDefeated = 0;
     this.bossIntroPlayedThisRun = false;
+    this.timeStopUntil = 0;
+    this.hitPauseUntil = 0;
+    this.deathFx = [];
     this.summary.essenceCollected = 0;
     this.summary.coinsCollected = 0;
     this.summary.relicsFound = [];
@@ -384,16 +445,16 @@ export class GameEngine {
       relics: [],
       reviveAvailable: false,
       damageMul: 1,
-      weapons: [STARTER_WEAPON],
-      spells: [STARTER_SPELL],
+      weapons: [a.startingWeapon ?? STARTER_WEAPON],
+      spells: [a.startingSpell ?? STARTER_SPELL],
       weaponIdx: 0,
       spellIdx: 0,
       attackHitsLeft: 0,
       attackHitTimer: 0,
     };
     this.grantRelic(a.startingRelic, true);
-    this.summary.weaponsFound.push(STARTER_WEAPON);
-    this.summary.spellsFound.push(STARTER_SPELL);
+    this.summary.weaponsFound.push(a.startingWeapon ?? STARTER_WEAPON);
+    this.summary.spellsFound.push(a.startingSpell ?? STARTER_SPELL);
 
     // Debug hook: ?devloot=1 grants every weapon + spell for previewing
     if (typeof window !== 'undefined' && window.location?.search?.includes('devloot')) {
@@ -556,7 +617,8 @@ export class GameEngine {
     }
 
     this.floorTransition = { t: 0, duration: 0.9 };
-    audio.startDungeonAmbience();
+    audio.stopAmbience();
+    audio.startDungeonAmbience(sph.id);
     audio.sfx('descend');
   }
 
@@ -720,6 +782,28 @@ export class GameEngine {
         e.isBoss = true;
         e.phase = 1; e.phaseTimer = 0; e.pattern = 0;
         break;
+      // Seven Wardens — stats come from the BossDef keyed by visualKey.
+      // Floor difficulty multiplier matches the original wardenBoss scaling.
+      case 'seleneBoss':
+      case 'hermesBoss':
+      case 'aphroditeBoss':
+      case 'heliosBoss':
+      case 'aresBoss':
+      case 'zeusBoss':
+      case 'kronosBoss': {
+        const def = wardenDefFromVisual(type);
+        if (def) {
+          e.hp = e.maxHp = Math.round(def.baseHp + def.baseHp * 0.3 * (floor / 10 - 1));
+          e.speed = def.speed;
+          e.radius = def.radius;
+          e.width = def.width;
+          e.height = def.height;
+          e.contactDamage = def.contactDamage;
+        }
+        e.isBoss = true;
+        e.phase = 1; e.phaseTimer = 0; e.pattern = 0;
+        break;
+      }
     }
     if (isMiniBoss && !e.isBoss && !e.isMiniBoss) e.isMiniBoss = true;
     this.enemies.push(e);
@@ -727,7 +811,12 @@ export class GameEngine {
 
   private spawnBoss(floor: number, seed: number): void {
     const rng = new RNG(seed);
-    this.spawnEnemy('wardenBoss', { x: ROOM_W / 2, y: ROOM_H / 2 - 20 }, floor);
+    // Pick the Warden by which sphere this boss room sits in. Each
+    // sphere has a sphere-specific Warden with its own visual + patterns.
+    const sphere = sphereForFloor(floor);
+    const def = BOSSES[sphere.id];
+    const visualKey = (def?.visualKey ?? 'wardenBoss') as Enemy['type'];
+    this.spawnEnemy(visualKey, { x: ROOM_W / 2, y: ROOM_H / 2 - 20 }, floor);
     void rng;
   }
 
@@ -774,15 +863,31 @@ export class GameEngine {
       this.updatePlayer(dt, s);
     }
 
-    this.updateEnemies(dt);
-    this.updateProjectiles(dt);
-    this.updatePickups(dt);
-    this.updateSigils(dt);
+    // Hit-pause: freeze the world (enemies / projectiles / pickups /
+    // sigils / particles / camera) for a few frames after a big hit.
+    // Time-stop (Kronos signature): same freeze, but for ~1.5s with
+    // a visible cosmic effect. Player input + the death-fx fade still
+    // tick so the moment lands.
+    const inHitPause = this.timeAlive < this.hitPauseUntil;
+    const inTimeStop = this.timeAlive < this.timeStopUntil;
+    const worldFrozen = inHitPause || inTimeStop;
+    if (!worldFrozen) {
+      this.updateEnemies(dt);
+      this.updateProjectiles(dt);
+      this.updatePickups(dt);
+      this.updateSigils(dt);
+    } else if (inTimeStop) {
+      // During time-stop sigils still tick their delay so the player
+      // can read what's pending — but they can't fire.
+      // (Empty — let the freeze be total. Subtle motion would defeat the
+      // visual impact.)
+    }
 
     this.handleRoomTransition();
     this.updateCamera(dt);
-    this.particles.update(dt);
+    if (!worldFrozen) this.particles.update(dt);
     this.updateDamageNumbers(dt);
+    this.updateDeathFx(dt);
 
     if (this.floorBanner) {
       this.floorBanner.t += dt;
@@ -821,16 +926,17 @@ export class GameEngine {
       p.iframes = Math.max(p.iframes, 0.04);
       this.particles.trail(p.pos.x, p.pos.y + 4, PALETTE.teal);
     } else {
-      // Movement
+      // Movement — halved during a Kronos time-stop so the freeze has weight.
+      const speedMul = this.timeAlive < this.timeStopUntil ? 0.5 : 1;
       const mvx = s.moveX, mvy = s.moveY;
       const ml = Math.hypot(mvx, mvy);
       if (ml > 0.05) {
         const dirX = mvx / Math.max(ml, 1);
         const dirY = mvy / Math.max(ml, 1);
-        p.vel.x = dirX * p.speed;
-        p.vel.y = dirY * p.speed;
+        p.vel.x = dirX * p.speed * speedMul;
+        p.vel.y = dirY * p.speed * speedMul;
         p.facing = { x: dirX, y: dirY };
-        p.walkPhase += dt * 10;
+        p.walkPhase += dt * 10 * speedMul;
       } else {
         p.vel.x = 0; p.vel.y = 0;
       }
@@ -852,7 +958,8 @@ export class GameEngine {
     p.pos.y = clamp(p.pos.y, passU ? 2 : ROOM_MARGIN + 4, passD ? ROOM_H - 2 : ROOM_H - ROOM_MARGIN);
 
     // Actions
-    if (s.dashPressed && p.dashCooldown <= 0) {
+    // Dash blocked during Kronos time-stop — the freeze means everything.
+    if (s.dashPressed && p.dashCooldown <= 0 && this.timeAlive >= this.timeStopUntil) {
       const dx = s.moveX, dy = s.moveY;
       const dl = Math.hypot(dx, dy);
       const dir = dl > 0.05 ? { x: dx / dl, y: dy / dl } : p.facing;
@@ -1326,6 +1433,13 @@ export class GameEngine {
           break;
         }
         case 'wardenBoss':
+        case 'seleneBoss':
+        case 'hermesBoss':
+        case 'aphroditeBoss':
+        case 'heliosBoss':
+        case 'aresBoss':
+        case 'zeusBoss':
+        case 'kronosBoss':
           this.updateWarden(e, dt, n, d);
           break;
       }
@@ -1346,12 +1460,14 @@ export class GameEngine {
       }
     }
 
-    // Boss snapshot
+    // Boss snapshot — name comes from the Warden's BossDef if there is one,
+    // otherwise the legacy "Warden of the First Lamp".
     const boss = this.enemies.find((e) => e.isBoss);
     if (boss) {
+      const def = wardenDefFromVisual(boss.visualKey);
       this.bossSnapshot = {
         hp: boss.hp, maxHp: boss.maxHp,
-        name: 'Warden of the First Lamp',
+        name: def?.displayName ?? 'Warden of the First Lamp',
       };
     } else if (this.bossSnapshot) {
       this.bossSnapshot = null;
@@ -1375,13 +1491,195 @@ export class GameEngine {
     this.moveTowards(e, dir, e.speed, dt);
 
     if (e.cooldown <= 0) {
-      const pattern = (e.pattern ?? 0) % 3;
-      if (pattern === 0) this.wardenRadialBurst(e);
-      else if (pattern === 1) this.wardenSummon(e);
-      else this.wardenSigils(e);
+      const def = wardenDefFromVisual(e.visualKey);
+      const patterns: BossPattern[] = def?.patterns ?? ['radialBurst', 'summonShades', 'dropSigils'];
+      const cooldowns = def?.phaseCooldowns ?? [2.5, 2.0, 1.5];
+      const pattern = patterns[(e.pattern ?? 0) % patterns.length];
+      this.runBossPattern(e, pattern);
       e.pattern = (e.pattern ?? 0) + 1;
-      e.cooldown = e.phase === 3 ? 1.5 : e.phase === 2 ? 2.0 : 2.5;
+      const phaseIdx = Math.min(2, Math.max(0, (e.phase ?? 1) - 1));
+      e.cooldown = cooldowns[phaseIdx];
     }
+  }
+
+  /** Dispatch the named pattern. Each pattern function below mutates
+   * engine state (projectiles / sigils / enemies / timeStop). */
+  private runBossPattern(e: Enemy, pattern: BossPattern): void {
+    switch (pattern) {
+      case 'radialBurst':    this.wardenRadialBurst(e); break;
+      case 'summonShades':   this.wardenSummon(e); break;
+      case 'dropSigils':     this.wardenSigils(e); break;
+      case 'tidalPulse':     this.seleneTidalPulse(e); break;
+      case 'mercurialStep':  this.hermesMercurialStep(e); break;
+      case 'loveBind':       this.aphroditeLoveBind(e); break;
+      case 'solarLance':     this.heliosSolarLance(e); break;
+      case 'chargeAndSever': this.aresChargeAndSever(e); break;
+      case 'wrathOfHeaven':  this.zeusWrathOfHeaven(e); break;
+      case 'stopTime':       this.kronosStopTime(e); break;
+    }
+  }
+
+  // ─── Sphere-specific attack patterns ─────────────────────────────────
+
+  /** Selene — A widening tidal ring with a safe shadow zone near the
+   * boss. Stay close to her (or far outside the wave) to dodge. */
+  private seleneTidalPulse(e: Enemy): void {
+    this.sigils.push({
+      pos: { x: e.pos.x, y: e.pos.y },
+      timer: 0,
+      delay: 1.0,
+      damage: 14,
+      fired: false,
+      fromPlayer: false,
+      radius: 220,
+      safeRadius: 60,
+      colour: '#cdd6dc',
+    });
+    audio.sfx('bossWarn');
+  }
+
+  /** Hermes — Quicksilver teleport. Boss vanishes, reappears at a
+   * random distant point, and an after-image at the old spot fires
+   * a single bolt at the player. */
+  private hermesMercurialStep(e: Enemy): void {
+    const oldX = e.pos.x;
+    const oldY = e.pos.y;
+    // Teleport — pick a point at least 100 away from player and inside bounds
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const nx = ROOM_MARGIN + 24 + Math.random() * (ROOM_W - ROOM_MARGIN * 2 - 48);
+      const ny = ROOM_MARGIN + 24 + Math.random() * (ROOM_H - ROOM_MARGIN * 2 - 48);
+      const d = Math.hypot(this.player.pos.x - nx, this.player.pos.y - ny);
+      if (d > 100) { e.pos.x = nx; e.pos.y = ny; break; }
+    }
+    // Burst at the old position
+    if (!this.reducedParticles) {
+      this.particles.burst(oldX, oldY, 22, { colour: '#6cf6e5', life: 0.5, maxLife: 0.5, drag: 0.85 });
+      this.particles.burst(e.pos.x, e.pos.y, 22, { colour: '#a4faf0', life: 0.5, maxLife: 0.5, drag: 0.85 });
+    }
+    // After-image bolt fires from the OLD location toward the player
+    const aimDx = this.player.pos.x - oldX;
+    const aimDy = this.player.pos.y - oldY;
+    const aimL = Math.hypot(aimDx, aimDy) || 1;
+    this.projectiles.push({
+      id: nid(),
+      pos: { x: oldX, y: oldY },
+      vel: { x: (aimDx / aimL) * 220, y: (aimDy / aimL) * 220 },
+      life: 2, radius: 5, damage: 12,
+      fromPlayer: false, pierce: 0, homing: false,
+      colour: '#a4faf0', trailColour: '#1f8a86',
+    });
+    audio.sfx('dash');
+  }
+
+  /** Aphrodite — A 3-second sigil drops where the player is standing.
+   * If the player is still inside it when it ticks, take damage. */
+  private aphroditeLoveBind(e: Enemy): void {
+    const px = this.player.pos.x;
+    const py = this.player.pos.y;
+    this.sigils.push({
+      pos: { x: px, y: py },
+      timer: 0,
+      delay: 2.5,
+      damage: 16,
+      fired: false,
+      fromPlayer: false,
+      radius: 40,
+      colour: '#ff9bc1',
+    });
+    void e;
+    audio.sfx('shrine');
+  }
+
+  /** Helios — A long beam projectile fires across the room toward the
+   * player's CURRENT position. (Telegraphed-feel via slow speed.) */
+  private heliosSolarLance(e: Enemy): void {
+    const aimDx = this.player.pos.x - e.pos.x;
+    const aimDy = this.player.pos.y - e.pos.y;
+    const aimL = Math.hypot(aimDx, aimDy) || 1;
+    // Fire 3 lances in a slight spread for arena coverage.
+    const baseAng = Math.atan2(aimDy, aimDx);
+    for (let i = -1; i <= 1; i++) {
+      const a = baseAng + i * 0.18;
+      this.projectiles.push({
+        id: nid(),
+        pos: { x: e.pos.x, y: e.pos.y },
+        vel: { x: Math.cos(a) * 160, y: Math.sin(a) * 160 },
+        life: 3, radius: 6, damage: 14,
+        fromPlayer: false, pierce: 0, homing: false,
+        colour: '#ffe6a3', trailColour: '#f4d27a',
+      });
+    }
+    void aimL;
+    audio.sfx('bossWarn');
+  }
+
+  /** Ares — Boss dashes across the room toward the player. Slash trail
+   * uses fast-decaying projectiles so the path remains briefly hazardous. */
+  private aresChargeAndSever(e: Enemy): void {
+    const aimDx = this.player.pos.x - e.pos.x;
+    const aimDy = this.player.pos.y - e.pos.y;
+    const aimL = Math.hypot(aimDx, aimDy) || 1;
+    const ux = aimDx / aimL;
+    const uy = aimDy / aimL;
+    // Jump the boss forward a fixed amount
+    const dashDist = 140;
+    const fromX = e.pos.x;
+    const fromY = e.pos.y;
+    e.pos.x = clamp(e.pos.x + ux * dashDist, ROOM_MARGIN + 12, ROOM_W - ROOM_MARGIN - 12);
+    e.pos.y = clamp(e.pos.y + uy * dashDist, ROOM_MARGIN + 16, ROOM_H - ROOM_MARGIN - 12);
+    // Slash trail — chain of small projectiles along the path
+    const steps = 7;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / (steps + 1);
+      this.projectiles.push({
+        id: nid(),
+        pos: { x: fromX + ux * dashDist * t, y: fromY + uy * dashDist * t },
+        vel: { x: 0, y: 0 },
+        life: 0.7, radius: 8, damage: 11,
+        fromPlayer: false, pierce: 99, homing: false,
+        colour: '#e23a4a', trailColour: '#ff7a5a',
+      });
+    }
+    if (!this.reducedParticles) {
+      this.particles.burst(e.pos.x, e.pos.y, 20, { colour: '#ff7a5a', life: 0.45, maxLife: 0.45, drag: 0.85 });
+    }
+    this.camera.shakeT = 0.2; this.camera.shakeMag = 3;
+    audio.sfx('dash');
+  }
+
+  /** Zeus — Five lightning sigils mark random tiles around the player. */
+  private zeusWrathOfHeaven(e: Enemy): void {
+    const n = (e.phase ?? 1) >= 2 ? 6 : 5;
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n) * Math.PI * 2 + Math.random() * 0.4;
+      const r = 50 + Math.random() * 80;
+      const sx = clamp(this.player.pos.x + Math.cos(ang) * r, ROOM_MARGIN + 12, ROOM_W - ROOM_MARGIN - 12);
+      const sy = clamp(this.player.pos.y + Math.sin(ang) * r, ROOM_MARGIN + 12, ROOM_H - ROOM_MARGIN - 12);
+      this.sigils.push({
+        pos: { x: sx, y: sy },
+        timer: 0,
+        delay: 1.2,
+        damage: 14,
+        fired: false,
+        fromPlayer: false,
+        radius: 28,
+        colour: '#f4d27a',
+      });
+    }
+    void e;
+    audio.sfx('bossWarn');
+  }
+
+  /** Kronos — Freezes the world for 1.5 s. Player can still move at
+   * half speed but cannot dash, and everything else stops. */
+  private kronosStopTime(e: Enemy): void {
+    this.timeStopUntil = this.timeAlive + 1.5;
+    // Flash + heavy shake to telegraph the freeze
+    this.camera.shakeT = 0.4; this.camera.shakeMag = 4;
+    if (!this.reducedParticles) {
+      this.particles.burst(e.pos.x, e.pos.y, 30, { colour: '#9b6cff', life: 1.2, maxLife: 1.2, drag: 0.9 });
+    }
+    audio.sfx('bossWarn');
   }
 
   private wardenRadialBurst(e: Enemy): void {
@@ -1436,6 +1734,20 @@ export class GameEngine {
   private killEnemy(e: Enemy, idx: number): void {
     this.enemies.splice(idx, 1);
     this.summary.enemiesDefeated += 1;
+    // Death fade animation — sprite expands + alpha drops over 0.35 s,
+    // replacing the "instant pop-out" with a visible dissolve.
+    this.deathFx.push({
+      visualKey: e.visualKey,
+      pos: { x: e.pos.x, y: e.pos.y },
+      facing: { x: e.facing.x, y: e.facing.y },
+      width: e.width,
+      height: e.height,
+      radius: e.radius,
+      t: 0,
+      duration: e.isBoss ? 0.55 : e.isMiniBoss ? 0.45 : 0.35,
+    });
+    // Hit-pause on a kill — quick punch of stillness so the death lands.
+    this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + (e.isBoss ? 0.10 : 0.05));
     this.particles.burst(e.pos.x, e.pos.y, e.isBoss ? 80 : e.isMiniBoss ? 40 : 18, {
       colour: e.isBoss ? '#ffd97a' : '#e23a4a', life: 0.9, maxLife: 0.9,
     });
@@ -1555,9 +1867,19 @@ export class GameEngine {
     e.hp -= dmg;
     e.flash = 0.12;
     const dirLen = Math.hypot(knock.x, knock.y) || 1;
-    e.pos.x += (knock.x / dirLen) * knockStrength * 0.02;
-    e.pos.y += (knock.y / dirLen) * knockStrength * 0.02;
+    const nx = knock.x / dirLen;
+    const ny = knock.y / dirLen;
+    const prevX = e.pos.x;
+    const prevY = e.pos.y;
+    e.pos.x += nx * knockStrength * 0.02;
+    e.pos.y += ny * knockStrength * 0.02;
     this.spawnDamageNumber(e.pos.x, e.pos.y - 10, `${Math.round(dmg)}`, '#ffd97a');
+    // Brief hit-pause on damage landing — only on meaty hits (heavy weapons
+    // and spells that take serious chunks). Avoid stuttering on tiny dagger
+    // pokes by gating on damage threshold.
+    if (dmg >= 8) {
+      this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + 0.04);
+    }
     if (!this.reducedParticles) {
       for (let i = 0; i < 4; i++) {
         this.particles.emit({
@@ -1565,6 +1887,18 @@ export class GameEngine {
           vx: (Math.random() - 0.5) * 80, vy: (Math.random() - 0.5) * 80,
           life: 0.3, maxLife: 0.3, size: 1.5, colour: '#e23a4a', drag: 0.9,
         });
+      }
+      // Knockback dust — "kicked up" at the point of impact, opposite to
+      // the direction the enemy was launched.
+      if (knockStrength > 60) {
+        for (let i = 0; i < 4; i++) {
+          this.particles.emit({
+            x: prevX - nx * 4, y: prevY - ny * 4,
+            vx: -nx * (40 + Math.random() * 40) + (Math.random() - 0.5) * 20,
+            vy: -ny * (40 + Math.random() * 40) + (Math.random() - 0.5) * 20,
+            life: 0.28, maxLife: 0.28, size: 1.3, colour: '#1a0f2c', drag: 0.85,
+          });
+        }
       }
     }
   }
@@ -1617,6 +1951,13 @@ export class GameEngine {
           if (d < pr.radius + e.radius) {
             this.damageEnemy(e, pr.damage, { x: pr.vel.x, y: pr.vel.y }, 90);
             const explodeR = (pr as Projectile & { explodeRadius?: number }).explodeRadius ?? 0;
+            // Every spell impact gets a small burst + shake so the hit reads
+            // as an event, not just a number popping up.
+            if (!this.reducedParticles) {
+              this.particles.burst(pr.pos.x, pr.pos.y, 8, { colour: pr.colour, life: 0.35, maxLife: 0.35, drag: 0.85 });
+            }
+            this.camera.shakeT = Math.max(this.camera.shakeT, 0.06);
+            this.camera.shakeMag = Math.max(this.camera.shakeMag, 1.5);
             if (explodeR > 0) {
               // splash damage to nearby enemies
               for (const e2 of this.enemies) {
@@ -1729,7 +2070,13 @@ export class GameEngine {
           }
         } else {
           const d = Math.hypot(this.player.pos.x - s.pos.x, this.player.pos.y - s.pos.y);
-          if (d < radius) this.damagePlayer(s.damage);
+          // Selene's tidal-pulse uses safeRadius: player is safe INSIDE
+          // a small ring around the source; damaged BETWEEN safeRadius
+          // and the outer ring. Default behaviour is "damage if inside
+          // the (single) radius".
+          const safe = s.safeRadius ?? 0;
+          const hit = safe > 0 ? (d >= safe && d <= radius) : (d < radius);
+          if (hit) this.damagePlayer(s.damage);
         }
         this.particles.burst(s.pos.x, s.pos.y, 32, { colour, life: 0.8, maxLife: 0.8 });
         this.camera.shakeT = 0.2; this.camera.shakeMag = 2.5;
@@ -1819,6 +2166,14 @@ export class GameEngine {
     }
   }
 
+  private updateDeathFx(dt: number): void {
+    for (let i = this.deathFx.length - 1; i >= 0; i--) {
+      const fx = this.deathFx[i];
+      fx.t += dt;
+      if (fx.t >= fx.duration) this.deathFx.splice(i, 1);
+    }
+  }
+
   // --- render -------------------------------------------------------------
 
   private render(): void {
@@ -1871,6 +2226,24 @@ export class GameEngine {
     this.drawDamageNumbers();
     this.drawRoomClearEffects();
 
+    // Time-stop visual — violet tint + tight central pulse during freeze
+    if (this.timeAlive < this.timeStopUntil) {
+      const left = this.timeStopUntil - this.timeAlive;
+      const a = Math.min(1, left * 1.4); // brightest mid-effect, dims at end
+      ctx.fillStyle = `rgba(91, 58, 134, ${0.18 * a})`;
+      ctx.fillRect(0, 0, ROOM_W, ROOM_H);
+      // Three thin diagonal "frozen" lines crossing the screen
+      ctx.strokeStyle = `rgba(155, 108, 255, ${0.55 * a})`;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        const off = i * 80;
+        ctx.beginPath();
+        ctx.moveTo(0, off);
+        ctx.lineTo(ROOM_W, off + 200);
+        ctx.stroke();
+      }
+    }
+
     ctx.restore();
 
     // Vignette
@@ -1894,6 +2267,12 @@ export class GameEngine {
   private drawRoom(): void {
     const ctx = this.ctx;
     const rng = new RNG(this.currentRoom.seed);
+    // Per-sphere visual identity: walls' cap-stones and torch flame
+    // colour shift toward the current sphere's accent. Cheap palette
+    // pass; every floor reads as its own sphere at a glance.
+    const sphere = sphereForFloor(this.floor.number);
+    const wallTint = sphere.accent;
+    const torchTint = makeTorchTint(sphere);
     // floor
     for (let y = 0; y < ROOM_H; y += TILE) {
       for (let x = 0; x < ROOM_W; x += TILE) {
@@ -1907,12 +2286,12 @@ export class GameEngine {
     }
     // walls (top and bottom)
     for (let x = 0; x < ROOM_W; x += TILE) {
-      drawWallTile(ctx, x, 0, TILE, true);
-      drawWallTile(ctx, x, ROOM_H - TILE, TILE, false);
+      drawWallTile(ctx, x, 0, TILE, true, wallTint);
+      drawWallTile(ctx, x, ROOM_H - TILE, TILE, false, wallTint);
     }
     for (let y = TILE; y < ROOM_H - TILE; y += TILE) {
-      drawWallTile(ctx, 0, y, TILE, false);
-      drawWallTile(ctx, ROOM_W - TILE, y, TILE, false);
+      drawWallTile(ctx, 0, y, TILE, false, wallTint);
+      drawWallTile(ctx, ROOM_W - TILE, y, TILE, false, wallTint);
     }
     // Doors
     this.drawDoors();
@@ -1920,7 +2299,7 @@ export class GameEngine {
     const torchT = this.timeAlive;
     for (let i = 1; i <= 4; i++) {
       const x = (ROOM_W / 5) * i;
-      drawTorch(ctx, x - 2, 18, torchT + i * 0.5);
+      drawTorch(ctx, x - 2, 18, torchT + i * 0.5, torchTint);
     }
     // boss specific decoration: seven lamps
     if (this.currentRoom.type === 'boss') {
@@ -1958,22 +2337,27 @@ export class GameEngine {
   private drawOccultCircle(cx: number, cy: number, r: number): void {
     const ctx = this.ctx;
     const t = this.timeAlive;
+    // Use the current sphere's colour palette so the floor's pentagram
+    // reads as part of THIS sphere, not the default Mercury-teal cosmos.
+    const sphere = sphereForFloor(this.floor.number);
+    const ringColour = hexToRgbString(sphere.colour);
+    const accentColour = hexToRgbString(sphere.accent);
     ctx.save();
-    // Faint halo behind the circle
+    // Faint halo behind the circle — sphere accent
     const halo = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 1.4);
-    halo.addColorStop(0, 'rgba(108, 246, 229, 0.08)');
-    halo.addColorStop(1, 'rgba(108, 246, 229, 0)');
+    halo.addColorStop(0, `rgba(${accentColour}, 0.08)`);
+    halo.addColorStop(1, `rgba(${accentColour}, 0)`);
     ctx.fillStyle = halo;
     ctx.fillRect(cx - r * 1.5, cy - r * 1.5, r * 3, r * 3);
 
-    // Outer rotating ring of glyph marks
-    ctx.strokeStyle = `rgba(244, 210, 122, ${0.45 + Math.sin(t * 1.2) * 0.1})`;
+    // Outer rotating ring of glyph marks — sphere ring colour
+    ctx.strokeStyle = `rgba(${ringColour}, ${0.45 + Math.sin(t * 1.2) * 0.1})`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
-    // glyph ticks on the outer ring (rotate slowly)
-    ctx.fillStyle = 'rgba(244, 210, 122, 0.55)';
+    // glyph ticks
+    ctx.fillStyle = `rgba(${ringColour}, 0.55)`;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + t * 0.18;
       const gx = cx + Math.cos(a) * r;
@@ -1982,17 +2366,16 @@ export class GameEngine {
     }
 
     // Inner ring
-    ctx.strokeStyle = 'rgba(244, 210, 122, 0.35)';
+    ctx.strokeStyle = `rgba(${ringColour}, 0.35)`;
     ctx.beginPath();
     ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Pentagram — thicker and brighter
-    ctx.strokeStyle = `rgba(108, 246, 229, ${0.55 + Math.sin(t * 2) * 0.15})`;
+    // Pentagram — sphere accent
+    ctx.strokeStyle = `rgba(${accentColour}, ${0.55 + Math.sin(t * 2) * 0.15})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i < 5; i++) {
-      // 5-pointed star: step by 2/5 turns
       const a = (((i * 2) % 5) / 5) * Math.PI * 2 - Math.PI / 2;
       const x = cx + Math.cos(a) * r * 0.92;
       const y = cy + Math.sin(a) * r * 0.92;
@@ -2002,15 +2385,15 @@ export class GameEngine {
     ctx.closePath();
     ctx.stroke();
 
-    // Centre rune — pulsing diamond
+    // Centre rune — pulsing diamond (sphere ring colour)
     const pulse = 0.5 + 0.5 * Math.sin(t * 3);
-    ctx.fillStyle = `rgba(244, 210, 122, ${0.4 + pulse * 0.4})`;
+    ctx.fillStyle = `rgba(${ringColour}, ${0.4 + pulse * 0.4})`;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(Math.PI / 4);
     ctx.fillRect(-3, -3, 6, 6);
     ctx.restore();
-    ctx.fillStyle = `rgba(255, 230, 163, ${pulse})`;
+    ctx.fillStyle = `rgba(${accentColour}, ${pulse})`;
     ctx.fillRect(cx - 1, cy - 1, 2, 2);
     ctx.restore();
   }
@@ -2112,6 +2495,17 @@ export class GameEngine {
       ctx.beginPath();
       ctx.arc(0, 0, radius * p, 0, Math.PI * 2);
       ctx.stroke();
+      // Selene tidal-pulse: render the safe shadow zone as a faint
+      // teal "stay here" ring inside the damage band.
+      if (s.safeRadius && s.safeRadius > 0) {
+        ctx.strokeStyle = `rgba(108, 246, 229, ${0.55 + 0.35 * Math.sin(this.timeAlive * 4)})`;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(0, 0, s.safeRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       // Inner ring
       ctx.strokeStyle = `rgba(${accent}, ${0.35 + 0.4 * p})`;
       ctx.beginPath();
@@ -2252,6 +2646,34 @@ export class GameEngine {
         this.ctx.fillStyle = `rgba(226, 58, 74, ${0.2 + 0.4 * Math.sin(this.timeAlive * 20)})`;
         this.ctx.fillRect(e.pos.x - e.width, e.pos.y - 16, e.width * 2, 2);
       }
+      // non-boss telegraph: heavy contact attackers flash their accent
+      // colour during the wind-up window (cooldown is between 0.1 and 0.5).
+      if (!e.isBoss && e.contactDamage > 6 && e.cooldown < 0.5 && e.cooldown > 0.1) {
+        const pulse = 0.5 + 0.5 * Math.sin(this.timeAlive * 18);
+        this.ctx.fillStyle = `rgba(244, 130, 60, ${0.18 + 0.22 * pulse})`;
+        this.ctx.fillRect(e.pos.x - e.radius - 1, e.pos.y - e.radius - 1, (e.radius + 1) * 2, (e.radius + 1) * 2);
+      }
+    }
+    // Dissolving death effects — sprite expands and fades.
+    for (const fx of this.deathFx) {
+      const sz = getEnemySize(fx.visualKey);
+      const scale = 2;
+      const tNorm = Math.min(1, fx.t / fx.duration);
+      const grow = 1 + tNorm * 0.5;
+      const alpha = 1 - tNorm;
+      const dx = fx.pos.x - (sz.w * scale) / 2;
+      const dy = fx.pos.y - (sz.h * scale) + fx.radius + 1;
+      // Centre on the sprite, scale, draw — the canvas transform handles
+      // the growth around the centre point.
+      const cx = fx.pos.x;
+      const cy = dy + (sz.h * scale) / 2;
+      this.ctx.save();
+      this.ctx.globalAlpha = alpha;
+      this.ctx.translate(cx, cy);
+      this.ctx.scale(grow, grow);
+      this.ctx.translate(-cx, -cy);
+      drawEnemy(this.ctx, fx.visualKey, dx, dy, scale, 0.6 * (1 - tNorm), fx.facing.x < 0);
+      this.ctx.restore();
     }
   }
 

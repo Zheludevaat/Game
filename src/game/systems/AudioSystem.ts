@@ -3,10 +3,35 @@ export type SfxName =
   | 'chest' | 'shrine' | 'descend' | 'bossWarn' | 'bossDeath' | 'pickup'
   | 'doorLock' | 'doorOpen';
 
+export type CinematicMood = 'cosmos' | 'descent' | 'boss' | 'ascent';
+
 interface Voice {
   o: OscillatorNode;
   g: GainNode;
 }
+
+// Per-mood drone chords. Frequencies are deliberately low so the pad
+// sits underneath dialogue / subtitles without competing.
+const PAD_CHORDS: Record<CinematicMood, number[]> = {
+  cosmos:  [65.4, 130.8, 196.0],   // F2 + C3 + G3 — open, hopeful
+  descent: [49.0, 65.4],           // G1 + F2 — dark minor
+  boss:    [58.3, 87.3],           // A#1 + F2 — dissonant tritone
+  ascent:  [65.4, 130.8, 164.8],   // F2 + C3 + E3 — warm major
+};
+
+// Per-sphere "top voice" overlaid on the dungeon ambient drone.
+// Indexed by SphereId; the spheres at the deepest descent get sub-bass,
+// the upper spheres get airy triangle / sine harmonics.
+const SPHERE_TOP_VOICE: Record<string, { freq: number; type: OscillatorType; gain: number }> = {
+  moon:    { freq: 440, type: 'triangle', gain: 0.025 }, // pale silver bell
+  mercury: { freq: 330, type: 'sine',     gain: 0.030 }, // quicksilver shimmer
+  venus:   { freq: 264, type: 'sine',     gain: 0.030 }, // warm middle voice
+  sun:     { freq: 220, type: 'triangle', gain: 0.035 }, // bright gold pad
+  mars:    { freq: 110, type: 'sawtooth', gain: 0.022 }, // edged sustain
+  jupiter: { freq: 82,  type: 'triangle', gain: 0.030 }, // deep brass undertone
+  saturn:  { freq: 55,  type: 'square',   gain: 0.020 }, // black sub
+  ogdoad:  { freq: 528, type: 'sine',     gain: 0.040 }, // bright octave above all
+};
 
 export class AudioSystem {
   private ctx: AudioContext | null = null;
@@ -71,7 +96,7 @@ export class AudioSystem {
     });
   }
 
-  startDungeonAmbience(): void {
+  startDungeonAmbience(sphereId?: string): void {
     if (!this.unlocked || !this.ctx || this.ambientStarted) return;
     this.stopMenuHum();
     this.ambientStarted = true;
@@ -87,6 +112,89 @@ export class AudioSystem {
       o.start(now);
       this.ambientNodes.push({ o, g });
     });
+    // Sphere-specific top voice — gives floor 1 (Moon) a different
+    // sonic signature from floor 7 (Saturn) without rewriting the bed.
+    if (sphereId && SPHERE_TOP_VOICE[sphereId]) {
+      const cfg = SPHERE_TOP_VOICE[sphereId];
+      const o = this.ctx.createOscillator();
+      o.type = cfg.type;
+      o.frequency.value = cfg.freq;
+      const g = this.ctx.createGain();
+      g.gain.value = cfg.gain;
+      o.connect(g);
+      g.connect(this.musicGain);
+      o.start(now);
+      this.ambientNodes.push({ o, g });
+    }
+  }
+
+  /** Start a sustained pad tuned for one of four cinematic moods.
+   * Returns a stop function the caller invokes on unmount / film end. */
+  playCinematicPad(mood: CinematicMood = 'cosmos'): () => void {
+    if (!this.unlocked || !this.ctx) return () => undefined;
+    const ctx = this.ctx;
+    const chord = PAD_CHORDS[mood] ?? PAD_CHORDS.cosmos;
+    const now = ctx.currentTime;
+    const voices: Voice[] = [];
+    chord.forEach((f, i) => {
+      const o = ctx.createOscillator();
+      o.type = i === 0 ? 'sine' : (i === 1 ? 'triangle' : 'sine');
+      o.frequency.value = f;
+      // Slow detune LFO for a "breathing" pad.
+      const lfo = ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.12 + i * 0.04;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 0.6 + i * 0.4; // cents — extremely subtle
+      lfo.connect(lfoGain);
+      lfoGain.connect(o.detune);
+      lfo.start(now);
+      const g = ctx.createGain();
+      // Fade in over 1.2s so the pad eases under the first beat.
+      g.gain.value = 0;
+      g.gain.linearRampToValueAtTime(0.08 / (i + 1), now + 1.2);
+      o.connect(g);
+      g.connect(this.musicGain);
+      o.start(now);
+      voices.push({ o, g });
+      voices.push({ o: lfo, g: lfoGain });
+    });
+    return () => {
+      const stopAt = ctx.currentTime;
+      for (const v of voices) {
+        try {
+          v.g.gain.cancelScheduledValues(stopAt);
+          v.g.gain.setValueAtTime(v.g.gain.value, stopAt);
+          v.g.gain.linearRampToValueAtTime(0.0001, stopAt + 0.6);
+          v.o.stop(stopAt + 0.7);
+        } catch { /* */ }
+      }
+    };
+  }
+
+  /** Quick attack-decay chime used as a beat-advance cue inside films. */
+  playCinematicChime(): void {
+    if (!this.unlocked || !this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const mix = ctx.createGain();
+    mix.gain.value = 0;
+    mix.connect(this.sfxGain);
+    // Fundamental + perfect fifth — bell-like
+    [880, 1320].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.value = i === 0 ? 0.18 : 0.10;
+      o.connect(g);
+      g.connect(mix);
+      o.start(now);
+      o.stop(now + 0.45);
+    });
+    mix.gain.setValueAtTime(0, now);
+    mix.gain.linearRampToValueAtTime(1, now + 0.02);
+    mix.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
   }
 
   stopAll(): void {

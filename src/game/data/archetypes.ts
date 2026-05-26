@@ -7,6 +7,8 @@ export const ARCHETYPES: ArchetypeDef[] = [
     subtitle: 'Initiate of the Word',
     description: 'Balanced initiate, stronger spells, more mana.',
     startingRelic: 'emeraldTablet',
+    startingWeapon: 'tarnishedDagger',
+    startingSpell: 'frostLance',
     stats: {
       maxHp: 90,
       maxMp: 80,
@@ -25,6 +27,8 @@ export const ARCHETYPES: ArchetypeDef[] = [
     subtitle: 'Keeper of the Lamp',
     description: 'Slow, durable, melee-focused wanderer.',
     startingRelic: 'blackSalt',
+    startingWeapon: 'boneCleaver',
+    startingSpell: 'sparkBolt',
     stats: {
       maxHp: 130,
       maxMp: 40,
@@ -43,6 +47,8 @@ export const ARCHETYPES: ArchetypeDef[] = [
     subtitle: 'Vessel of Astral Fire',
     description: 'Fast, fragile, lucky vessel of astral fire.',
     startingRelic: 'lunarMirror',
+    startingWeapon: 'twinSickles',
+    startingSpell: 'sparkBolt',
     stats: {
       maxHp: 70,
       maxMp: 90,

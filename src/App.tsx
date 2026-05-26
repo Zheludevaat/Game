@@ -446,6 +446,7 @@ export function App(): JSX.Element {
         <CinematicShort
           shots={TABULA_CINEMATIC}
           title="I — OPENING"
+          mood="cosmos"
           onDone={() => {
             setMeta((m) => ({ ...m, seenPrologue: true }));
             setScreen('menu');
@@ -457,6 +458,7 @@ export function App(): JSX.Element {
         <CinematicShort
           shots={ENDING_CINEMATIC}
           title="VIII — THE OGDOAD"
+          mood="ascent"
           onDone={() => {
             setMeta((m) => ({ ...m, seenEnding: true }));
             setScreen(previousScreen === 'game' ? 'game' : 'menu');
@@ -468,6 +470,7 @@ export function App(): JSX.Element {
         <CinematicShort
           shots={NEW_GAME_CINEMATIC}
           title="II — THE DESCENT BEGINS"
+          mood="descent"
           onDone={() => {
             setMeta((m) => ({ ...m, seenNewRunCinematic: true }));
             const run = pendingRunStart;
@@ -484,6 +487,7 @@ export function App(): JSX.Element {
           <CinematicShort
             shots={bossIntroShots(sphereId)}
             title={`${sphere.numeral} — ${sphere.name.toUpperCase()}`}
+            mood="boss"
             onDone={() => {
               setPendingBossIntro(null);
               setMeta((m) => ({

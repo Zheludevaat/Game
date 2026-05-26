@@ -8,6 +8,10 @@ export interface ArchetypeDef {
   subtitle: string;
   description: string;
   startingRelic: RelicId;
+  /** Starting melee weapon. If omitted, falls back to the global default. */
+  startingWeapon?: WeaponId;
+  /** Starting spell. If omitted, falls back to the global default. */
+  startingSpell?: SpellId;
   stats: {
     maxHp: number;
     maxMp: number;

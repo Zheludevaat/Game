@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useGamepadButtons } from './useGamepadButtons';
+import { audio, CinematicMood } from '../game/systems/AudioSystem';
 
 export interface ShotArgs {
   ctx: CanvasRenderingContext2D;
@@ -48,6 +49,8 @@ export interface CinematicShortProps {
   onDone: () => void;
   /** Chapter label shown briefly at top of first shot. */
   title?: string;
+  /** Cinematic mood for the underlying pad. Defaults to 'cosmos'. */
+  mood?: CinematicMood;
 }
 
 export function CinematicShort(p: CinematicShortProps): JSX.Element {
@@ -55,11 +58,26 @@ export function CinematicShort(p: CinematicShortProps): JSX.Element {
   const [shotStart, setShotStart] = useState(() => performance.now());
   const filmStart = useRef(performance.now());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Audio: a sustained pad runs underneath every cinematic, with a
+  // chime cued on each beat advance. Stop fn captured here so unmount
+  // (or skip) cleanly fades the pad out.
+  const padStop = useRef<(() => void) | null>(null);
 
   const shot = p.shots[idx];
 
+  // Start pad on mount, stop on unmount.
+  useEffect(() => {
+    padStop.current = audio.playCinematicPad(p.mood ?? 'cosmos');
+    return () => {
+      padStop.current?.();
+      padStop.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const next = (): void => {
     if (idx < p.shots.length - 1) {
+      audio.playCinematicChime();
       setIdx(idx + 1);
       setShotStart(performance.now());
     } else {

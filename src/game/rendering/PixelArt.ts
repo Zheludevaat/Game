@@ -264,7 +264,7 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       w: '#e23a4a',
     },
   },
-  // Warden of the Seven Lamps — boss. 22×20
+  // Warden of the Seven Lamps — generic boss (kept for legacy / debug).
   wardenBoss: {
     rows: [
       '........oooooooo......',
@@ -298,6 +298,212 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       g: '#1a0824',
       y: '#f4d27a',
       Y: '#ffe6a3',
+    },
+  },
+  // ─── Seven Wardens — same 22×20 silhouette, sphere-coloured ─────────
+  // Each is a palette swap of the wardenBoss matrix above. The core
+  // gold (y/Y) is kept as the "lit lamp at the heart" for every Warden.
+  seleneBoss: {
+    rows: [
+      '........oooooooo......',
+      '.......offfffffo......',
+      '......ofGGGGGGGfo.....',
+      '.....ofGwwwwwwwGfo....',
+      '....ofGwffffffwwGfo...',
+      '...ofGwfggggggfwGfo...',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '.ofGwfgrwyyyywwgfwGfo.',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      '.ofGwfgrwwyywwrgfwGfo.',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '...ofGwfgggggggfwGfo..',
+      '....ofGwffffffwwGfo...',
+      '.....ofGwwwwwwGfo.....',
+      '......ofGGGGGGfo......',
+      '.......offffffo.......',
+      '........oooooo........',
+    ],
+    palette: {
+      '.': null, o: '#04020a',
+      f: '#2a3a52', G: '#6c8cff', w: '#cdd6dc',
+      r: '#9b6cff', g: '#0a0420', y: '#ffe6a3', Y: '#ffffff',
+    },
+  },
+  hermesBoss: {
+    rows: [
+      '........oooooooo......',
+      '.......offfffffo......',
+      '......ofGGGGGGGfo.....',
+      '.....ofGwwwwwwwGfo....',
+      '....ofGwffffffwwGfo...',
+      '...ofGwfggggggfwGfo...',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '.ofGwfgrwyyyywwgfwGfo.',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      '.ofGwfgrwwyywwrgfwGfo.',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '...ofGwfgggggggfwGfo..',
+      '....ofGwffffffwwGfo...',
+      '.....ofGwwwwwwGfo.....',
+      '......ofGGGGGGfo......',
+      '.......offffffo.......',
+      '........oooooo........',
+    ],
+    palette: {
+      '.': null, o: '#04020a',
+      f: '#0d3a40', G: '#1f8a86', w: '#6cf6e5',
+      r: '#a4faf0', g: '#031820', y: '#f4d27a', Y: '#ffffff',
+    },
+  },
+  aphroditeBoss: {
+    rows: [
+      '........oooooooo......',
+      '.......offfffffo......',
+      '......ofGGGGGGGfo.....',
+      '.....ofGwwwwwwwGfo....',
+      '....ofGwffffffwwGfo...',
+      '...ofGwfggggggfwGfo...',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '.ofGwfgrwyyyywwgfwGfo.',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      '.ofGwfgrwwyywwrgfwGfo.',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '...ofGwfgggggggfwGfo..',
+      '....ofGwffffffwwGfo...',
+      '.....ofGwwwwwwGfo.....',
+      '......ofGGGGGGfo......',
+      '.......offffffo.......',
+      '........oooooo........',
+    ],
+    palette: {
+      '.': null, o: '#04020a',
+      f: '#5b2a52', G: '#9b6cff', w: '#ff9bc1',
+      r: '#ffd0e3', g: '#1a0824', y: '#f4d27a', Y: '#ffffff',
+    },
+  },
+  heliosBoss: {
+    rows: [
+      '........oooooooo......',
+      '.......offfffffo......',
+      '......ofGGGGGGGfo.....',
+      '.....ofGwwwwwwwGfo....',
+      '....ofGwffffffwwGfo...',
+      '...ofGwfggggggfwGfo...',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '.ofGwfgrwyyyywwgfwGfo.',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      '.ofGwfgrwwyywwrgfwGfo.',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '...ofGwfgggggggfwGfo..',
+      '....ofGwffffffwwGfo...',
+      '.....ofGwwwwwwGfo.....',
+      '......ofGGGGGGfo......',
+      '.......offffffo.......',
+      '........oooooo........',
+    ],
+    palette: {
+      '.': null, o: '#2a1608',
+      f: '#7a5a1a', G: '#c8983f', w: '#f4d27a',
+      r: '#ffe6a3', g: '#3a2410', y: '#ffffff', Y: '#fff7d6',
+    },
+  },
+  aresBoss: {
+    rows: [
+      '........oooooooo......',
+      '.......offfffffo......',
+      '......ofGGGGGGGfo.....',
+      '.....ofGwwwwwwwGfo....',
+      '....ofGwffffffwwGfo...',
+      '...ofGwfggggggfwGfo...',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '.ofGwfgrwyyyywwgfwGfo.',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      '.ofGwfgrwwyywwrgfwGfo.',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '...ofGwfgggggggfwGfo..',
+      '....ofGwffffffwwGfo...',
+      '.....ofGwwwwwwGfo.....',
+      '......ofGGGGGGfo......',
+      '.......offffffo.......',
+      '........oooooo........',
+    ],
+    palette: {
+      '.': null, o: '#04020a',
+      f: '#5a1018', G: '#e23a4a', w: '#ff7a5a',
+      r: '#ffe6a3', g: '#1a0408', y: '#f4d27a', Y: '#ffffff',
+    },
+  },
+  zeusBoss: {
+    rows: [
+      '........oooooooo......',
+      '.......offfffffo......',
+      '......ofGGGGGGGfo.....',
+      '.....ofGwwwwwwwGfo....',
+      '....ofGwffffffwwGfo...',
+      '...ofGwfggggggfwGfo...',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '.ofGwfgrwyyyywwgfwGfo.',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      '.ofGwfgrwwyywwrgfwGfo.',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '...ofGwfgggggggfwGfo..',
+      '....ofGwffffffwwGfo...',
+      '.....ofGwwwwwwGfo.....',
+      '......ofGGGGGGfo......',
+      '.......offffffo.......',
+      '........oooooo........',
+    ],
+    palette: {
+      '.': null, o: '#2a1608',
+      f: '#5a3a18', G: '#c8983f', w: '#f4d27a',
+      r: '#ffffff', g: '#3a2410', y: '#ffe6a3', Y: '#fff7d6',
+    },
+  },
+  kronosBoss: {
+    rows: [
+      '........oooooooo......',
+      '.......offfffffo......',
+      '......ofGGGGGGGfo.....',
+      '.....ofGwwwwwwwGfo....',
+      '....ofGwffffffwwGfo...',
+      '...ofGwfggggggfwGfo...',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '.ofGwfgrwyyyywwgfwGfo.',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      'ofGwfgrwyYYyywrwGfwGfo',
+      '.ofGwfgrwwyywwrgfwGfo.',
+      '.ofGwfgrwwwwwwrgfwGfo.',
+      '..ofGwfgrrrrrrgfwGfo..',
+      '...ofGwfgggggggfwGfo..',
+      '....ofGwffffffwwGfo...',
+      '.....ofGwwwwwwGfo.....',
+      '......ofGGGGGGfo......',
+      '.......offffffo.......',
+      '........oooooo........',
+    ],
+    palette: {
+      '.': null, o: '#04020a',
+      f: '#1a0f2c', G: '#3b265c', w: '#5b3a86',
+      r: '#9b6cff', g: '#0a0420', y: '#c8983f', Y: '#ffe6a3',
     },
   },
 };
@@ -394,6 +600,9 @@ export function drawWallTile(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, size: number,
   topEdge: boolean,
+  /** Sphere accent colour. When supplied, the cap-stone strip is tinted
+   * toward this hue so each floor reads as its own sphere at a glance. */
+  tint?: string | null,
 ): void {
   // Base stone
   ctx.fillStyle = PALETTE.wallDark;
@@ -401,9 +610,9 @@ export function drawWallTile(
   ctx.fillStyle = PALETTE.wall;
   ctx.fillRect(x + 1, y + 1, size - 2, size - 2);
 
-  // Highlight ridge on top (cap stones)
+  // Highlight ridge on top (cap stones) — tinted by sphere when provided
   if (topEdge) {
-    ctx.fillStyle = PALETTE.wallTop;
+    ctx.fillStyle = tint ?? PALETTE.wallTop;
     ctx.fillRect(x, y, size, 3);
     ctx.fillStyle = '#7a559e';
     ctx.fillRect(x + 1, y + 1, size - 2, 1);
@@ -438,11 +647,16 @@ export function drawWallTile(
 export function drawTorch(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, t: number,
+  /** Optional sphere-flavoured colour for the halo + outer flame layer.
+   * Inner core stays white-hot so torches still read as fire. */
+  tint?: { rgb: string; halo: string } | null,
 ): void {
-  // wall halo — soft warm glow on stone
+  const haloColour = tint?.halo ?? 'rgba(244, 210, 122, 0.35)';
+  const haloFade = tint ? tint.halo.replace(/[\d.]+\)$/, '0)') : 'rgba(244, 210, 122, 0)';
+  // wall halo — soft glow on stone, tinted toward sphere accent when set
   const halo = ctx.createRadialGradient(x + 2, y - 2, 1, x + 2, y - 2, 22);
-  halo.addColorStop(0, 'rgba(244, 210, 122, 0.35)');
-  halo.addColorStop(1, 'rgba(244, 210, 122, 0)');
+  halo.addColorStop(0, haloColour);
+  halo.addColorStop(1, haloFade);
   ctx.fillStyle = halo;
   ctx.fillRect(x - 20, y - 24, 44, 44);
 
@@ -454,14 +668,17 @@ export function drawTorch(
   ctx.fillStyle = PALETTE.gold3;
   ctx.fillRect(x + 1, y + 8, 2, 1);
 
-  // flame — three-layer with flicker
+  // flame — three-layer with flicker. Outer + mid layers take the tint
+  // when set; innermost two stay white-hot.
   const flicker = Math.sin(t * 6 + x * 0.3);
   const off = Math.sin(t * 9 + x) * 0.6;
-  ctx.fillStyle = 'rgba(244, 130, 60, 0.55)';
+  const outerColour = tint?.rgb ? `rgba(${tint.rgb}, 0.55)` : 'rgba(244, 130, 60, 0.55)';
+  const midColour   = tint?.rgb ? `rgba(${tint.rgb}, 0.9)`  : 'rgba(244, 210, 122, 0.9)';
+  ctx.fillStyle = outerColour;
   ctx.beginPath();
   ctx.ellipse(x + 2 + off * 0.3, y - 4, 4 + Math.abs(flicker), 7 + Math.abs(flicker), 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = 'rgba(244, 210, 122, 0.9)';
+  ctx.fillStyle = midColour;
   ctx.beginPath();
   ctx.ellipse(x + 2 + off * 0.2, y - 4, 3, 5.5, 0, 0, Math.PI * 2);
   ctx.fill();

@@ -85,10 +85,17 @@ export function CinematicsScreen({ onBack, endingUnlocked = false }: Props): JSX
   const focus = useMenuNav(items, { onCancel: onBack, enabled: !playing });
 
   if (playing) {
+    // Pick the pad mood by film id so gallery replays sound like the
+    // in-game versions.
+    let mood: 'cosmos' | 'descent' | 'boss' | 'ascent' = 'cosmos';
+    if (playing.id === 'new-game') mood = 'descent';
+    else if (playing.id.startsWith('boss-')) mood = 'boss';
+    else if (playing.id === 'ending') mood = 'ascent';
     return (
       <CinematicShort
         shots={playing.shots}
         title={playing.chapter}
+        mood={mood}
         onDone={() => setPlaying(null)}
       />
     );
