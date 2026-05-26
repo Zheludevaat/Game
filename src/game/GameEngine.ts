@@ -15,6 +15,9 @@ import {
   speedMultiplierFromStatus,
 } from './data/statusEffects';
 import type { AppliesStatus } from './data/statusEffects';
+import {
+  HAZARD_CONFIG, Hazard, hazardIsActive, hazardActiveProgress, spawnRoomHazards,
+} from './data/hazards';
 import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
@@ -355,6 +358,7 @@ export class GameEngine {
   private projectiles: Projectile[] = [];
   private pickups: Pickup[] = [];
   private sigils: SigilHazard[] = [];
+  private hazards: Hazard[] = [];
   private particles = new ParticleSystem();
 
   private summary: RunSummary;
@@ -715,7 +719,17 @@ export class GameEngine {
     this.sigils = [];
     this.enemies = [];
     this.pickups = [];
+    this.hazards = [];
     this.player.pos = { x: entryPos.x, y: entryPos.y };
+    // Per-sphere environmental hazards — quiet rooms get at most one,
+    // combat rooms get up to three. Boss / start rooms stay clean so
+    // those moments read as cinematic.
+    const safeRooms = new Set<RoomType>(['start', 'boss', 'exit']);
+    if (!safeRooms.has(room.type)) {
+      const isCombat = room.type === 'enemy' || room.type === 'miniBoss' || room.type === 'locked';
+      const sphere = sphereForFloor(this.floor.number).id;
+      this.hazards = spawnRoomHazards(sphere, room.seed, this.reducedParticles, isCombat);
+    }
     // Spawn content
     if (!room.cleared) {
       this.spawnRoomContent(room);
@@ -1006,6 +1020,7 @@ export class GameEngine {
       this.updatePickups(dt);
       this.updateSigils(dt);
       this.updateDelayedActions(dt);
+      this.updateHazards(dt);
     }
 
     if (!this.dead) this.handleRoomTransition();
@@ -2926,6 +2941,62 @@ export class GameEngine {
     }
   }
 
+  /** Tick + damage environmental hazards. Periodic kinds (blade /
+   *  lightning) damage once per cycle when the player is inside;
+   *  solar kind ticks damage every 0.5 s while overlap holds. */
+  private updateHazards(dt: number): void {
+    if (this.hazards.length === 0) return;
+    const p = this.player;
+    for (const h of this.hazards) {
+      const wasActive = hazardIsActive(h);
+      h.t += dt;
+      if (h.t >= h.period) h.t -= h.period;
+      const nowActive = hazardIsActive(h);
+      const d = Math.hypot(p.pos.x - h.x, p.pos.y - h.y);
+      const cfg = HAZARD_CONFIG[h.kind];
+      const inside = d < h.radius + PLAYER_RADIUS;
+      if (h.kind === 'solar') {
+        // Continuous damage, throttled to 0.5 s ticks while inside.
+        if (inside && this.timeAlive - h.lastTick > 0.5) {
+          h.lastTick = this.timeAlive;
+          this.applyDotToPlayer(h.damage);
+          if (cfg.status === 'burn') {
+            applyStatusEffect(this.player, 'burn', this.timeAlive, { duration: 1.5 });
+          }
+        }
+      } else {
+        // Periodic — damage on the transition into the active window.
+        if (inside && !wasActive && nowActive) {
+          this.damagePlayer(h.damage);
+          if (cfg.status === 'stun') {
+            applyStatusEffect(this.player, 'stun', this.timeAlive, { duration: 0.4 });
+          } else if (cfg.status === 'slow') {
+            applyStatusEffect(this.player, 'slow', this.timeAlive, { duration: 1.2 });
+          }
+          // Sphere-accent burst on hit.
+          if (!this.reducedParticles) {
+            this.particles.burst(h.x, h.y, 14, {
+              colour: cfg.colour, life: 0.4, maxLife: 0.4, drag: 0.86,
+            });
+          }
+        }
+        // Enemies inside an active strike also take small damage.
+        if (!wasActive && nowActive) {
+          for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const e = this.enemies[i];
+            const dd = Math.hypot(e.pos.x - h.x, e.pos.y - h.y);
+            if (dd < h.radius + e.radius) {
+              this.damageEnemy(e, h.damage * 0.5, { x: 0, y: 0 }, 0, {
+                fromPlayer: false, canCrit: false,
+              });
+              if (e.hp <= 0) { this.killEnemy(e, i); }
+            }
+          }
+        }
+      }
+    }
+  }
+
   private updateSigils(dt: number): void {
     for (let i = this.sigils.length - 1; i >= 0; i--) {
       const s = this.sigils[i];
@@ -3124,6 +3195,7 @@ export class GameEngine {
     this.drawStairsIfExit();
     this.drawSigils();
     this.drawDelayedActionTelegraphs();
+    this.drawHazards();
     this.drawPickups();
     this.drawEnemiesAll();
     this.drawPlayer();
@@ -3460,6 +3532,102 @@ export class GameEngine {
         ctx.fill();
       }
       ctx.restore();
+    }
+  }
+
+  /** Render per-sphere environmental hazards. Each kind has its own
+   *  silhouette + a danger-progress shading. The activeFrac slice
+   *  shows a bright threat ring; the warmup phase is a faint pulse. */
+  private drawHazards(): void {
+    if (this.hazards.length === 0) return;
+    const ctx = this.ctx;
+    for (const h of this.hazards) {
+      const cfg = HAZARD_CONFIG[h.kind];
+      const active = hazardIsActive(h);
+      const ap = active ? hazardActiveProgress(h) : 0;
+      // Warmup pulse — a thin shimmering ring so the player can read
+      // where the danger will erupt before it does.
+      if (!active) {
+        const warm = h.t / (h.period * (1 - h.activeFrac));
+        ctx.strokeStyle = `rgba(255,255,255,${0.10 + 0.18 * warm})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, h.radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Per-kind silhouette.
+      switch (h.kind) {
+        case 'blade': {
+          // Spinning X — two crossed lines rotating fast. Brighter when
+          // actively damaging.
+          const t = this.timeAlive * (active ? 14 : 6);
+          const len = h.radius * (active ? 1.0 : 0.7);
+          ctx.save();
+          ctx.translate(h.x, h.y);
+          ctx.rotate(t);
+          ctx.strokeStyle = active ? '#ffffff' : cfg.colour;
+          ctx.lineWidth = active ? 3 : 2;
+          ctx.beginPath();
+          ctx.moveTo(-len, 0); ctx.lineTo(len, 0);
+          ctx.moveTo(0, -len); ctx.lineTo(0, len);
+          ctx.stroke();
+          ctx.restore();
+          break;
+        }
+        case 'solar': {
+          // Always-on heat well — pulsing core.
+          const pulse = 0.7 + 0.3 * Math.sin(this.timeAlive * 4 + h.x);
+          ctx.fillStyle = `rgba(255, 168, 64, ${0.18 * pulse})`;
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, h.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = `rgba(255, 230, 163, ${0.55 * pulse})`;
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case 'lightning': {
+          // Charge marker; brief bolt-flash when active.
+          ctx.strokeStyle = `rgba(108, 246, 229, ${0.4 + 0.5 * (h.t / h.period)})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, 5, 0, Math.PI * 2);
+          ctx.stroke();
+          if (active) {
+            const flash = 1 - ap;
+            ctx.strokeStyle = `rgba(255,255,255,${flash})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            // Stylised bolt — two zigzags.
+            ctx.moveTo(h.x - 3, h.y - h.radius);
+            ctx.lineTo(h.x + 2, h.y);
+            ctx.lineTo(h.x - 2, h.y);
+            ctx.lineTo(h.x + 3, h.y + h.radius);
+            ctx.stroke();
+            ctx.fillStyle = `rgba(164, 250, 240, ${0.25 * flash})`;
+            ctx.beginPath();
+            ctx.arc(h.x, h.y, h.radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+        }
+        case 'vine': {
+          // Vine knot — small green hub with tendrils.
+          ctx.fillStyle = active ? '#5f9050' : '#3a5a30';
+          for (let k = 0; k < 6; k++) {
+            const a = (k / 6) * Math.PI * 2 + this.timeAlive * 0.6;
+            ctx.fillRect(
+              h.x + Math.cos(a) * (h.radius - 3) - 1,
+              h.y + Math.sin(a) * (h.radius - 3) - 1,
+              2, 2,
+            );
+          }
+          ctx.fillStyle = active ? '#7fd070' : '#5a8b50';
+          ctx.fillRect(h.x - 2, h.y - 2, 5, 5);
+          break;
+        }
+      }
     }
   }
 

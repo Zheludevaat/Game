@@ -1,6 +1,27 @@
 import { RNG, hashSeed } from '../math/rng';
 import { Floor, Room, RoomType } from '../GameTypes';
 import { pickRoomName } from '../data/roomNames';
+import { sphereForFloor, SphereId } from '../data/spheres';
+
+/** Per-sphere modifier to the base room count. Mercury sprawls,
+ *  Sun keeps it tight, Saturn fragments. */
+const SPHERE_ROOM_MUL: Partial<Record<SphereId, number>> = {
+  moon: 1.0,
+  mercury: 1.35,
+  venus: 1.05,
+  sun: 0.85,
+  mars: 1.0,
+  jupiter: 1.15,
+  saturn: 1.20,
+};
+
+/** Per-sphere "branch acceptance" — Mercury accepts more branching,
+ *  Sun rejects branching for arena-feeling rooms. */
+const SPHERE_BRANCH_BIAS: Partial<Record<SphereId, number>> = {
+  mercury: 0.85, // accept more side passages
+  sun: 0.30,     // reject most branches — long arena halls
+  saturn: 0.75,
+};
 
 interface GenOptions {
   floor: number;
@@ -23,8 +44,16 @@ export function generateFloor(opts: GenOptions): Floor {
     return buildBossFloor(floor, seed);
   }
 
-  // Otherwise: random-walk dungeon
-  const target = Math.min(7 + Math.floor(floor * 1.5), 16);
+  // Otherwise: random-walk dungeon. Per-sphere room-count + branch
+  // bias shape the floor's silhouette so Mercury sprawls and Sun
+  // stays tight even on the same base size.
+  const sphere = sphereForFloor(floor).id;
+  const baseTarget = 7 + Math.floor(floor * 1.5);
+  const target = Math.min(
+    Math.max(5, Math.round(baseTarget * (SPHERE_ROOM_MUL[sphere] ?? 1.0))),
+    20,
+  );
+  const branchBias = SPHERE_BRANCH_BIAS[sphere] ?? 0.6;
   const grid = new Map<string, Room>();
   let nextId = 1;
 
@@ -66,9 +95,10 @@ export function generateFloor(opts: GenOptions): Floor {
       const nx = base.x + d.x;
       const ny = base.y + d.y;
       if (grid.has(keyOf(nx, ny))) continue;
-      // Limit branching to keep map readable
+      // Limit branching to keep map readable. Sphere-bias decides how
+      // aggressively to refuse new branches at busy intersections.
       const neighbours = countNeighbours(grid, nx, ny);
-      if (neighbours > 1 && rng.chance(0.6)) continue;
+      if (neighbours > 1 && rng.chance(branchBias)) continue;
       addRoom(nx, ny, 'enemy', pickRoomName('enemy', rng));
       frontier.push({ x: nx, y: ny });
       placed = true;
