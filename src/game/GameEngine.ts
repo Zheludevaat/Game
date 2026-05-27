@@ -249,21 +249,16 @@ interface PlayerState {
   /** Counter of coin / essence pickups consumed in this run — drives the
    *  Alchemical Mint synergy's every-12th relic drop. */
   pickupTally: number;
-  /** Seconds remaining on the archetype ultimate cooldown. Ready at 0. */
-  ultimateCd: number;
-  /** Max cooldown — copied from the archetype's ultimate.cooldown on mount. */
-  ultimateCdMax: number;
-  /** Charges remaining on a Mirror-Sigil-style reflect buff. Each enemy
-   *  projectile that hits the player while > 0 reflects with +damage. */
-  reflectCharges: number;
-  /** timeAlive after which the reflect buff lapses regardless of remaining charges. */
-  reflectExpiresAt: number;
-  /** timeAlive after which the aura (Hermes' Wake) lapses. */
-  auraExpiresAt: number;
-  /** Source spell id for the active aura, used for damage / status lookups. */
-  auraSpellId: SpellId | null;
-  /** Next timeAlive tick at which the aura damages enemies in radius. */
-  auraNextTick: number;
+  /** Archetype ultimate cooldown — `cd` ticks down, `cdMax` is fixed
+   *  from the archetype's ultimate.cooldown on mount. */
+  ultimate: { cd: number; cdMax: number };
+  /** Mirror-Sigil-style reflect buff. `charges` decrements per enemy
+   *  projectile reflected; `expiresAt` is the wall-time cutoff. Zero
+   *  charges = inactive (engine reads charges > 0 && time < expires). */
+  reflect: { charges: number; expiresAt: number };
+  /** Active aura state (Hermes' Wake). `spellId` is null when inactive;
+   *  `nextTick` is the wall-time of the next damage tick. */
+  aura: { spellId: SpellId | null; expiresAt: number; nextTick: number };
 }
 
 interface Enemy {
@@ -811,13 +806,9 @@ export class GameEngine {
       freeNextSpell: false,
       synergies: [],
       pickupTally: 0,
-      ultimateCd: 0,
-      ultimateCdMax: a.ultimate.cooldown,
-      reflectCharges: 0,
-      reflectExpiresAt: 0,
-      auraExpiresAt: 0,
-      auraSpellId: null,
-      auraNextTick: 0,
+      ultimate: { cd: 0, cdMax: a.ultimate.cooldown },
+      reflect: { charges: 0, expiresAt: 0 },
+      aura: { spellId: null, expiresAt: 0, nextTick: 0 },
     };
     this.tutorialStartPos = { x: this.player.pos.x, y: this.player.pos.y };
     this.grantRelic(a.startingRelic, true);
@@ -1117,11 +1108,11 @@ export class GameEngine {
 
   /** Fire the archetype's signature ability. Resolves via archetype.ultimate.id
    *  so each archetype gets a distinct move; the input handler already gates
-   *  on `ultimateCd <= 0`. Sets the cooldown after a successful cast. */
+   *  on `ultimate.cd <= 0`. Sets the cooldown after a successful cast. */
   private useUltimate(): void {
     const p = this.player;
     const u = this.archetype.ultimate;
-    p.ultimateCd = p.ultimateCdMax;
+    p.ultimate.cd = p.ultimate.cdMax;
     // Per-archetype ultimate SFX so each one has its own tonal
     // signature — the cast never sounds like a shrine confirm.
     const ultSfx = u.id === 'wordOfPower'  ? 'ultimateMagus'
@@ -1730,7 +1721,7 @@ export class GameEngine {
     p.spellTimer = Math.max(0, p.spellTimer - dt);
     p.attackCooldown = Math.max(0, p.attackCooldown - dt);
     p.spellCooldown = Math.max(0, p.spellCooldown - dt);
-    p.ultimateCd = Math.max(0, p.ultimateCd - dt);
+    p.ultimate.cd = Math.max(0, p.ultimate.cd - dt);
     p.mp = Math.min(p.maxMp, p.mp + p.manaRegen * dt);
     // Puzzle failure hold — tick down so the modal stays visible for
     // the duration of the red flash, then close cleanly.
@@ -1742,13 +1733,13 @@ export class GameEngine {
     }
     // Hermes' Wake — periodic AOE around the player while the aura
     // window is active. The spell def carries the radius / damage /
-    // status; we read it back via p.auraSpellId rather than capturing
+    // status; we read it back via p.aura.spellId rather than capturing
     // it in PlayerState so a balance tweak to spells.ts takes effect
     // on the next tick.
-    if (p.auraSpellId && this.timeAlive < p.auraExpiresAt) {
-      const sp = SPELLS[p.auraSpellId];
-      if (sp && this.timeAlive >= p.auraNextTick) {
-        p.auraNextTick = this.timeAlive + (sp.auraTickEvery ?? 0.32);
+    if (p.aura.spellId && this.timeAlive < p.aura.expiresAt) {
+      const sp = SPELLS[p.aura.spellId];
+      if (sp && this.timeAlive >= p.aura.nextTick) {
+        p.aura.nextTick = this.timeAlive + (sp.auraTickEvery ?? 0.32);
         const dmg = Math.max(1, Math.round(p.spellPower * p.damageMul * sp.damageMul));
         let tickHit = false;
         for (const e of this.enemies) {
@@ -1777,9 +1768,9 @@ export class GameEngine {
           }
         }
       }
-    } else if (p.auraSpellId && this.timeAlive >= p.auraExpiresAt) {
+    } else if (p.aura.spellId && this.timeAlive >= p.aura.expiresAt) {
       // Window closed — clear the source so the HUD pill goes away.
-      p.auraSpellId = null;
+      p.aura.spellId = null;
     }
     if (this.comboPulse > 0) this.comboPulse = Math.max(0, this.comboPulse - dt);
     if (this.critFlashT > 0) this.critFlashT = Math.max(0, this.critFlashT - dt);
@@ -1989,7 +1980,7 @@ export class GameEngine {
     }
     if (s.cycleConsumablePressed) this.cycleConsumable();
     if (s.useConsumablePressed)   this.useSelectedConsumable();
-    if (s.ultimatePressed && p.ultimateCd <= 0) this.useUltimate();
+    if (s.ultimatePressed && p.ultimate.cd <= 0) this.useUltimate();
 
     // Death check
     if (p.hp <= 0) this.tryRevive();
@@ -2236,8 +2227,8 @@ export class GameEngine {
       // updateProjectiles' enemy-projectile branch; it consumes a
       // charge per intercepted bolt and bounces the projectile back
       // with double damage.
-      p.reflectCharges = sp.reflectCharges ?? 3;
-      p.reflectExpiresAt = this.timeAlive + (sp.buffDuration ?? 8);
+      p.reflect.charges = sp.reflectCharges ?? 3;
+      p.reflect.expiresAt = this.timeAlive + (sp.buffDuration ?? 8);
       audio.sfx('shrine');
       this.spawnDamageNumber(p.pos.x, p.pos.y - 16, 'MIRROR', sp.projColour);
       if (!this.reducedParticles) {
@@ -2255,15 +2246,15 @@ export class GameEngine {
 
     if (sp.kind === 'aura') {
       // Hermes' Wake — sets an aura window on the player. updatePlayer
-      // ticks damage to nearby enemies on the auraNextTick cadence.
+      // ticks damage to nearby enemies on the aura.nextTick cadence.
       // Re-casting refreshes both the expiry and the next tick so the
       // effective uptime never drops below one full duration. Label
       // the cast as REFRESHED when the aura was already live so the
       // player sees the buff was extended (not absorbed).
-      const wasActive = p.auraSpellId === sp.id && this.timeAlive < p.auraExpiresAt;
-      p.auraExpiresAt = this.timeAlive + sp.life;
-      p.auraSpellId = sp.id;
-      p.auraNextTick = this.timeAlive + (sp.auraTickEvery ?? 0.32);
+      const wasActive = p.aura.spellId === sp.id && this.timeAlive < p.aura.expiresAt;
+      p.aura.expiresAt = this.timeAlive + sp.life;
+      p.aura.spellId = sp.id;
+      p.aura.nextTick = this.timeAlive + (sp.auraTickEvery ?? 0.32);
       audio.sfx('spell');
       this.spawnDamageNumber(p.pos.x, p.pos.y - 16, wasActive ? 'EXTENDED' : 'WAKE', sp.projColour);
       if (!this.reducedParticles) {
@@ -4091,8 +4082,8 @@ export class GameEngine {
           // is already in i-frames (or dead) so the charge doesn't burn
           // on a hit that would have been ignored anyway.
           const p = this.player;
-          if (p.iframes <= 0 && !this.dead && p.reflectCharges > 0 && this.timeAlive < p.reflectExpiresAt) {
-            p.reflectCharges -= 1;
+          if (p.iframes <= 0 && !this.dead && p.reflect.charges > 0 && this.timeAlive < p.reflect.expiresAt) {
+            p.reflect.charges -= 1;
             pr.fromPlayer = true;
             pr.vel.x *= -1.4; pr.vel.y *= -1.4;
             pr.colour = '#cdf6ff';
@@ -5896,9 +5887,9 @@ export class GameEngine {
    *  is live (vs. just lingering particles). */
   private drawAura(): void {
     const p = this.player;
-    if (!p.auraSpellId) return;
-    if (this.timeAlive >= p.auraExpiresAt) return;
-    const sp = SPELLS[p.auraSpellId];
+    if (!p.aura.spellId) return;
+    if (this.timeAlive >= p.aura.expiresAt) return;
+    const sp = SPELLS[p.aura.spellId];
     if (!sp) return;
     const ctx = this.ctx;
     const rgb = hexToRgbString(sp.projColour);
@@ -6259,12 +6250,12 @@ export class GameEngine {
       consumableIdx: p.consumableIdx,
       freeNextSpell: p.freeNextSpell,
       synergies: p.synergies.slice(),
-      ultimateCd: p.ultimateCd,
-      ultimateCdMax: p.ultimateCdMax || 1,
+      ultimateCd: p.ultimate.cd,
+      ultimateCdMax: p.ultimate.cdMax || 1,
       ultimateName: this.archetype.ultimate.name,
       ultimateGlyph: this.archetype.ultimate.glyph,
       ultimateColour: this.archetype.ultimate.colour,
-      reflectCharges: this.timeAlive < p.reflectExpiresAt ? p.reflectCharges : 0,
+      reflectCharges: this.timeAlive < p.reflect.expiresAt ? p.reflect.charges : 0,
       alive: !this.dead,
     });
   }
