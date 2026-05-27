@@ -26,6 +26,7 @@ import { ParticleSystem } from './rendering/Particles';
 import {
   drawChest, drawEnemy, drawFloorTile, drawInitiate, drawShrine, drawStairs, drawTorch, drawWallTile, getEnemySize,
 } from './rendering/PixelArt';
+import { drawProps, placeProps, propCountFor, PropPlacement } from './rendering/sphereDecor';
 import { InputManager } from './input/InputManager';
 import { audio } from './systems/AudioSystem';
 
@@ -413,6 +414,11 @@ export class GameEngine {
   // sits on top of fading ghosts.
   private dashTrail: { x: number; y: number; facing: Vec; walkPhase: number; t: number }[] = [];
   private dashTrailAccum = 0;
+
+  // Cached per-room prop placements — recomputed on enterRoom so the
+  // deterministic layout stays stable across redraws of the same room.
+  private roomProps: PropPlacement[] = [];
+  private roomPropsForRoomId = -1;
 
   // Combo meter — successive hits within 1.2s pile a multiplier.
   // Resets on damage taken or 1.5s idle. Cap at 5.
@@ -3525,6 +3531,14 @@ export class GameEngine {
     }
     // Doors
     this.drawDoors();
+    // Per-sphere decorative props — pillars / hourglasses / runes /
+    // braziers / etc. Each sphere has its own kit of three prop kinds;
+    // placement is deterministic on the room seed so a cleared room
+    // looks the same when the player back-tracks through it. Props
+    // never spawn in the centre play zone or in doorway corridors,
+    // so they're purely visual identity without affecting combat.
+    const props = this.currentRoomProps();
+    drawProps(ctx, props, this.timeAlive);
     // Torches
     const torchT = this.timeAlive;
     for (let i = 1; i <= 4; i++) {
@@ -3565,6 +3579,19 @@ export class GameEngine {
         drag: 0.98,
       });
     }
+  }
+
+  /** Lazily compute the per-sphere prop placements for the current room.
+   *  Recompute only when the room changes — same seed, same layout, so
+   *  back-tracking through a cleared room shows the SAME prop pattern. */
+  private currentRoomProps(): PropPlacement[] {
+    if (this.roomPropsForRoomId !== this.currentRoom.id) {
+      const sphere = sphereForFloor(this.floor.number).id;
+      const count = propCountFor(this.currentRoom.type, sphere, this.currentRoom.seed);
+      this.roomProps = placeProps(sphere, this.currentRoom.seed, count);
+      this.roomPropsForRoomId = this.currentRoom.id;
+    }
+    return this.roomProps;
   }
 
   private drawOccultCircle(cx: number, cy: number, r: number): void {
@@ -4075,101 +4102,89 @@ export class GameEngine {
     const t = this.timeAlive;
     const flick = (seed: number): number => 0.86 + 0.14 * Math.sin(t * 6 + seed * 1.7);
 
-    // Multiply layer — pulls the room toward dusk. Atmosphere only;
-    // the base floor palette (~17 % brightness) gets shaded to ~12 %
-    // by this and is then lifted to readable by the screen pass below.
+    // Multiply layer — a SOFT mood tint, not a darkness pass. After two
+    // rounds of player complaints about "blinding glow", this layer no
+    // longer crushes the floor's brightness. The room reads as a lit
+    // dungeon with a faint cool tint; the light pools below add tiny
+    // localised warmth at torches / pickups, not big white halos.
     ctx.save();
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = 'rgb(170, 150, 195)';
+    ctx.fillStyle = 'rgb(215, 200, 230)';
     ctx.fillRect(0, 0, ROOM_W, ROOM_H);
     ctx.restore();
 
-    // Light pools — using "screen" compositing instead of "lighter"
-    // (additive). Screen formula `1 - (1-src)*(1-dest)` caps at 100 %
-    // brightness when lights overlap, so a torch + the player's lamp
-    // overlapping no longer clip to pure white and wash out the
-    // sprites underneath. This is the fix for the "blinding glow"
-    // that hid the player, enemies, and floor details.
+    // Light pools — small + tight + low alpha. Screen-blend so overlaps
+    // never clip. The goal is "this torch is lit; that pickup glows" —
+    // NOT "the room is dramatically lit." The vignette below carries
+    // the atmosphere; lights are accents, not the lighting.
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
 
-    // Wall torches — kept gently warm. Lower alphas than before
-    // because screen blending amplifies overlapping pools relative
-    // to additive; values tuned so two torches + a player lamp meet
-    // in the middle of the room without going chalk-white.
+    // Wall torches — tiny flame halos. Just enough to read as lit.
     for (let i = 1; i <= 4; i++) {
       const lx = (ROOM_W / 5) * i;
       const ly = 28;
       const f = flick(i);
-      this.paintLight(lx, ly, 95, '255, 215, 150', 0.38 * f);
-      this.paintLight(lx, ly, 150, sphereRgb, 0.14 * f);
+      this.paintLight(lx, ly, 42, '255, 215, 150', 0.22 * f);
     }
 
-    // The player carries a small lamp — wide enough to cover the
-    // fighting radius. The PLAYER SPRITE IS NO LONGER PAINTED
-    // UNDERNEATH this light: the render order now draws the player
-    // AFTER the lighting layer, so the lamp illuminates the area
-    // around the player without overwriting the body.
+    // Player lamp — removed as a bright pool. The player sprite is now
+    // drawn AFTER the lighting layer (layer 3), so the player is always
+    // visible. A faint warm halo just under the feet keeps the
+    // "carrying a lamp" feel without flooding the floor with white.
     if (this.dyingT < 0) {
       const p = this.player;
-      this.paintLight(p.pos.x, p.pos.y - 6, 100, '255, 225, 175', 0.42);
-      // Mid-warm halo, not a hot core — keeps the area readable
-      // without saturating the floor texture immediately around
-      // the player's feet.
-      this.paintLight(p.pos.x, p.pos.y - 6, 50, '255, 240, 200', 0.18);
-      // Cosmetic: Lamp Aura — sphere-tinted outer halo + faint
-      // breathing pulse. Toned down with the rest of the lighting.
+      this.paintLight(p.pos.x, p.pos.y - 6, 38, '255, 230, 175', 0.16);
+      // Cosmetic: Lamp Aura — sphere-tinted accent. Subtle.
       if (this.meta.cosmeticLampAura) {
         const sphereAccentRgb = hexToRgbString(sphereForFloor(this.floor.number).accent);
         const breathe = 0.7 + 0.3 * Math.sin(this.timeAlive * 1.8);
-        this.paintLight(p.pos.x, p.pos.y - 6, 92, sphereAccentRgb, 0.14 * breathe);
+        this.paintLight(p.pos.x, p.pos.y - 6, 56, sphereAccentRgb, 0.10 * breathe);
       }
     }
 
-    // Unopened chests glow gently to draw the eye.
+    // Unopened chests — a small mark, not a glow zone.
     const room = this.currentRoom;
     if (room.hasChest && !room.chestOpened) {
-      this.paintLight(ROOM_W / 2, ROOM_H / 2, 36, '244, 210, 122', 0.22);
+      this.paintLight(ROOM_W / 2, ROOM_H / 2, 22, '244, 210, 122', 0.16);
     }
 
-    // Pickups — every coin/essence/key/hp/mp casts its own micro-glow.
-    // Alphas dialled back from 0.45 to 0.30 because the screen-blend
-    // already pops them above the dusk floor without saturating.
+    // Pickups — each kind gets its own micro-glow. Very subtle now.
     for (const pk of this.pickups) {
       switch (pk.kind) {
-        case 'coin':    this.paintLight(pk.pos.x, pk.pos.y, 22, '244, 210, 122', 0.32); break;
-        case 'essence': this.paintLight(pk.pos.x, pk.pos.y, 24, '155, 108, 255', 0.32); break;
-        case 'hp':      this.paintLight(pk.pos.x, pk.pos.y, 26, '255, 122, 138', 0.32); break;
-        case 'mp':      this.paintLight(pk.pos.x, pk.pos.y, 26, '155, 108, 255', 0.32); break;
-        case 'key':     this.paintLight(pk.pos.x, pk.pos.y, 26, '108, 246, 229', 0.32); break;
-        case 'relic':   this.paintLight(pk.pos.x, pk.pos.y, 40, '244, 210, 122', 0.40); break;
-        case 'weapon':  this.paintLight(pk.pos.x, pk.pos.y, 36, '244, 210, 122', 0.32); break;
-        case 'spell':   this.paintLight(pk.pos.x, pk.pos.y, 36, '155, 108, 255', 0.32); break;
+        case 'coin':    this.paintLight(pk.pos.x, pk.pos.y, 14, '244, 210, 122', 0.22); break;
+        case 'essence': this.paintLight(pk.pos.x, pk.pos.y, 14, '155, 108, 255', 0.22); break;
+        case 'hp':      this.paintLight(pk.pos.x, pk.pos.y, 16, '255, 122, 138', 0.24); break;
+        case 'mp':      this.paintLight(pk.pos.x, pk.pos.y, 16, '155, 108, 255', 0.24); break;
+        case 'key':     this.paintLight(pk.pos.x, pk.pos.y, 16, '108, 246, 229', 0.24); break;
+        case 'relic':   this.paintLight(pk.pos.x, pk.pos.y, 26, '244, 210, 122', 0.32); break;
+        case 'weapon':  this.paintLight(pk.pos.x, pk.pos.y, 22, '244, 210, 122', 0.24); break;
+        case 'spell':   this.paintLight(pk.pos.x, pk.pos.y, 22, '155, 108, 255', 0.24); break;
       }
     }
 
-    // Boss arena — seven sphere-hued lamps around the room.
+    // Boss arena — keep the seven lamps as accent, but small.
     if (this.currentRoom.type === 'boss') {
       const cx = ROOM_W / 2, cy = ROOM_H / 2;
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
         const lx = cx + Math.cos(a) * 110;
         const ly = cy + Math.sin(a) * 80;
-        this.paintLight(lx, ly, 60, sphereRgb, 0.24 * flick(i * 3));
+        this.paintLight(lx, ly, 36, sphereRgb, 0.18 * flick(i * 3));
       }
     }
 
-    // Shrine glow — pulsing gold so the altar reads as sanctified.
+    // Shrine glow — a small pulsing accent at the altar.
     if (this.currentRoom.hasShrine && !this.currentRoom.shrineUsed) {
       const pulse = 0.85 + 0.15 * Math.sin(t * 3);
-      this.paintLight(ROOM_W / 2, ROOM_H / 2 + 8, 50, '244, 210, 122', 0.24 * pulse);
+      this.paintLight(ROOM_W / 2, ROOM_H / 2 + 8, 28, '244, 210, 122', 0.16 * pulse);
     }
 
-    // Active spell projectiles cast a tiny light each.
+    // Spell projectiles — small tracer light per active bolt.
     for (const pr of this.projectiles) {
       if (!pr.fromPlayer) continue;
       const rgb = hexToRgbString(pr.colour);
-      this.paintLight(pr.pos.x, pr.pos.y, 22, rgb, 0.30);
+      this.paintLight(pr.pos.x, pr.pos.y, 14, rgb, 0.20);
     }
 
     ctx.restore();
