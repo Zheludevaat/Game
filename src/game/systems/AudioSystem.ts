@@ -59,6 +59,46 @@ const SPHERE_TOP_VOICE: Record<string, { freq: number; type: OscillatorType; gai
   ogdoad:  { freq: 528, type: 'sine',     gain: 0.040 }, // bright octave above all
 };
 
+/**
+ * Per-sphere ambient COMPANION voice + modulation layered on top of
+ * the single SPHERE_TOP_VOICE. Without these the seven spheres differ
+ * only in fundamental frequency — same envelope, same texture, same
+ * lack of motion. Adding a companion voice (interval-tuned to the
+ * top) plus a slow LFO mod gives each sphere a distinct sonic palette:
+ * Moon shimmers cool, Mars beats martial, Saturn drones deep and slow.
+ *
+ * Companion = a second oscillator interval-tuned to the top voice.
+ * LFO        = slow detune modulation (depth = cents, rate = Hz).
+ *              Slower spheres (Saturn) get glacial LFOs; brighter
+ *              ones (Moon, Ogdoad) get faster shimmer.
+ */
+const SPHERE_COMPANION: Record<string, {
+  /** Frequency multiplier vs the SPHERE_TOP_VOICE.freq — 1.5 = perfect fifth, etc. */
+  ratio: number;
+  type: OscillatorType;
+  gain: number;
+  /** Optional slow detune LFO. Rate in Hz, depth in cents. */
+  lfoRate?: number;
+  lfoDepth?: number;
+}> = {
+  // Moon — open fifth above, slow bell shimmer
+  moon:    { ratio: 1.5,    type: 'triangle', gain: 0.015, lfoRate: 0.18, lfoDepth: 8 },
+  // Mercury — perfect fourth + faster shimmer (quicksilver tremor)
+  mercury: { ratio: 4 / 3,  type: 'sine',     gain: 0.018, lfoRate: 0.35, lfoDepth: 12 },
+  // Venus — major third (warm consonant)
+  venus:   { ratio: 5 / 4,  type: 'sine',     gain: 0.020, lfoRate: 0.16, lfoDepth: 6 },
+  // Sun — octave above (radiant doubling)
+  sun:     { ratio: 2.0,    type: 'triangle', gain: 0.018, lfoRate: 0.22, lfoDepth: 5 },
+  // Mars — minor second (dissonant beat), fast tremolo
+  mars:    { ratio: 17 / 16,type: 'sawtooth', gain: 0.015, lfoRate: 0.5,  lfoDepth: 16 },
+  // Jupiter — major third + slow swell (broad brass)
+  jupiter: { ratio: 5 / 4,  type: 'triangle', gain: 0.022, lfoRate: 0.12, lfoDepth: 4 },
+  // Saturn — tritone below (cold dissonance), very slow drift
+  saturn:  { ratio: 23 / 32,type: 'square',   gain: 0.016, lfoRate: 0.06, lfoDepth: 10 },
+  // Ogdoad — three-octave open fifth shimmer
+  ogdoad:  { ratio: 1.5,    type: 'sine',     gain: 0.030, lfoRate: 0.28, lfoDepth: 14 },
+};
+
 // Four-note arpeggios played on floor entry — gives each sphere a
 // theme cue the player can hum back. Frequencies are loosely tonal to
 // the sphere's TOP_VOICE so the stinger sits atop the drone.
@@ -199,6 +239,43 @@ export class AudioSystem {
       g.connect(this.musicGain);
       o.start(now);
       this.ambientNodes.push({ o, g });
+
+      // Companion voice + LFO modulation — turns the single-oscillator
+      // top voice into a distinct per-sphere sonic palette so Moon
+      // shimmers cool, Mars beats martial, Saturn drones deep and
+      // slow. Pure procedural extension of the existing top voice;
+      // no external samples needed.
+      const comp = SPHERE_COMPANION[sphereId];
+      if (comp) {
+        const co = this.ctx.createOscillator();
+        co.type = comp.type;
+        co.frequency.value = cfg.freq * comp.ratio;
+        const cg = this.ctx.createGain();
+        cg.gain.value = comp.gain;
+        co.connect(cg);
+        cg.connect(this.musicGain);
+        co.start(now);
+        this.ambientNodes.push({ o: co, g: cg });
+
+        // Optional slow detune LFO — modulates BOTH the top voice
+        // and the companion via shared oscillator → gain → detune.
+        if (comp.lfoRate && comp.lfoDepth) {
+          const lfo = this.ctx.createOscillator();
+          lfo.type = 'sine';
+          lfo.frequency.value = comp.lfoRate;
+          const lfoGain = this.ctx.createGain();
+          lfoGain.gain.value = comp.lfoDepth;
+          lfo.connect(lfoGain);
+          // Detune is in cents on AudioParam — wire to both voices so
+          // they breathe together instead of drifting apart.
+          lfoGain.connect(o.detune);
+          lfoGain.connect(co.detune);
+          lfo.start(now);
+          // Track for cleanup. Push the LFO + its gain so stopDungeonAmbience
+          // tears them down with the rest.
+          this.ambientNodes.push({ o: lfo, g: lfoGain });
+        }
+      }
     }
   }
 
