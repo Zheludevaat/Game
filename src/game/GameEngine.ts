@@ -32,6 +32,7 @@ import {
 import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
+import { ENEMIES, EnemyTypeId, scaledEnemyHp } from './data/enemies';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
 import {
@@ -1537,7 +1538,6 @@ export class GameEngine {
     const asc = Math.max(0, this.meta.ascensionLevel ?? 0);
     const hpMul = 1 + asc * 0.30;
     const dmgMul = 1 + asc * 0.20;
-    const lvl = (1 + (floor - 1) * 0.2) * hpMul;
     const e: Enemy = {
       id: nid(), type, visualKey: type,
       pos: { ...pos }, vel: { x: 0, y: 0 },
@@ -1550,78 +1550,44 @@ export class GameEngine {
       // bob in lock-step with itself.
       walkPhase: Math.random() * Math.PI * 2,
     };
-    switch (type) {
-      case 'lesserShade':
-        e.hp = e.maxHp = Math.round(16 * lvl); e.speed = 38; e.radius = 8; e.width = 8; e.height = 8; e.contactDamage = 6;
-        break;
-      case 'mercuryImp':
-        e.hp = e.maxHp = Math.round(10 * lvl); e.speed = 72; e.radius = 7; e.width = 8; e.height = 7; e.contactDamage = 5;
-        e.ai = { jitterTimer: 0.4, jitterDir: { x: 1, y: 0 } };
-        break;
-      case 'saltGolem':
-        e.hp = e.maxHp = Math.round(48 * lvl); e.speed = 24; e.radius = 11; e.width = 10; e.height = 9; e.contactDamage = 12;
-        break;
-      case 'lunarWisp':
-        e.hp = e.maxHp = Math.round(14 * lvl); e.speed = 32; e.radius = 7; e.width = 8; e.height = 7; e.contactDamage = 4;
-        e.state = 'chase';
-        break;
-      case 'saturnKnight':
-        e.hp = e.maxHp = Math.round(36 * lvl); e.speed = 42; e.radius = 10; e.width = 9; e.height = 9; e.contactDamage = 10;
-        break;
-      case 'serpentOfBrass':
-        e.hp = e.maxHp = Math.round(120 * (1 + (floor - 1) * 0.25)); e.speed = 46; e.radius = 14; e.width = 14; e.height = 9; e.contactDamage = 12;
-        e.isMiniBoss = true;
-        break;
-      case 'martyrBeacon':
-        e.hp = e.maxHp = Math.round(60 * lvl); e.speed = 22; e.radius = 10; e.width = 9; e.height = 9; e.contactDamage = 4;
-        break;
-      case 'umbralStalker':
-        // Faster + stealthier shade. Half-alpha drawn until it attacks.
-        e.hp = e.maxHp = Math.round(20 * lvl); e.speed = 56; e.radius = 8; e.width = 8; e.height = 8; e.contactDamage = 10;
-        break;
-      case 'mirrorTwin':
-        e.hp = e.maxHp = Math.round(18 * lvl); e.speed = 40; e.radius = 7; e.width = 8; e.height = 7; e.contactDamage = 6;
-        break;
-      case 'kronosianHerald':
-        // Heavier than salt golem; contact applies slow.
-        e.hp = e.maxHp = Math.round(54 * lvl); e.speed = 30; e.radius = 11; e.width = 10; e.height = 9; e.contactDamage = 10;
-        break;
-      case 'heliokrator':
-        e.hp = e.maxHp = Math.round(160 * (1 + (floor - 1) * 0.22)); e.speed = 52; e.radius = 14; e.width = 14; e.height = 9; e.contactDamage = 14;
-        e.isMiniBoss = true;
-        break;
-      case 'nikethron':
-        e.hp = e.maxHp = Math.round(220 * (1 + (floor - 1) * 0.20)); e.speed = 38; e.radius = 14; e.width = 14; e.height = 9; e.contactDamage = 16;
-        e.isMiniBoss = true;
-        break;
-      case 'wardenBoss':
-        e.hp = e.maxHp = Math.round(260 + 80 * (floor / 10)); e.speed = 28; e.radius = 18; e.width = 18; e.height = 16; e.contactDamage = 16;
-        e.isBoss = true;
-        e.phase = 1; e.phaseTimer = 0; e.pattern = 0;
-        break;
-      // Seven Wardens — stats come from the BossDef keyed by visualKey.
-      // Floor difficulty multiplier matches the original wardenBoss scaling.
-      case 'seleneBoss':
-      case 'hermesBoss':
-      case 'aphroditeBoss':
-      case 'heliosBoss':
-      case 'aresBoss':
-      case 'zeusBoss':
-      case 'kronosBoss': {
-        const def = wardenDefFromVisual(type);
-        if (def) {
-          e.hp = e.maxHp = Math.round(def.baseHp + def.baseHp * 0.3 * (floor / 10 - 1));
-          e.speed = def.speed;
-          e.radius = def.radius;
-          e.width = def.width;
-          e.height = def.height;
-          e.contactDamage = def.contactDamage;
-        }
-        e.isBoss = true;
-        e.phase = 1; e.phaseTimer = 0; e.pattern = 0;
-        break;
+
+    // Bosses still come from data/bosses.ts via the visualKey ↔
+    // wardenDefFromVisual path. Everything else is one data lookup.
+    if (type === 'wardenBoss') {
+      e.hp = e.maxHp = Math.round(260 + 80 * (floor / 10));
+      e.speed = 28; e.radius = 18; e.width = 18; e.height = 16; e.contactDamage = 16;
+      e.isBoss = true;
+      e.phase = 1; e.phaseTimer = 0; e.pattern = 0;
+    } else if (
+      type === 'seleneBoss' || type === 'hermesBoss' || type === 'aphroditeBoss'
+      || type === 'heliosBoss' || type === 'aresBoss' || type === 'zeusBoss'
+      || type === 'kronosBoss'
+    ) {
+      const def = wardenDefFromVisual(type);
+      if (def) {
+        e.hp = e.maxHp = Math.round(def.baseHp + def.baseHp * 0.3 * (floor / 10 - 1));
+        e.speed = def.speed;
+        e.radius = def.radius;
+        e.width = def.width;
+        e.height = def.height;
+        e.contactDamage = def.contactDamage;
+      }
+      e.isBoss = true;
+      e.phase = 1; e.phaseTimer = 0; e.pattern = 0;
+    } else {
+      const def = ENEMIES[type as EnemyTypeId];
+      if (def) {
+        e.hp = e.maxHp = scaledEnemyHp(def, floor, hpMul);
+        e.speed = def.speed;
+        e.radius = def.radius;
+        e.width = def.width;
+        e.height = def.height;
+        e.contactDamage = def.contactDamage;
+        if (def.isMiniBoss) e.isMiniBoss = true;
+        if (def.initAi) e.ai = def.initAi();
       }
     }
+
     if (isMiniBoss && !e.isBoss && !e.isMiniBoss) e.isMiniBoss = true;
     // Bosses scale a bit harder than mooks under ascension.
     if (e.isBoss) {
