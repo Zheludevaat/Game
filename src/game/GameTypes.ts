@@ -120,9 +120,11 @@ export type SpellId =
   | 'thunderSigil'
   | 'frostbiteRay'
   | 'sacredFlame'
-  | 'eclipseOrb';
+  | 'eclipseOrb'
+  | 'wrathSplinter'
+  | 'mirrorSigil';
 
-export type SpellKind = 'singleProjectile' | 'spread' | 'sigil';
+export type SpellKind = 'singleProjectile' | 'spread' | 'sigil' | 'reflectBuff';
 export type SpellVisual = 'orb' | 'shard' | 'flame' | 'sigil';
 
 export interface SpellDef {
@@ -148,6 +150,12 @@ export interface SpellDef {
   appliesStatus?: AppliesStatus;
   /** Heal player by this many HP for each enemy killed by this spell. */
   healOnKill?: number;
+  /** Charges granted by a reflectBuff spell — N enemy projectiles will
+   *  bounce back to the source while the buff is up. Ignored for other
+   *  kinds. */
+  reflectCharges?: number;
+  /** Duration of a self / buff-style cast (e.g. Mirror Sigil's window). */
+  buffDuration?: number;
   projColour: string;
   trailColour: string;
   projVisual: SpellVisual;

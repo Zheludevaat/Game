@@ -99,6 +99,8 @@ export interface HudSnapshot {
   ultimateName: string;
   ultimateGlyph: string;
   ultimateColour: string;
+  /** Remaining reflect charges from Mirror Sigil (0 = no ward). */
+  reflectCharges: number;
   // For game over
   alive: boolean;
 }
@@ -205,6 +207,11 @@ interface PlayerState {
   ultimateCd: number;
   /** Max cooldown — copied from the archetype's ultimate.cooldown on mount. */
   ultimateCdMax: number;
+  /** Charges remaining on a Mirror-Sigil-style reflect buff. Each enemy
+   *  projectile that hits the player while > 0 reflects with +damage. */
+  reflectCharges: number;
+  /** timeAlive after which the reflect buff lapses regardless of remaining charges. */
+  reflectExpiresAt: number;
 }
 
 interface Enemy {
@@ -651,6 +658,8 @@ export class GameEngine {
       pickupTally: 0,
       ultimateCd: 0,
       ultimateCdMax: a.ultimate.cooldown,
+      reflectCharges: 0,
+      reflectExpiresAt: 0,
     };
     this.tutorialStartPos = { x: this.player.pos.x, y: this.player.pos.y };
     this.grantRelic(a.startingRelic, true);
@@ -1913,10 +1922,37 @@ export class GameEngine {
     const pierce = sp.pierce + (p.relics.includes('emeraldTablet') ? 1 : 0);
     const homing = sp.seeking || p.relics.includes('serpentWand');
 
+    if (sp.kind === 'reflectBuff') {
+      // Self-cast: stack reflect charges + refresh expiry. Reads as a
+      // moonlit halo around the player. The reflect detection lives in
+      // updateProjectiles' enemy-projectile branch; it consumes a
+      // charge per intercepted bolt and bounces the projectile back
+      // with double damage.
+      p.reflectCharges = sp.reflectCharges ?? 3;
+      p.reflectExpiresAt = this.timeAlive + (sp.buffDuration ?? 8);
+      audio.sfx('shrine');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, 'MIRROR', sp.projColour);
+      if (!this.reducedParticles) {
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2;
+          this.particles.emit({
+            x: p.pos.x, y: p.pos.y - 4,
+            vx: Math.cos(a) * 90, vy: Math.sin(a) * 90,
+            life: 0.6, maxLife: 0.6, size: 1.4, colour: sp.projColour, drag: 0.85,
+          });
+        }
+      }
+      return;
+    }
+
     if (sp.kind === 'sigil') {
-      // Place a sigil where the player faces (within sigilRange)
-      const sx = p.pos.x + dir.x * (sp.sigilRange ?? 60);
-      const sy = p.pos.y + dir.y * (sp.sigilRange ?? 60);
+      // Place a sigil where the player faces (within sigilRange).
+      // sigilRange of 0 (Wrath Splinter) lands the sigil at the caster
+      // — sigilDelay of 0 fires it instantly, giving the spell its
+      // panic-button identity.
+      const range = sp.sigilRange ?? 60;
+      const sx = range === 0 ? p.pos.x : p.pos.x + dir.x * range;
+      const sy = range === 0 ? p.pos.y : p.pos.y + dir.y * range;
       const sigil: SigilHazard = {
         pos: { x: sx, y: sy },
         timer: 0,
@@ -3499,6 +3535,25 @@ export class GameEngine {
         }
         const d = Math.hypot(this.player.pos.x - pr.pos.x, this.player.pos.y - pr.pos.y);
         if (d < pr.radius + PLAYER_RADIUS) {
+          // Mirror Sigil ward — while the buff is up and charges remain,
+          // the next enemy bolt bounces back instead of damaging the
+          // caster. One charge spent per intercept.
+          const p = this.player;
+          if (p.reflectCharges > 0 && this.timeAlive < p.reflectExpiresAt) {
+            p.reflectCharges -= 1;
+            pr.fromPlayer = true;
+            pr.vel.x *= -1.4; pr.vel.y *= -1.4;
+            pr.colour = '#cdf6ff';
+            pr.trailColour = '#6cf6e5';
+            pr.damage *= 2;
+            this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'REFLECT', '#cdf6ff');
+            if (!this.reducedParticles) {
+              this.particles.burst(pr.pos.x, pr.pos.y, 10, {
+                colour: '#cdf6ff', life: 0.4, maxLife: 0.4, drag: 0.86,
+              });
+            }
+            continue;
+          }
           if (this.tryParry({ kind: 'projectile', projectile: pr })) {
             // Reflected — leave the projectile in the world, now owned by the player.
             continue;
@@ -5329,6 +5384,7 @@ export class GameEngine {
       ultimateName: this.archetype.ultimate.name,
       ultimateGlyph: this.archetype.ultimate.glyph,
       ultimateColour: this.archetype.ultimate.colour,
+      reflectCharges: this.timeAlive < p.reflectExpiresAt ? p.reflectCharges : 0,
       alive: !this.dead,
     });
   }

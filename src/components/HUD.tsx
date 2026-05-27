@@ -339,8 +339,10 @@ function UltimateIndicator({ hud }: { hud: HudSnapshot }): JSX.Element {
   );
 }
 
-function ConsumableStrip({ hud }: { hud: HudSnapshot }): JSX.Element | null {
-  if (!hud.consumables || hud.consumables.length === 0) {
+function ConsumableStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
+  const hasItems = hud.consumables && hud.consumables.length > 0;
+  const buffs = hud.freeNextSpell || hud.reflectCharges > 0;
+  if (!hasItems && !buffs) {
     return (
       <div style={{
         marginTop: 6, fontSize: 9, color: 'var(--bone)', opacity: 0.55, letterSpacing: '0.16em',
@@ -350,10 +352,12 @@ function ConsumableStrip({ hud }: { hud: HudSnapshot }): JSX.Element | null {
     );
   }
   return (
-    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-      <span style={{ fontSize: 9, color: 'var(--bone)', opacity: 0.75, letterSpacing: '0.18em', marginRight: 2 }}>
-        [G / H]
-      </span>
+    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+      {hasItems && (
+        <span style={{ fontSize: 9, color: 'var(--bone)', opacity: 0.75, letterSpacing: '0.18em', marginRight: 2 }}>
+          [G / H]
+        </span>
+      )}
       {hud.consumables.map((slot, i) => {
         const def = CONSUMABLES[slot.id];
         const selected = i === hud.consumableIdx;
@@ -391,6 +395,20 @@ function ConsumableStrip({ hud }: { hud: HudSnapshot }): JSX.Element | null {
           }}
         >
           ECHO
+        </span>
+      )}
+      {hud.reflectCharges > 0 && (
+        <span
+          title={`Mirror Sigil — ${hud.reflectCharges} reflect${hud.reflectCharges === 1 ? '' : 's'} ready`}
+          style={{
+            fontSize: 9,
+            color: '#cdf6ff',
+            letterSpacing: '0.18em',
+            marginLeft: 6,
+            textShadow: '0 0 6px #cdf6ff88',
+          }}
+        >
+          MIRROR ×{hud.reflectCharges}
         </span>
       )}
     </div>
