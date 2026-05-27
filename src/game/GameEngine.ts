@@ -512,6 +512,9 @@ export class GameEngine {
   /** Boss Rush mode — descend +10 each clear, full heal between fights.
    *  Set from EngineConfig.bossRushMode on mount. */
   private bossRushMode = false;
+  /** timeAlive of the last dotTick SFX play — throttle so stacked DoT
+   *  doesn't sound like a machine gun. */
+  private lastDotTickSfx = -1;
 
   // Cached per-room prop placements — recomputed on enterRoom so the
   // deterministic layout stays stable across redraws of the same room.
@@ -3367,6 +3370,12 @@ export class GameEngine {
     p.flash = Math.max(p.flash, 0.08);
     this.lastDamageSource = source;
     this.spawnDamageNumber(p.pos.x + (Math.random() - 0.5) * 6, p.pos.y - 8, `${dmg}`, '#ff7a3a');
+    // Audio feedback for stacking DoT — throttled to one play per
+    // half-second so a 3-stack burn doesn't fire continuously.
+    if (this.timeAlive - this.lastDotTickSfx > 0.5) {
+      this.lastDotTickSfx = this.timeAlive;
+      audio.sfx('dotTick');
+    }
   }
 
   /** Attempt to parry an incoming hit. If the player is within the

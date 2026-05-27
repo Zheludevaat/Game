@@ -1,7 +1,7 @@
 export type SfxName =
   | 'menu' | 'attack' | 'dash' | 'spell' | 'enemyHit' | 'playerHit'
   | 'chest' | 'shrine' | 'descend' | 'bossWarn' | 'bossDeath' | 'pickup'
-  | 'doorLock' | 'doorOpen' | 'crit';
+  | 'doorLock' | 'doorOpen' | 'crit' | 'dotTick';
 
 interface VoiceSpec {
   type: OscillatorType;
@@ -341,6 +341,16 @@ export class AudioSystem {
       case 'doorLock':  this.playLayered([{ type: 'sawtooth', freq: 100, end: 50,  attack: 0.01,  decay: 0.20, peak: 0.25 }]); break;
       case 'doorOpen':  this.playLayered([{ type: 'sine',     freq: 440, end: 880, attack: 0.02,  decay: 0.30, peak: 0.20 }]); break;
       case 'menu':      this.playLayered([{ type: 'sine',     freq: 660, end: 990, attack: 0.01,  decay: 0.15, peak: 0.10 }]); break;
+      // DoT tick — a soft hiss when a burn / poison tick deals damage.
+      // Quiet on purpose: the player is bleeding HP, not taking a hit.
+      // The engine throttles to one play per 0.5 s so a 3-stack burn
+      // doesn't sound like a machine gun.
+      case 'dotTick':
+        this.playLayered([
+          { type: 'sawtooth', freq: 320, end: 180, attack: 0.005, decay: 0.10, peak: 0.06 },
+          { type: 'square',   freq: 1200,end: 800, attack: 0.005, decay: 0.08, peak: 0.04 },
+        ]);
+        break;
     }
   }
 }
