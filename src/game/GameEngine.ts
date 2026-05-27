@@ -856,6 +856,15 @@ export class GameEngine {
     return RELIC_IDS.filter((id) => !owned.has(id));
   }
 
+  /** True when opening a lock should NOT consume a key — Key of the
+   *  Gate procs (35 %, or 100 % via Cartographer's Key synergy) save
+   *  it. Used for both chest unlock and door unlock paths. */
+  private shouldKeepKey(): boolean {
+    if (!this.player.relics.includes('keyOfTheGate')) return false;
+    const chance = this.hasSynergy('cartographersKey') ? 1.0 : RELIC.keyOfTheGateChance;
+    return Math.random() < chance;
+  }
+
   /** Side effects that fire on any player-source critical hit — Pulse
    *  Heart heal + Pulse Crown bonus drop. Inlined twice (melee + spell
    *  projectile) before; now shared. */
@@ -2428,8 +2437,7 @@ export class GameEngine {
       const cx = ROOM_W / 2, cy = ROOM_H / 2 + 4;
       if (dist(p.pos, { x: cx, y: cy }) < 36) {
         if (room.chestLocked) {
-          const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : RELIC.keyOfTheGateChance;
-          const consume = !(p.relics.includes('keyOfTheGate') && Math.random() < keyChance);
+          const consume = !this.shouldKeepKey();
           if (p.keys <= 0) {
             this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'LOCKED', DAMAGE_COLOURS.error);
             return;
@@ -4522,8 +4530,7 @@ export class GameEngine {
     if (!next) return;
     // Locked rooms cost a key
     if (next.type === 'locked' && !next.visited) {
-      const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : RELIC.keyOfTheGateChance;
-      const useKey = !(this.player.relics.includes('keyOfTheGate') && Math.random() < keyChance);
+      const useKey = !this.shouldKeepKey();
       if (this.player.keys <= 0) {
         // Push back
         this.player.pos.x = clamp(p.x, ROOM_MARGIN + 4, ROOM_W - ROOM_MARGIN - 4);
