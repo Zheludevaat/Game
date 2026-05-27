@@ -2,6 +2,7 @@ import { RNG, hashSeed } from '../math/rng';
 import { Floor, Room, RoomType } from '../GameTypes';
 import { pickRoomName } from '../data/roomNames';
 import { sphereForFloor, SphereId } from '../data/spheres';
+import { npcForSphere } from '../data/npcs';
 
 /** Per-sphere modifier to the base room count. Mercury sprawls,
  *  Sun keeps it tight, Saturn fragments. */
@@ -170,6 +171,17 @@ export function generateFloor(opts: GenOptions): Floor {
     r.type = 'trap';
     r.name = pickRoomName('trap', rng);
     r.cleared = true;       // no enemy combat — only the hazard grid
+    r.enemiesSpawned = true;
+  }
+  // Sanctuary — non-hostile chamber hosting the sphere's wandering NPC.
+  // ~25 % per floor in spheres that authored a wanderer, capped to 1.
+  // Pre-cleared so combat doors never close.
+  const sphereId = sphereForFloor(floor).id;
+  if (others.length && npcForSphere(sphereId) && rng.chance(0.25)) {
+    const r = others.pop()!;
+    r.type = 'sanctuary';
+    r.name = pickRoomName('sanctuary', rng);
+    r.cleared = true;
     r.enemiesSpawned = true;
   }
   // MiniBoss on floor%5==0

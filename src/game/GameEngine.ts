@@ -19,6 +19,7 @@ import {
 import {
   ShrineVariant, pickShrineVariant, shrineDisplayName,
 } from './data/shrines';
+import { NPCS, NpcDef, npcForSphere } from './data/npcs';
 import {
   STATUS_CONFIG, StatusEffect, StatusEffectKind,
   applyStatusEffect, tickStatusEffects, hasStatus, absorbWithShield,
@@ -310,6 +311,25 @@ interface Pickup {
   life: number;
 }
 
+interface NpcEntity {
+  id: number;
+  defId: string;
+  pos: Vec;
+  /** Idle bob / sway phase. */
+  phase: number;
+  /** timeAlive of the next passive-gift tick. */
+  nextPassiveAt: number;
+  /** Cumulative seconds the player has spent within passive radius —
+   *  required minimum is one full `every` interval before the first
+   *  gift, so brushing past doesn't pay out. */
+  proximityT: number;
+  /** True once the player has been close enough to hear the ambient
+   *  line. Suppresses re-display on later visits. */
+  spokenAmbient: boolean;
+  /** Index into ambientLines to pick a deterministic line for this NPC. */
+  ambientIdx: number;
+}
+
 interface Familiar {
   id: number;
   /** Live world position — orbits the player via orbitPhase. */
@@ -481,6 +501,7 @@ export class GameEngine {
   private pickups: Pickup[] = [];
   private sigils: SigilHazard[] = [];
   private familiars: Familiar[] = [];
+  private npcs: NpcEntity[] = [];
   private hazards: Hazard[] = [];
   private particles = new ParticleSystem();
 
@@ -1193,6 +1214,7 @@ export class GameEngine {
     this.pickups = [];
     this.sigils = [];
     this.familiars = [];
+    this.npcs = [];
     this.bossSnapshot = null;
     this.bossBannerTimer = 0;
     this.roomClearEffects = [];
@@ -1253,6 +1275,7 @@ export class GameEngine {
     this.projectiles = [];
     this.sigils = [];
     this.familiars = [];
+    this.npcs = [];
     this.enemies = [];
     this.pickups = [];
     this.hazards = [];
@@ -1270,6 +1293,30 @@ export class GameEngine {
     // Spawn content
     if (!room.cleared) {
       this.spawnRoomContent(room);
+    }
+    // Sanctuary rooms host the sphere's wandering NPC — populate one
+    // each time the player enters so a re-entry never strands an empty
+    // chamber. Deterministic on room.seed so the NPC always stands in
+    // the same spot. Skipped if no NPC is authored for this sphere.
+    if (room.type === 'sanctuary') {
+      const sphere = sphereForFloor(this.floor.number).id;
+      const def = npcForSphere(sphere);
+      if (def) {
+        const seedRng = new RNG(room.seed ^ 0x4e7c);
+        const ambientIdx = def.ambientLines && def.ambientLines.length
+          ? seedRng.int(0, def.ambientLines.length)
+          : 0;
+        this.npcs.push({
+          id: nid(),
+          defId: def.id,
+          pos: { x: ROOM_W / 2, y: ROOM_H / 2 + 4 },
+          phase: seedRng.next() * Math.PI * 2,
+          nextPassiveAt: 0,
+          proximityT: 0,
+          spokenAmbient: false,
+          ambientIdx,
+        });
+      }
     }
     this.cameraDest = {
       x: clamp(this.player.pos.x - VIRTUAL_W / 2, 0, ROOM_W - VIRTUAL_W),
@@ -1579,6 +1626,7 @@ export class GameEngine {
       this.updatePickups(dt);
       this.updateSigils(dt);
       this.updateFamiliars(dt);
+      this.updateNpcs(dt);
       this.updateDelayedActions(dt);
       this.updateHazards(dt);
     }
@@ -4075,6 +4123,60 @@ export class GameEngine {
     }
   }
 
+  /** Tick non-hostile NPCs: idle phase + passive-gift cadence. The
+   *  player drops the proximity timer when out of range so a momentary
+   *  brush past doesn't count. */
+  private updateNpcs(dt: number): void {
+    if (this.npcs.length === 0) return;
+    const p = this.player;
+    for (const npc of this.npcs) {
+      const def = NPCS[npc.defId];
+      if (!def) continue;
+      npc.phase += dt * 0.9;
+      // Ambient line — surface as a floating note the first time the
+      // player walks within range.
+      if (!npc.spokenAmbient && def.ambientLines && def.ambientLines.length) {
+        const d = Math.hypot(p.pos.x - npc.pos.x, p.pos.y - npc.pos.y);
+        if (d < 72) {
+          const line = def.ambientLines[npc.ambientIdx % def.ambientLines.length];
+          npc.spokenAmbient = true;
+          this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, line, def.colour);
+        }
+      }
+      // Passive gift — accumulate proximity time, fire when interval met.
+      const pas = def.passive;
+      if (pas) {
+        const d = Math.hypot(p.pos.x - npc.pos.x, p.pos.y - npc.pos.y);
+        if (d < pas.radius) {
+          npc.proximityT += dt;
+          if (npc.proximityT >= pas.every) {
+            npc.proximityT = 0;
+            // Drop the gift as a normal pickup in front of the NPC so
+            // the player walks into it. Reuses the existing magnet +
+            // pickup-sparkle pipeline.
+            const kind: Pickup['kind'] = pas.kind === 'essence' ? 'essence'
+              : pas.kind === 'mp' ? 'mp'
+              : pas.kind === 'hp' ? 'hp' : 'coin';
+            this.pickups.push({
+              id: nid(),
+              pos: { x: npc.pos.x + 6, y: npc.pos.y + 6 },
+              kind, value: pas.amount, life: 8,
+            });
+            if (!this.reducedParticles) {
+              this.particles.burst(npc.pos.x, npc.pos.y, 8, {
+                colour: def.colour, life: 0.4, maxLife: 0.4, drag: 0.86,
+              });
+            }
+          }
+        } else {
+          // Player wandered off — decay slowly so the player can take
+          // a half-second pause without resetting the whole interval.
+          npc.proximityT = Math.max(0, npc.proximityT - dt * 0.5);
+        }
+      }
+    }
+  }
+
   private handleRoomTransition(): void {
     const p = this.player.pos;
     const cur = this.currentRoom;
@@ -4289,6 +4391,7 @@ export class GameEngine {
     // painted by drawLighting), but the player sprite is no longer
     // OVERPAINTED by it.
     this.drawAura();
+    this.drawNpcs();
     this.drawPlayer();
     this.drawFamiliars();
     this.drawProjectiles();
@@ -5464,6 +5567,62 @@ export class GameEngine {
     ctx.arc(p.pos.x, p.pos.y - 4, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+  }
+
+  /** Draw the in-room sanctuary NPC. Per-id sprite with a soft halo
+   *  in the NPC's colour. Reed-Cutter renders as a kneeling figure
+   *  with a sickle; later wanderers each get their own branch. */
+  private drawNpcs(): void {
+    if (this.npcs.length === 0) return;
+    const ctx = this.ctx;
+    for (const npc of this.npcs) {
+      const def = NPCS[npc.defId];
+      if (!def) continue;
+      const bob = Math.sin(npc.phase) * 1.2;
+      const x = npc.pos.x;
+      const y = npc.pos.y + bob;
+      // Soft sphere-coloured halo
+      const rgb = hexToRgbString(def.colour);
+      const halo = ctx.createRadialGradient(x, y, 1, x, y, 24);
+      halo.addColorStop(0, `rgba(${rgb}, 0.35)`);
+      halo.addColorStop(1, `rgba(${rgb}, 0)`);
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 24, y - 24, 48, 48);
+      // ground shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x - 6, y + 6, 12, 2);
+      // Reed-Cutter — kneeling silhouette, sickle, reed bundle. Other
+      // wanderers' sprites can branch here as they land.
+      if (def.id === 'reedCutter') {
+        // Robe body
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x - 5, y - 2, 10, 8);
+        // Hood
+        ctx.fillStyle = '#231142';
+        ctx.fillRect(x - 4, y - 7, 8, 4);
+        // Gold rim
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 4, y - 7, 8, 1);
+        // Face shadow
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 3, y - 5, 6, 2);
+        // Sickle — bronze blade leaning across the lap
+        ctx.fillStyle = '#a4faf0';
+        ctx.fillRect(x + 4, y + 1, 4, 1);
+        ctx.fillRect(x + 7, y - 1, 1, 3);
+        // Reed bundle at side
+        ctx.fillStyle = '#cdf6ff';
+        ctx.fillRect(x - 9, y + 2, 3, 4);
+        ctx.fillStyle = '#dac8ff';
+        ctx.fillRect(x - 9, y + 2, 3, 1);
+      } else {
+        // Fallback — small robed silhouette so an unauthored NPC still renders.
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x - 4, y - 4, 8, 10);
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 3, y - 6, 6, 3);
+      }
+    }
   }
 
   /** Render the orbiting familiars — a small skull-like silhouette

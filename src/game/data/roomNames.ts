@@ -21,6 +21,7 @@ const NAMES: Record<RoomType, string[]> = {
   miniBoss: ['Serpentine Chamber', 'Brass Crucible', 'The Caduceus Ring'],
   boss: ['Sanctum of the First Lamp', 'Sphere of the Warden', 'The Crowned Abyss'],
   trap: ['Hall of Snares', 'Engine of Salt', 'Spiked Concourse', 'The Mason\'s Folly'],
+  sanctuary: ['Quiet Cloister', 'Reedlit Chamber', 'Garlanded Refuge', 'Sigil of Rest'],
 };
 
 export function pickRoomName(type: RoomType, rng: RNG): string {

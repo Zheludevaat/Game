@@ -17,6 +17,17 @@ export interface NpcDef {
   interaction: NpcInteraction;
   /** Hint colour for the portrait outline + caption tag. */
   colour: string;
+  /** Ambient lines surfaced as floating text over the NPC the first
+   *  time the player walks within range. */
+  ambientLines?: string[];
+  /** Passive proximity gift — fires while the player stands within
+   *  radius for at least `every` seconds. Reed-Cutter style. */
+  passive?: {
+    kind: 'essence' | 'mp' | 'hp' | 'coin';
+    amount: number;
+    radius: number;
+    every: number;
+  };
 }
 
 export const NPCS: Record<string, NpcDef> = {
@@ -28,7 +39,29 @@ export const NPCS: Record<string, NpcDef> = {
     interaction: 'full',
     colour: '#ffe6a3',
   },
+  reedCutter: {
+    id: 'reedCutter',
+    name: 'The Reed-Cutter',
+    title: 'Patient of the Moon',
+    sphere: 'moon',
+    interaction: 'ambient',
+    colour: '#cdf6ff',
+    ambientLines: [
+      '"The tide does not ask."',
+      '"Reeds remember the moon."',
+      '"Stay a moment. The water listens."',
+    ],
+    passive: { kind: 'essence', amount: 1, radius: 40, every: 2.0 },
+  },
 };
+
+/** Pick the wandering NPC for a given sphere — null if no in-run NPC
+ *  is authored for that sphere yet. Each sphere gets at most one
+ *  wanderer per the docs/npcs.md plan. */
+export function npcForSphere(sphereId: SphereId): NpcDef | null {
+  if (sphereId === 'moon') return NPCS.reedCutter;
+  return null;
+}
 
 /** A single dialogue line — speaker line plus an optional follow-up
  *  string the menu uses to label the "next" advance button. */
