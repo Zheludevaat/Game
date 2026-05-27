@@ -846,7 +846,7 @@ export class GameEngine {
       if (id === 'crownedVessel') {
         this.player.mp = this.player.maxMp;
       }
-      audio.sfx('shrine');
+      audio.sfx('synergy');
       this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 22, '✦ COMBINATION ✦', '#ffe6a3');
       this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 12, def.name, def.colour);
       if (!this.reducedParticles) {
@@ -1094,7 +1094,12 @@ export class GameEngine {
     const p = this.player;
     const u = this.archetype.ultimate;
     p.ultimateCd = p.ultimateCdMax;
-    audio.sfx('shrine');
+    // Per-archetype ultimate SFX so each one has its own tonal
+    // signature — the cast never sounds like a shrine confirm.
+    const ultSfx = u.id === 'wordOfPower'  ? 'ultimateMagus'
+                : u.id === 'lanternFlare' ? 'ultimateHermit'
+                : 'ultimateStar';
+    audio.sfx(ultSfx);
     this.spawnDamageNumber(p.pos.x, p.pos.y - 22, u.name.toUpperCase(), u.colour);
     if (!this.reducedParticles) {
       this.particles.burst(p.pos.x, p.pos.y - 6, 24, {
@@ -1752,6 +1757,7 @@ export class GameEngine {
       if (sp && this.timeAlive >= p.auraNextTick) {
         p.auraNextTick = this.timeAlive + (sp.auraTickEvery ?? 0.32);
         const dmg = Math.max(1, Math.round(p.spellPower * p.damageMul * sp.damageMul));
+        let tickHit = false;
         for (const e of this.enemies) {
           if (e.hp <= 0) continue;
           const d = Math.hypot(e.pos.x - p.pos.x, e.pos.y - p.pos.y);
@@ -1759,7 +1765,12 @@ export class GameEngine {
           this.damageEnemy(e, dmg, {
             x: e.pos.x - p.pos.x, y: e.pos.y - p.pos.y,
           }, 20, { fromPlayer: true, appliesStatus: sp.appliesStatus, canCrit: false });
+          tickHit = true;
         }
+        // Audible cue only when the aura actually clips an enemy —
+        // an empty tick stays silent so a Magus running between fights
+        // doesn't trigger constant pips.
+        if (tickHit) audio.sfx('auraTick');
         if (!this.reducedParticles) {
           // Tick visual — soft pulse ring that fades within the tick window.
           for (let i = 0; i < 8; i++) {
@@ -2032,6 +2043,10 @@ export class GameEngine {
       });
     }
     audio.sfx('playerHit');
+    // Slow descending drone fills the 1.6 s death sequence so the
+    // world doesn't go silent while the lamp goes out. Also halts the
+    // dungeon ambience inside playDeathDrone so the drone reads clearly.
+    audio.playDeathDrone();
     // onGameOver is fired once dyingT crosses dyingDuration.
   }
 
@@ -2255,7 +2270,9 @@ export class GameEngine {
           spellId: sp.id,
         });
       }
-      audio.sfx('shrine');
+      // Summon reads as a CAST, not as a ward — use the spell SFX
+      // so the player associates it with offensive magic.
+      audio.sfx('spell');
       this.spawnDamageNumber(p.pos.x, p.pos.y - 16, 'SUMMON', sp.projColour);
       if (!this.reducedParticles) {
         for (let i = 0; i < 14; i++) {
@@ -2291,6 +2308,11 @@ export class GameEngine {
       (sigil as SigilHazard & { appliesStatus?: AppliesStatus }).appliesStatus = sp.appliesStatus;
       this.sigils.push(sigil);
       audio.sfx('spell');
+      // Wrath Splinter — instant-cast sigils (no range, no delay) layer
+      // a sharper crit-style transient on top of the soft spell sweep
+      // so the panic-button identity carries through the audio.
+      const isPanicCast = (sp.sigilRange ?? 60) === 0 && (sp.sigilDelay ?? 0.5) === 0;
+      if (isPanicCast) audio.sfx('crit');
       return;
     }
 
@@ -2960,7 +2982,15 @@ export class GameEngine {
   private updateWarden(e: Enemy, dt: number, n: Vec, d: number): void {
     if (e.phase == null) e.phase = 1;
     if (e.phase === 1 && e.hp / e.maxHp < 0.6) { e.phase = 2; this.camera.shakeT = 0.6; this.camera.shakeMag = 4; audio.sfx('bossWarn'); }
-    if (e.phase === 2 && e.hp / e.maxHp < 0.3) { e.phase = 3; this.camera.shakeT = 0.6; this.camera.shakeMag = 5; audio.sfx('bossWarn'); }
+    if (e.phase === 2 && e.hp / e.maxHp < 0.3) {
+      e.phase = 3;
+      this.camera.shakeT = 0.7; this.camera.shakeMag = 5.5;
+      audio.sfx('bossWarn');
+      // Phase-3 escalation — layer a bright crit ping on top of the
+      // bossWarn so "this is the final form" reads louder than the
+      // earlier 0.6 → 0.3 HP threshold.
+      audio.sfx('crit');
+    }
 
     // Slow drift toward player but keep distance
     const target = 80;
@@ -3569,6 +3599,10 @@ export class GameEngine {
     this.summary.roomsCleared += 1;
     this.roomClearEffects.push({ t: 0, duration: 0.9, x: ROOM_W / 2, y: ROOM_H / 2 });
     audio.sfx('doorOpen');
+    // Bright chime layered over the door-open sound so the moment of
+    // "this fight is over" reads as a small reward, not just a
+    // mechanical state flip.
+    audio.sfx('roomClear');
     this.particles.burst(ROOM_W / 2, ROOM_H / 2, 36, {
       colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.92,
     });

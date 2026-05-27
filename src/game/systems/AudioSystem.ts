@@ -1,7 +1,9 @@
 export type SfxName =
   | 'menu' | 'attack' | 'dash' | 'spell' | 'enemyHit' | 'playerHit'
   | 'chest' | 'shrine' | 'descend' | 'bossWarn' | 'bossDeath' | 'pickup'
-  | 'doorLock' | 'doorOpen' | 'crit' | 'dotTick';
+  | 'doorLock' | 'doorOpen' | 'crit' | 'dotTick'
+  | 'ultimateMagus' | 'ultimateHermit' | 'ultimateStar'
+  | 'synergy' | 'roomClear' | 'auraTick';
 
 interface VoiceSpec {
   type: OscillatorType;
@@ -442,7 +444,81 @@ export class AudioSystem {
           { type: 'square',   freq: 1200,end: 800, attack: 0.005, decay: 0.08, peak: 0.04 },
         ]);
         break;
+      // --- Archetype ultimates — each has its own tonal signature so
+      //     a player who hears "Magus Word of Power" never confuses it
+      //     with a shrine confirm or a synergy completion.
+      case 'ultimateMagus':
+        // High triangle starburst — three voices stacked an octave apart.
+        this.playLayered([
+          { type: 'triangle', freq: 1320, end: 1980, attack: 0.002, decay: 0.18, peak: 0.18 },
+          { type: 'triangle', freq: 1760, end: 2640, attack: 0.002, decay: 0.18, peak: 0.12 },
+          { type: 'sine',     freq: 2200, end: 3300, attack: 0.002, decay: 0.20, peak: 0.08 },
+        ]);
+        break;
+      case 'ultimateHermit':
+        // Bright bell flare — slower attack, longer decay, fundamental + fifth.
+        this.playLayered([
+          { type: 'sine', freq: 880,  end: 1320, attack: 0.006, decay: 0.45, peak: 0.20 },
+          { type: 'sine', freq: 1320, end: 1980, attack: 0.006, decay: 0.45, peak: 0.10 },
+        ]);
+        break;
+      case 'ultimateStar':
+        // Sine sweep — pitch climbs as the player vanishes into the step.
+        this.playLayered([
+          { type: 'sine',     freq: 220, end: 880, attack: 0.003, decay: 0.30, peak: 0.22 },
+          { type: 'triangle', freq: 440, end: 1320,attack: 0.003, decay: 0.30, peak: 0.12 },
+        ]);
+        break;
+      case 'synergy':
+        // Gold two-voice chord — major third interval. Distinguishes
+        // earned combinations from input actions.
+        this.playLayered([
+          { type: 'sine',     freq: 1320, end: 1320, attack: 0.005, decay: 0.30, peak: 0.20 },
+          { type: 'sine',     freq: 1980, end: 1980, attack: 0.005, decay: 0.30, peak: 0.14 },
+          { type: 'triangle', freq: 660,  end: 660,  attack: 0.005, decay: 0.32, peak: 0.10 },
+        ]);
+        break;
+      case 'roomClear':
+        // Bright pickup chime — major third up.
+        this.playLayered([
+          { type: 'sine', freq: 660,  end: 990,  attack: 0.005, decay: 0.30, peak: 0.16 },
+          { type: 'sine', freq: 990,  end: 1320, attack: 0.010, decay: 0.40, peak: 0.10 },
+        ]);
+        break;
+      case 'auraTick':
+        // Quiet sine pip — every aura damage tick. Mixed low so a
+        // stacked aura on a roomful of enemies doesn't drown the kit.
+        this.playLayered([
+          { type: 'sine', freq: 660, end: 660, attack: 0.003, decay: 0.08, peak: 0.04 },
+        ]);
+        break;
     }
+  }
+
+  /** Slow descending drone played during the death sequence. Sawtooth
+   *  body sinks from 80 → 30 Hz over ~1.2 s with a linear gain fade,
+   *  so the world feels like it's collapsing under the player as the
+   *  lamp goes out. Routes through musicGain so it sits under SFX. */
+  playDeathDrone(): void {
+    if (!this.unlocked || !this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const dur = 1.2;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(80, now);
+    o.frequency.linearRampToValueAtTime(30, now + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.28, now + 0.15);
+    g.gain.linearRampToValueAtTime(0.0, now + dur);
+    o.connect(g);
+    g.connect(this.musicGain);
+    o.start(now);
+    o.stop(now + dur + 0.05);
+    // Halt the dungeon ambience so the drone reads clearly. The
+    // ambience restarts naturally on the next floor / new run.
+    this.stopAmbience();
   }
 }
 
