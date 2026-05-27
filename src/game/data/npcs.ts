@@ -53,13 +53,43 @@ export const NPCS: Record<string, NpcDef> = {
     ],
     passive: { kind: 'essence', amount: 1, radius: 40, every: 2.0 },
   },
+  garlandkeep: {
+    id: 'garlandkeep',
+    name: 'The Garlandkeep',
+    title: 'Tender of Venus',
+    sphere: 'venus',
+    interaction: 'ambient',
+    colour: '#ff7a8a',
+    ambientLines: [
+      '"For the heart you have lost."',
+      '"The flower opens because it must."',
+      '"Mercy is a blade. Sharpen yours."',
+    ],
+    // Drops one HP-token every 10 s the player keeps her company.
+    passive: { kind: 'hp', amount: 12, radius: 42, every: 10.0 },
+  },
+  mute: {
+    id: 'mute',
+    name: 'The Mute',
+    title: 'Watcher of Kronos',
+    sphere: 'saturn',
+    interaction: 'ambient',
+    colour: '#9b6cff',
+    // Says nothing on purpose. The codex line tied to first contact
+    // lives in the codex layer; this NPC stays silent in-game.
+    ambientLines: [],
+    // Slow heal-over-time: +1 HP every second within range.
+    passive: { kind: 'hp', amount: 1, radius: 42, every: 1.0 },
+  },
 };
 
 /** Pick the wandering NPC for a given sphere — null if no in-run NPC
  *  is authored for that sphere yet. Each sphere gets at most one
  *  wanderer per the docs/npcs.md plan. */
 export function npcForSphere(sphereId: SphereId): NpcDef | null {
-  if (sphereId === 'moon') return NPCS.reedCutter;
+  if (sphereId === 'moon')   return NPCS.reedCutter;
+  if (sphereId === 'venus')  return NPCS.garlandkeep;
+  if (sphereId === 'saturn') return NPCS.mute;
   return null;
 }
 

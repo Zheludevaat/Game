@@ -5591,8 +5591,7 @@ export class GameEngine {
       // ground shadow
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fillRect(x - 6, y + 6, 12, 2);
-      // Reed-Cutter — kneeling silhouette, sickle, reed bundle. Other
-      // wanderers' sprites can branch here as they land.
+      // Reed-Cutter — kneeling silhouette, sickle, reed bundle.
       if (def.id === 'reedCutter') {
         // Robe body
         ctx.fillStyle = '#3b265c';
@@ -5615,6 +5614,43 @@ export class GameEngine {
         ctx.fillRect(x - 9, y + 2, 3, 4);
         ctx.fillStyle = '#dac8ff';
         ctx.fillRect(x - 9, y + 2, 3, 1);
+      } else if (def.id === 'garlandkeep') {
+        // Seated tender with garlands strewn around her. Pink halo gives
+        // the Venus chamber a warmer feel than the lunar reedlit one.
+        // Garland scatter (three petals on the ground)
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 12, y + 5, 2, 2);
+        ctx.fillRect(x + 9, y + 6, 2, 2);
+        ctx.fillRect(x + 3, y + 7, 2, 2);
+        // Robe body — rose-trimmed
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x - 5, y - 1, 10, 9);
+        // Garland draped across lap
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 6, y + 3, 12, 1);
+        // Hood / shawl
+        ctx.fillStyle = '#5b3a86';
+        ctx.fillRect(x - 4, y - 6, 8, 4);
+        // Face shadow
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 3, y - 4, 6, 2);
+        // Brow rose
+        ctx.fillStyle = '#ffe6a3';
+        ctx.fillRect(x - 1, y - 6, 2, 1);
+      } else if (def.id === 'mute') {
+        // Tall featureless silhouette — the hood swallows the face
+        // entirely; the figure is taller than the others.
+        // Robe body — extra-tall
+        ctx.fillStyle = '#1a0f2c';
+        ctx.fillRect(x - 5, y - 4, 10, 12);
+        // Deep hood
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 4, y - 10, 8, 7);
+        // Faint violet rim — the only colour on the silhouette
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 4, y - 10, 8, 1);
+        ctx.fillRect(x - 4, y - 3, 8, 1);
+        // No face — just absolute darkness in the hood. The void itself.
       } else {
         // Fallback — small robed silhouette so an unauthored NPC still renders.
         ctx.fillStyle = '#3b265c';
