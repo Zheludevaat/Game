@@ -206,7 +206,7 @@ export function MainMenu(p: Props): JSX.Element {
               return 'NEW';
             })()}
           >
-            Boss Rush {p.bossRushUnlocked ? '' : '(clear Ogdoad to unlock)'}
+            Boss Rush
           </PixelButton>
           <PixelButton
             onClick={p.onTimeAttack}
@@ -215,8 +215,13 @@ export function MainMenu(p: Props): JSX.Element {
           >
             Time Attack
           </PixelButton>
-          <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 4}>
-            Continue {p.resumeAvailable ? '' : '(none)'}
+          <PixelButton
+            onClick={p.onContinue}
+            disabled={!p.resumeAvailable}
+            focused={focus === 4}
+            badge={p.resumeAvailable ? undefined : 'NONE'}
+          >
+            Continue
           </PixelButton>
           <PixelButton onClick={p.onCodex} focused={focus === 5} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
             Codex Hermeticum

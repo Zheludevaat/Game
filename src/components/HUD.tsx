@@ -102,11 +102,11 @@ export function HUD({ hud, input, onShopBuy, onShopClose }: Props): JSX.Element 
         )}
       </div>
 
-      <div className="hud-bottom-right" style={{ maxWidth: 360 }}>
+      <div className="hud-bottom-right" style={{ maxWidth: 'min(360px, 60vw)' }}>
         {hud.prompts.map((t) => (
-          <div key={t} className="glow-text" style={{ fontSize: 11, marginBottom: 4 }}>{t}</div>
+          <div key={t} className="glow-text" style={{ fontSize: 11, marginBottom: 4, wordBreak: 'break-word' }}>{t}</div>
         ))}
-        {hud.hint && <div style={{ color: 'var(--gold-1)', fontSize: 10 }}>{hud.hint}</div>}
+        {hud.hint && <div style={{ color: 'var(--gold-1)', fontSize: 10, wordBreak: 'break-word' }}>{hud.hint}</div>}
       </div>
 
       {hud.showFloorBanner && hud.floorBannerText && (
@@ -436,7 +436,7 @@ function ConsumableStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
             }}
           >
             {def.glyph}
-            <div style={{ fontSize: 8, color: 'var(--bone)', opacity: 0.85 }}>
+            <div style={{ fontSize: 8, lineHeight: 1, marginTop: 1, color: 'var(--bone)', opacity: 0.85, textAlign: 'center' }}>
               ×{slot.count}
             </div>
           </div>

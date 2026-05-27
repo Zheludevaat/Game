@@ -242,13 +242,13 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
       const isWaiting = remapping === action;
       return (
         <div className={'settings-row' + focusedClass} onMouseEnter={() => setFocus(i)}>
-          <span className="settings-pad-label">{action}</span>
+          <span className="settings-pad-label">{PAD_LABELS[action] ?? action}</span>
           <button
             type="button"
             className="settings-remap-btn"
             onClick={() => remapAction(action)}
           >
-            {isWaiting ? 'PRESS A BUTTON…' : (GAMEPAD_BUTTON_NAMES[settings.gamepadMap[action]] ?? `Btn ${settings.gamepadMap[action]}`)}
+            {isWaiting ? 'PRESS A BUTTON…' : (GAMEPAD_BUTTON_NAMES[settings.gamepadMap[action]] ?? `Button ${settings.gamepadMap[action]}`)}
           </button>
         </div>
       );
