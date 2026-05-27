@@ -1294,13 +1294,14 @@ export class GameEngine {
     if (!room.cleared) {
       this.spawnRoomContent(room);
     }
-    // Sanctuary rooms host the sphere's wandering NPC — populate one
-    // each time the player enters so a re-entry never strands an empty
-    // chamber. Deterministic on room.seed so the NPC always stands in
-    // the same spot. Skipped if no NPC is authored for this sphere.
+    // Sanctuary rooms host either the sphere's wandering NPC or a
+    // universal one tagged on the room by the generator. Deterministic
+    // on room.seed so the NPC always stands in the same spot.
     if (room.type === 'sanctuary') {
       const sphere = sphereForFloor(this.floor.number).id;
-      const def = npcForSphere(sphere);
+      const def: NpcDef | null = room.sanctuaryNpcId
+        ? (NPCS[room.sanctuaryNpcId] ?? null)
+        : npcForSphere(sphere);
       if (def) {
         const seedRng = new RNG(room.seed ^ 0x4e7c);
         const ambientIdx = def.ambientLines && def.ambientLines.length
@@ -5760,6 +5761,33 @@ export class GameEngine {
         // Spearpoint glow
         ctx.fillStyle = def.colour;
         ctx.fillRect(x + 3, y - 11, 3, 2);
+      } else if (def.id === 'mendicant') {
+        // Hunched figure with an outstretched begging bowl, threadbare
+        // cloak with a teal stitched hem, eyes lit teal in the hood
+        // shadow. Universal — appears on any sphere.
+        // Cloak
+        ctx.fillStyle = '#1a0f2c';
+        ctx.fillRect(x - 4, y - 1, 8, 8);
+        // Stitched hem
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 4, y + 6, 8, 1);
+        // Hood
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 4, y - 6, 8, 5);
+        // Two glowing teal eyes
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 2, y - 4, 1, 1);
+        ctx.fillRect(x + 1, y - 4, 1, 1);
+        // Outstretched bowl (small dish to the side, slightly tilted)
+        ctx.fillStyle = '#3a2410';
+        ctx.fillRect(x + 4, y + 2, 4, 2);
+        ctx.fillStyle = '#5a3a18';
+        ctx.fillRect(x + 4, y + 1, 4, 1);
+        // A coin sometimes glints in the bowl
+        if ((Math.floor(this.timeAlive) + npc.id) % 4 === 0) {
+          ctx.fillStyle = '#f4d27a';
+          ctx.fillRect(x + 5, y + 1, 1, 1);
+        }
       } else if (def.id === 'penitent') {
         // Kneeling hooded figure, hands resting on a small lamp that
         // burns in the sphere's accent colour. The colour comes from

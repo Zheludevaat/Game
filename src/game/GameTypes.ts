@@ -209,6 +209,10 @@ export interface Room {
   hasShrine: boolean;
   shrineUsed: boolean;
   shrineKind?: ShrineKind;
+  /** For sanctuary rooms — id of the NpcDef the engine should spawn.
+   *  Empty / undefined means "pick by sphere via npcForSphere"; a
+   *  specific id (e.g. 'mendicant') overrides the sphere wanderer. */
+  sanctuaryNpcId?: string;
   name: string;
   // procedural decor seed
   seed: number;

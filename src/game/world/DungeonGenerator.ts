@@ -177,12 +177,26 @@ export function generateFloor(opts: GenOptions): Floor {
   // ~25 % per floor in spheres that authored a wanderer, capped to 1.
   // Pre-cleared so combat doors never close.
   const sphereId = sphereForFloor(floor).id;
+  let sanctuarySpawned = false;
   if (others.length && npcForSphere(sphereId) && rng.chance(0.25)) {
     const r = others.pop()!;
     r.type = 'sanctuary';
     r.name = pickRoomName('sanctuary', rng);
     r.cleared = true;
     r.enemiesSpawned = true;
+    sanctuarySpawned = true;
+  }
+  // Mendicant sanctuary — a rare independent roll on top. 7 % per
+  // floor, and only when the sphere sanctuary didn't already land
+  // (so a floor can't have two sanctuaries). The engine reads
+  // sanctuaryNpcId to know which NPC to populate.
+  if (others.length && !sanctuarySpawned && rng.chance(0.07)) {
+    const r = others.pop()!;
+    r.type = 'sanctuary';
+    r.name = pickRoomName('sanctuary', rng);
+    r.cleared = true;
+    r.enemiesSpawned = true;
+    r.sanctuaryNpcId = 'mendicant';
   }
   // MiniBoss on floor%5==0
   if (isMiniBoss && others.length) {

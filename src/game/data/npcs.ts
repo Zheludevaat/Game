@@ -149,6 +149,24 @@ export const NPCS: Record<string, NpcDef> = {
     // so the default ambient-line surfaced is filled in by the engine.
     ambientLines: [],
   },
+  mendicant: {
+    id: 'mendicant',
+    name: 'The Mendicant',
+    title: 'Beggar of the In-Between',
+    sphere: null,           // universal — appears on any sphere
+    interaction: 'ambient',
+    colour: '#6cf6e5',
+    ambientLines: [
+      '"For the lamp."',
+      '"Bless your descent."',
+      '"You should not have come."',
+      '"A coin spared is a coin remembered."',
+    ],
+    // Spare change — the player who lingers receives 1 essence every
+    // 4 s, sustained as long as they keep him company. Felt as "alms
+    // returned" rather than a vending transaction.
+    passive: { kind: 'essence', amount: 1, radius: 38, every: 4.0 },
+  },
 };
 
 /** Sphere-keyed lament spoken by the Penitent over a fallen Warden's
