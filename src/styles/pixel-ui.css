@@ -1,3 +1,32 @@
+/* Bundled subset of Noto Sans Symbols 2 (OFL) covering only the
+ * alchemical / astrological / weapon glyphs the game uses. Without
+ * this, several SMP alchemy characters (U+1F702 etc.) fall back to
+ * Color Emoji on iOS or `.notdef` on browsers with thin symbol
+ * font coverage, blowing the monochrome pixel aesthetic. See
+ * public/fonts/CREDITS.md. */
+@font-face {
+  font-family: 'AbyssGlyphs';
+  src: url('/fonts/abyss-glyphs.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+2604, U+2609, U+2620, U+263D-263F, U+2640, U+2642-2644, U+2646,
+    U+2665, U+2692-2696, U+269B, U+26A1, U+26B7,
+    U+271A, U+2726, U+2734, U+2744-2746, U+29D6,
+    U+1F525, U+1F5E1, U+1F6E1, U+1F702, U+1F70D, U+1F714,
+    U+1F738, U+1F73A, U+1FA93;
+}
+
+/* Apply to any glyph span — keeps emoji-presentation off (text style)
+ * so iOS doesn't colourize ☿ or ♀, and prefers AbyssGlyphs before any
+ * system fallback. Use as <span className="glyph">{glyph}</span>. */
+.glyph {
+  font-family: 'AbyssGlyphs', 'Segoe UI Symbol', 'Noto Sans Symbols 2', system-ui, sans-serif;
+  font-variant-emoji: text;
+  text-rendering: geometricPrecision;
+}
+
 .pixel-panel {
   position: relative;
   background:

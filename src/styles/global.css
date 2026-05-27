@@ -45,7 +45,11 @@ body,
   min-height: -webkit-fill-available;
   background: #000;
   color: var(--ink);
-  font-family: 'Iowan Old Style', 'Cambria', 'Georgia', serif;
+  /* AbyssGlyphs ships a subsetted Noto Sans Symbols 2 (~8 KB) and uses
+   * unicode-range so it ONLY intercepts the ~33 alchemical / weapon
+   * glyphs the game references. All other text continues to render in
+   * Iowan / Cambria / Georgia / serif. See public/fonts/CREDITS.md. */
+  font-family: 'AbyssGlyphs', 'Iowan Old Style', 'Cambria', 'Georgia', serif;
   letter-spacing: 0.02em;
   -webkit-font-smoothing: antialiased;
   /* iOS auto-adjusts text size on orientation change unless explicitly
