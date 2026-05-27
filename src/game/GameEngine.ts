@@ -1555,18 +1555,44 @@ export class GameEngine {
     const p = this.player;
     const room = this.currentRoom;
     if (this.tutorialActive) this.tutorialDidInteract = true;
-    // Stairs
+
+    // Diagnostic — fires whenever interact is pressed, regardless of
+    // whether anything was in range. Lets the user see in devtools
+    // why a press appears to "do nothing": it usually means there's
+    // no chest / shrine / exit nearby, or the player isn't standing
+    // close enough to the centre object.
+    const distToCentre = dist(p.pos, { x: ROOM_W / 2, y: ROOM_H / 2 });
+    // eslint-disable-next-line no-console
+    console.info(
+      '%c[interact] tryInteract',
+      'color: #ffe6a3',
+      {
+        roomType: room.type,
+        hasChest: room.hasChest, chestOpened: room.chestOpened,
+        hasShrine: room.hasShrine, shrineUsed: room.shrineUsed,
+        playerPos: `(${Math.round(p.pos.x)}, ${Math.round(p.pos.y)})`,
+        distFromRoomCentre: Math.round(distToCentre),
+        chestThreshold: 30, shrineThreshold: 28, stairsThreshold: 36,
+      },
+    );
+
+    // Stairs — generous range (36 px from room centre).
     if (room.type === 'exit' && this.isNearCenter(p.pos)) {
       this.descend();
       return;
     }
-    // Chest
+    // Chest — opens within 30 px of the chest position. Range bumped
+    // to 36 here so the player doesn't have to stand directly on it,
+    // matching the chest's visual footprint.
     if (room.hasChest && !room.chestOpened) {
       const cx = ROOM_W / 2, cy = ROOM_H / 2 + 4;
-      if (dist(p.pos, { x: cx, y: cy }) < 30) {
+      if (dist(p.pos, { x: cx, y: cy }) < 36) {
         if (room.chestLocked) {
           const consume = !(p.relics.includes('keyOfTheGate') && Math.random() < 0.35);
-          if (p.keys <= 0) return;
+          if (p.keys <= 0) {
+            this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'LOCKED', '#e23a4a');
+            return;
+          }
           if (consume) p.keys -= 1;
         }
         room.chestOpened = true;
@@ -1574,12 +1600,24 @@ export class GameEngine {
         return;
       }
     }
-    // Shrine
+    // Shrine — bumped to 34 px for the same reason.
     if (room.hasShrine && !room.shrineUsed) {
       const cx = ROOM_W / 2, cy = ROOM_H / 2 - 8;
-      if (dist(p.pos, { x: cx, y: cy }) < 28) {
+      if (dist(p.pos, { x: cx, y: cy }) < 34) {
         this.beginShrine(room.shrineKind!);
+        return;
       }
+    }
+    // Nothing in range — surface a transient hint so the player knows
+    // the press was registered. Useful both for diagnosing the
+    // "interact doesn't work" report (it DID fire, just nothing was
+    // close enough) and as general UX feedback.
+    if (
+      (room.hasChest && !room.chestOpened) ||
+      (room.hasShrine && !room.shrineUsed) ||
+      room.type === 'exit'
+    ) {
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'TOO FAR', '#9b6cff');
     }
   }
 
@@ -4666,14 +4704,16 @@ export class GameEngine {
     const room = this.currentRoom;
     const prompts: string[] = [];
     const hint = this.computeHint();
+    // Prompts use the same ranges tryInteract opens at, so the HUD
+    // hint appears exactly when pressing interact will do something.
     if (room.type === 'exit' && this.isNearCenter(p.pos)) prompts.push('Press Interact to descend');
     if (room.hasChest && !room.chestOpened) {
       const d = dist(p.pos, { x: ROOM_W / 2, y: ROOM_H / 2 + 4 });
-      if (d < 30) prompts.push(room.chestLocked ? `Locked chest — keys: ${p.keys}` : 'Press Interact to open');
+      if (d < 36) prompts.push(room.chestLocked ? `Locked chest — keys: ${p.keys}` : 'Press Interact to open');
     }
     if (room.hasShrine && !room.shrineUsed) {
       const d = dist(p.pos, { x: ROOM_W / 2, y: ROOM_H / 2 - 8 });
-      if (d < 28) prompts.push('Press Interact to commune');
+      if (d < 34) prompts.push('Press Interact to commune');
     }
     // Nearby weapon / spell / relic pickup — surface a stat preview so
     // the player can decide whether to swap before stepping on it.
