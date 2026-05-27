@@ -3,6 +3,7 @@ import { Floor, Room, RoomType } from '../GameTypes';
 import { pickRoomName } from '../data/roomNames';
 import { sphereForFloor, SphereId } from '../data/spheres';
 import { npcForSphere } from '../data/npcs';
+import { ROOM_SPAWN_CHANCE } from '../data/balance';
 
 /** Per-sphere modifier to the base room count. Mercury sprawls,
  *  Sun keeps it tight, Saturn fragments. */
@@ -141,7 +142,7 @@ export function generateFloor(opts: GenOptions): Floor {
     r.name = pickRoomName('treasure', rng);
     r.cleared = true;
     r.hasChest = true;
-    r.chestLocked = rng.chance(0.35);
+    r.chestLocked = rng.chance(ROOM_SPAWN_CHANCE.chestLock);
   }
   // Shrine room — 1 always
   if (others.length) {
@@ -153,7 +154,7 @@ export function generateFloor(opts: GenOptions): Floor {
     r.shrineKind = pickShrineKind(rng);
   }
   // Locked room — sometimes
-  if (others.length && rng.chance(0.6)) {
+  if (others.length && rng.chance(ROOM_SPAWN_CHANCE.locked)) {
     const r = others.pop()!;
     r.type = 'locked';
     r.name = pickRoomName('locked', rng);
@@ -166,7 +167,7 @@ export function generateFloor(opts: GenOptions): Floor {
   const sphereForTrap = sphereForFloor(floor).id;
   const sphereHasHazards =
     sphereForTrap !== 'moon' && sphereForTrap !== 'ogdoad';
-  if (others.length && sphereHasHazards && rng.chance(0.12)) {
+  if (others.length && sphereHasHazards && rng.chance(ROOM_SPAWN_CHANCE.trap)) {
     const r = others.pop()!;
     r.type = 'trap';
     r.name = pickRoomName('trap', rng);
@@ -178,7 +179,7 @@ export function generateFloor(opts: GenOptions): Floor {
   // Pre-cleared so combat doors never close.
   const sphereId = sphereForFloor(floor).id;
   let sanctuarySpawned = false;
-  if (others.length && npcForSphere(sphereId) && rng.chance(0.25)) {
+  if (others.length && npcForSphere(sphereId) && rng.chance(ROOM_SPAWN_CHANCE.sphereSanctuary)) {
     const r = others.pop()!;
     r.type = 'sanctuary';
     r.name = pickRoomName('sanctuary', rng);
@@ -190,7 +191,7 @@ export function generateFloor(opts: GenOptions): Floor {
   // exclusive with the sphere wanderer slot. Rarer than the Mendicant,
   // pricier per visit, but the only reliable source of consumables
   // outside chest drops.
-  if (others.length && !sanctuarySpawned && floor >= 5 && rng.chance(0.12)) {
+  if (others.length && !sanctuarySpawned && floor >= 5 && rng.chance(ROOM_SPAWN_CHANCE.lampwright)) {
     const r = others.pop()!;
     r.type = 'sanctuary';
     r.name = pickRoomName('sanctuary', rng);
@@ -203,7 +204,7 @@ export function generateFloor(opts: GenOptions): Floor {
   // floor, and only when no other sanctuary landed (so a floor can't
   // double up). The engine reads sanctuaryNpcId to know which NPC to
   // populate.
-  if (others.length && !sanctuarySpawned && rng.chance(0.07)) {
+  if (others.length && !sanctuarySpawned && rng.chance(ROOM_SPAWN_CHANCE.mendicant)) {
     const r = others.pop()!;
     r.type = 'sanctuary';
     r.name = pickRoomName('sanctuary', rng);
@@ -221,9 +222,9 @@ export function generateFloor(opts: GenOptions): Floor {
   }
   // Some enemy rooms also have chests
   for (const r of others) {
-    if (rng.chance(0.25)) {
+    if (rng.chance(ROOM_SPAWN_CHANCE.enemyRoomChest)) {
       r.hasChest = true;
-      r.chestLocked = rng.chance(0.2);
+      r.chestLocked = rng.chance(ROOM_SPAWN_CHANCE.enemyRoomChestLock);
     }
   }
 
@@ -233,7 +234,7 @@ export function generateFloor(opts: GenOptions): Floor {
   // Discovered in the engine skips secret rooms), so the player
   // discovers it by trying an unexpected door. Brass Ear still reveals
   // every cell since it's a meta-knowledge relic.
-  if (rng.chance(0.4)) {
+  if (rng.chance(ROOM_SPAWN_CHANCE.secret)) {
     const enemyRooms = [...grid.values()].filter((r) => r.type === 'enemy');
     shuffleInPlace(enemyRooms, rng);
     for (const candidate of enemyRooms) {

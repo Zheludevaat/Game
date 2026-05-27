@@ -33,6 +33,10 @@ import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
 import { ENEMIES, EnemyTypeId, scaledEnemyHp } from './data/enemies';
+import {
+  BOSS_RUSH_BOOST, MAGNET_RADIUS, HIT_PAUSE,
+  ULTIMATE_DAMAGE_MUL, SYNERGY, RELIC,
+} from './data/balance';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
 import {
@@ -718,17 +722,16 @@ export class GameEngine {
     // stat boost so the player isn't fighting Selene with floor-1 gear.
     if (this.bossRushMode) {
       const p = this.player;
-      // Tuned to roughly match a natural floor-10 player after relic /
-      // shrine pickups — the earlier +22/+22/+60/+40 stat boost was
-      // ~18% under-statted, making the first Warden fight RNG-dependent.
-      p.attack += 28;
-      p.spellPower += 28;
-      p.maxHp += 90;
+      // Stat boost values live in src/game/data/balance.ts so tuning
+      // is a one-line edit. See BOSS_RUSH_BOOST.
+      p.attack     += BOSS_RUSH_BOOST.attack;
+      p.spellPower += BOSS_RUSH_BOOST.spellPower;
+      p.maxHp      += BOSS_RUSH_BOOST.maxHp;
       p.hp = p.maxHp;
-      p.maxMp += 50;
+      p.maxMp      += BOSS_RUSH_BOOST.maxMp;
       p.mp = p.maxMp;
-      p.armor += 3;
-      p.luck += 2;
+      p.armor      += BOSS_RUSH_BOOST.armor;
+      p.luck       += BOSS_RUSH_BOOST.luck;
       this.goToFloor(10);
     } else {
       this.goToFloor(config.startingFloor ?? 1);
@@ -1144,7 +1147,7 @@ export class GameEngine {
             return da - db;
           })
           .slice(0, 3);
-        const dmg = Math.round(p.spellPower * p.damageMul * 1.8);
+        const dmg = Math.round(p.spellPower * p.damageMul * ULTIMATE_DAMAGE_MUL.wordOfPower);
         const baseSpeed = 200;
         const baseLife = 1.4;
         const aimedAngles = sources.map((e) => Math.atan2(e.pos.y - p.pos.y, e.pos.x - p.pos.x));
@@ -1203,7 +1206,7 @@ export class GameEngine {
         // 90 px radial stun + tickle damage. Stuns for 1.5 s, soft burn
         // for the brief flash. Reads as a defensive panic button.
         const radius = 90;
-        const flareDmg = Math.round(p.attack * p.damageMul * 0.6);
+        const flareDmg = Math.round(p.attack * p.damageMul * ULTIMATE_DAMAGE_MUL.lanternFlare);
         for (const e of this.enemies) {
           if (e.hp <= 0) continue;
           const d = Math.hypot(e.pos.x - p.pos.x, e.pos.y - p.pos.y);
@@ -1242,7 +1245,7 @@ export class GameEngine {
         const endX = clamp(p.pos.x + ux * dist, ROOM_MARGIN + 4, ROOM_W - ROOM_MARGIN - 4);
         const endY = clamp(p.pos.y + uy * dist, ROOM_MARGIN + 4, ROOM_H - ROOM_MARGIN - 4);
         // Line-segment vs circle for each enemy.
-        const stepDmg = Math.round(p.attack * p.damageMul * 1.6);
+        const stepDmg = Math.round(p.attack * p.damageMul * ULTIMATE_DAMAGE_MUL.astralStep);
         const lineDx = endX - startX;
         const lineDy = endY - startY;
         const lineLen2 = lineDx * lineDx + lineDy * lineDy || 1;
@@ -2124,7 +2127,7 @@ export class GameEngine {
       if (w.healOnKill && r.killed) this.healPlayer(w.healOnKill);
       if (p.relics.includes('pulseHeart') && r.isCrit) {
         this.healPlayer(this.hasSynergy('pulseCrown') ? 4 : 2);
-        if (this.hasSynergy('pulseCrown') && Math.random() < 0.15) {
+        if (this.hasSynergy('pulseCrown') && Math.random() < SYNERGY.pulseCrownHeartChance) {
           this.pickups.push({
             id: nid(),
             pos: { x: e.pos.x, y: e.pos.y },
@@ -2154,7 +2157,7 @@ export class GameEngine {
       case 'overhead':
         this.camera.shakeT = Math.max(this.camera.shakeT, 0.28);
         this.camera.shakeMag = Math.max(this.camera.shakeMag, 4.5);
-        this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + 0.08);
+        this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + HIT_PAUSE.crit);
         break;
       case 'flurry':
         // Each individual hit in a flurry produces a small punch — the
@@ -2409,7 +2412,7 @@ export class GameEngine {
       const cx = ROOM_W / 2, cy = ROOM_H / 2 + 4;
       if (dist(p.pos, { x: cx, y: cy }) < 36) {
         if (room.chestLocked) {
-          const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : 0.35;
+          const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : RELIC.keyOfTheGateChance;
           const consume = !(p.relics.includes('keyOfTheGate') && Math.random() < keyChance);
           if (p.keys <= 0) {
             this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'LOCKED', '#e23a4a');
@@ -2747,7 +2750,7 @@ export class GameEngine {
       let dotDmg = tickStatusEffects(e, dt, this.timeAlive);
       // Tar Bloom synergy — burning enemies take +50 % per-tick DoT.
       if (dotDmg > 0 && hasStatus(e, 'burn') && this.hasSynergy('tarBloom')) {
-        dotDmg *= 1.5;
+        dotDmg *= SYNERGY.tarBloomDotMul;
       }
       if (dotDmg > 0) {
         e.hp -= dotDmg;
@@ -3503,7 +3506,7 @@ export class GameEngine {
       duration: e.isBoss ? 0.55 : e.isMiniBoss ? 0.45 : 0.35,
     });
     // Hit-pause on a kill — quick punch of stillness so the death lands.
-    this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + (e.isBoss ? 0.10 : 0.05));
+    this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + (e.isBoss ? HIT_PAUSE.heavy : HIT_PAUSE.std));
     this.particles.burst(e.pos.x, e.pos.y, e.isBoss ? 80 : e.isMiniBoss ? 40 : 18, {
       colour: e.isBoss ? '#ffd97a' : '#e23a4a', life: 0.9, maxLife: 0.9,
     });
@@ -3633,7 +3636,7 @@ export class GameEngine {
       colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.92,
     });
     // Crown Spark heal chance
-    if (this.player.relics.includes('crownSpark') && Math.random() < 0.25) {
+    if (this.player.relics.includes('crownSpark') && Math.random() < RELIC.crownSparkHealChance) {
       this.healPlayer(Math.floor(this.player.maxHp * 0.08));
     }
   }
@@ -3713,7 +3716,7 @@ export class GameEngine {
     // Brief hit-pause on damage landing. Every hit gets a 2-frame
     // pause for "punch" feel; big hits get 4 frames. Avoid stacking
     // beyond timeAlive + 0.06 so multi-hits don't lock the world.
-    const pauseDur = dmg >= 8 ? 0.05 : 0.025;
+    const pauseDur = dmg >= 8 ? HIT_PAUSE.std : HIT_PAUSE.short;
     this.hitPauseUntil = Math.min(
       this.timeAlive + 0.06,
       Math.max(this.hitPauseUntil, this.timeAlive + pauseDur),
@@ -3943,7 +3946,7 @@ export class GameEngine {
     // damaging hits trigger this; the 5-dmg floor stops DoT ticks from
     // perpetually freezing the frame.
     if (dmg >= 5) {
-      this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + (dmg >= 12 ? 0.10 : 0.06));
+      this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + (dmg >= 12 ? HIT_PAUSE.heavy : HIT_PAUSE.std));
     }
     // Camera shake scales with damage fraction — a 4 dmg chip is a 3 px
     // nudge, a 20 dmg slam yanks the camera 6 px.
@@ -4033,7 +4036,7 @@ export class GameEngine {
             if (prMeta.healOnKill && r.killed) this.healPlayer(prMeta.healOnKill);
             if (this.player.relics.includes('pulseHeart') && r.isCrit) {
               this.healPlayer(this.hasSynergy('pulseCrown') ? 4 : 2);
-              if (this.hasSynergy('pulseCrown') && Math.random() < 0.15) {
+              if (this.hasSynergy('pulseCrown') && Math.random() < SYNERGY.pulseCrownHeartChance) {
                 this.pickups.push({
                   id: nid(),
                   pos: { x: e.pos.x, y: e.pos.y },
@@ -4071,7 +4074,7 @@ export class GameEngine {
         }
       } else {
         // Reflect chance via lunar mirror
-        if (this.player.relics.includes('lunarMirror') && Math.random() < 0.005) {
+        if (this.player.relics.includes('lunarMirror') && Math.random() < RELIC.lunarMirrorReflectChance) {
           pr.fromPlayer = true;
           pr.vel.x *= -1; pr.vel.y *= -1;
           pr.colour = '#6cf6e5';
@@ -4124,7 +4127,9 @@ export class GameEngine {
       // smaller pickups, but tightened from 56 to 44 px so they don't
       // hijack the player's walkup to an adjacent relic. Relics still
       // require deliberate pickup.
-      const magnet = pk.kind === 'coin' || pk.kind === 'essence' ? 44 : 36;
+      const magnet = pk.kind === 'coin' || pk.kind === 'essence'
+        ? MAGNET_RADIUS.coinEssence
+        : MAGNET_RADIUS.other;
       if (d < magnet && pk.kind !== 'relic') {
         const dx = p.pos.x - pk.pos.x, dy = p.pos.y - pk.pos.y;
         const len = Math.hypot(dx, dy) || 1;
@@ -4181,7 +4186,7 @@ export class GameEngine {
     // player. Counter persists for the full run.
     if (this.hasSynergy('alchemicalMint') && (pk.kind === 'coin' || pk.kind === 'essence')) {
       p.pickupTally += 1;
-      if (p.pickupTally >= 12) {
+      if (p.pickupTally >= SYNERGY.alchemicalMintEvery) {
         p.pickupTally = 0;
         const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
         if (pool.length > 0) {
@@ -4513,7 +4518,7 @@ export class GameEngine {
     if (!next) return;
     // Locked rooms cost a key
     if (next.type === 'locked' && !next.visited) {
-      const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : 0.35;
+      const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : RELIC.keyOfTheGateChance;
       const useKey = !(this.player.relics.includes('keyOfTheGate') && Math.random() < keyChance);
       if (this.player.keys <= 0) {
         // Push back
