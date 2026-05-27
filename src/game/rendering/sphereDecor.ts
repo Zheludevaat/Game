@@ -44,38 +44,240 @@ const PROPS_BY_SPHERE: Record<SphereId, PropKind[]> = {
   ogdoad:  ['starGlyph', 'crystalSpire', 'voidRune'],
 };
 
-/** Exclusion zone around the room centre — props never spawn here
- *  so the play space stays clean. Also avoid doorway corridors. */
-const CENTRE_EXCLUSION = 60;
-const DOORWAY_HALF = 32;
+/** Tall vertical props that should hug walls instead of standing in
+ *  the middle of an open floor. Pillars / statues / rods read as
+ *  "things that lean on something" — they look wrong floating. */
+const VERTICAL_PROPS: Set<PropKind> = new Set([
+  'rosePillar', 'brokenColumn', 'brassPillar',
+  'decayingStatue', 'crystalSpire',
+  'lightningRod', 'scytheRack', 'weaponRack',
+]);
 
-/** Deterministic list of props to render in a given room. */
+/** Flat-on-floor props that can go anywhere outside the play zone. */
+const FLAT_PROPS: Set<PropKind> = new Set([
+  'tidePool', 'mosaicShard', 'chainPile', 'bonePile',
+  'vineCluster', 'reedClump', 'driftwood',
+  'throneMark', 'mirrorDisk', 'sunDial',
+  'starGlyph', 'voidRune',
+]);
+
+/** Inputs describing what's already in the room so prop placement
+ *  doesn't collide with the pentagram, interactables, or doorways. */
+export interface RoomLayout {
+  type: string;
+  hasChest: boolean;
+  hasShrine: boolean;
+  /** True if this room renders the occult circle. Mirrors the engine's
+   *  drawOccultCircle call site (enemy / miniBoss / boss / shrine). */
+  hasPentagram: boolean;
+}
+
+/** Compute the radius of the "no-decor" zone around the room centre.
+ *  Sized to cover the pentagram halo (1.4 × r in drawOccultCircle)
+ *  plus a small buffer, and tall enough to clear the shrine altar
+ *  and stair markings. */
+function centreExclusionRadius(layout: RoomLayout): number {
+  if (layout.hasPentagram) {
+    const r = layout.type === 'boss' ? 100 : 60;
+    return Math.round(r * 1.05) + 6; // pentagram outer ring + buffer
+  }
+  if (layout.hasChest || layout.hasShrine || layout.type === 'exit') {
+    return 36;
+  }
+  return 28; // start / treasure / locked / corridor
+}
+
+/** Deterministic list of props to render in a given room. The shape
+ *  of the placement is chosen by a template (symmetric pair / wall
+ *  line / corner cluster / scatter), seeded by the room. Inside a
+ *  template, prop KINDS are picked from the sphere's palette with a
+ *  preference for vertical props on wall-hugging templates and flat
+ *  props for floor scatter. */
 export function placeProps(
   sphere: SphereId,
   roomSeed: number,
   count: number,
+  layout: RoomLayout,
 ): PropPlacement[] {
   const palette = PROPS_BY_SPHERE[sphere] ?? PROPS_BY_SPHERE.moon;
   if (palette.length === 0 || count <= 0) return [];
   const rng = new RNG(roomSeed ^ 0xa7f3b2c1);
-  const out: PropPlacement[] = [];
-  let tries = 0;
-  while (out.length < count && tries < count * 8) {
-    tries++;
-    const x = TILE * 2 + rng.next() * (ROOM_W - TILE * 4);
-    const y = TILE * 3 + rng.next() * (ROOM_H - TILE * 6);
-    if (Math.hypot(x - ROOM_W / 2, y - ROOM_H / 2) < CENTRE_EXCLUSION) continue;
-    if (Math.abs(x - ROOM_W / 2) < DOORWAY_HALF && (y < TILE * 2 + 10 || y > ROOM_H - TILE * 2 - 10)) continue;
-    if (Math.abs(y - ROOM_H / 2) < DOORWAY_HALF && (x < TILE * 2 + 10 || x > ROOM_W - TILE * 2 - 10)) continue;
-    let tooClose = false;
-    for (const p of out) {
-      if (Math.hypot(p.x - x, p.y - y) < 36) { tooClose = true; break; }
+  const exclR = centreExclusionRadius(layout);
+
+  // Pick a template — biased so symmetric / wall layouts appear more
+  // often than pure scatter, giving the dungeon an "architected" feel.
+  const templateRoll = rng.int(0, 100);
+  let template: 'symmetricPair' | 'cornerCluster' | 'wallLine' | 'scatter';
+  if (templateRoll < 30) template = 'symmetricPair';
+  else if (templateRoll < 55) template = 'cornerCluster';
+  else if (templateRoll < 75) template = 'wallLine';
+  else template = 'scatter';
+
+  // Floor area available for props. The valid play area excludes the
+  // walls (top + bottom 1 tile, left + right 1 tile) and the doorway
+  // corridors carved through each wall.
+  const minX = TILE * 2;
+  const maxX = ROOM_W - TILE * 2;
+  const minY = TILE * 3;
+  const maxY = ROOM_H - TILE * 3;
+  const centreX = ROOM_W / 2;
+  const centreY = ROOM_H / 2;
+  const doorHalf = 32;
+
+  const isClear = (x: number, y: number, placed: PropPlacement[]): boolean => {
+    if (x < minX || x > maxX || y < minY || y > maxY) return false;
+    if (Math.hypot(x - centreX, y - centreY) < exclR) return false;
+    if (Math.abs(x - centreX) < doorHalf && (y < minY + 6 || y > maxY - 6)) return false;
+    if (Math.abs(y - centreY) < doorHalf && (x < minX + 6 || x > maxX - 6)) return false;
+    for (const p of placed) {
+      if (Math.hypot(p.x - x, p.y - y) < 36) return false;
     }
-    if (tooClose) continue;
-    const kind = palette[rng.int(0, palette.length)];
-    const variant = rng.int(0, 16);
-    out.push({ kind, x, y, variant });
+    return true;
+  };
+
+  const tryPlace = (
+    x: number, y: number,
+    kindPicker: (rng: RNG) => PropKind,
+    placed: PropPlacement[],
+    nudgeBudget = 8,
+  ): boolean => {
+    // If the ideal spot is taken, nudge a few times before giving up.
+    for (let attempt = 0; attempt < nudgeBudget; attempt++) {
+      const ox = attempt === 0 ? 0 : (rng.next() - 0.5) * 24;
+      const oy = attempt === 0 ? 0 : (rng.next() - 0.5) * 24;
+      const tx = x + ox;
+      const ty = y + oy;
+      if (isClear(tx, ty, placed)) {
+        const kind = kindPicker(rng);
+        placed.push({ kind, x: tx, y: ty, variant: rng.int(0, 16) });
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const pickAny = (r: RNG): PropKind => palette[r.int(0, palette.length)];
+  const pickVertical = (r: RNG): PropKind => {
+    const v = palette.filter((p) => VERTICAL_PROPS.has(p));
+    return v.length > 0 ? v[r.int(0, v.length)] : pickAny(r);
+  };
+  const pickFlat = (r: RNG): PropKind => {
+    const f = palette.filter((p) => FLAT_PROPS.has(p));
+    return f.length > 0 ? f[r.int(0, f.length)] : pickAny(r);
+  };
+
+  const out: PropPlacement[] = [];
+
+  switch (template) {
+    case 'symmetricPair': {
+      // Mirrored pairs on the left and right (or top / bottom). Pillars
+      // / columns / statues lean into this template — they look
+      // intentional rather than scattered. Each pair shares its KIND
+      // so the mirror reads cleanly.
+      const horizontal = rng.next() < 0.6;
+      const pairs = Math.max(1, Math.floor(count / 2));
+      for (let i = 0; i < pairs && out.length + 2 <= count; i++) {
+        const kind = pickVertical(rng);
+        const variant = rng.int(0, 16);
+        if (horizontal) {
+          // Two props at the same y, mirrored across centreX.
+          const y = minY + 10 + (i + 0.5) * ((maxY - minY - 20) / pairs);
+          const offset = 60 + rng.next() * 40;
+          const lx = centreX - offset;
+          const rx = centreX + offset;
+          if (isClear(lx, y, out)) out.push({ kind, x: lx, y, variant });
+          if (isClear(rx, y, out)) out.push({ kind, x: rx, y, variant });
+        } else {
+          const x = minX + 10 + (i + 0.5) * ((maxX - minX - 20) / pairs);
+          const offset = 40 + rng.next() * 30;
+          const ty = centreY - offset;
+          const by = centreY + offset;
+          if (isClear(x, ty, out)) out.push({ kind, x, y: ty, variant });
+          if (isClear(x, by, out)) out.push({ kind, x, y: by, variant });
+        }
+      }
+      // Fill any remaining budget with flat-on-floor accents.
+      while (out.length < count) {
+        const placed = tryPlace(
+          minX + rng.next() * (maxX - minX),
+          minY + rng.next() * (maxY - minY),
+          pickFlat, out, 6,
+        );
+        if (!placed) break;
+      }
+      break;
+    }
+    case 'cornerCluster': {
+      // 1-2 corners receive a tight cluster of 2-3 props each.
+      // Corners get vertical accents (the tall thing in the corner)
+      // plus flat scatter (debris around it).
+      const corners: Array<[number, number]> = [
+        [minX + 22, minY + 22],
+        [maxX - 22, minY + 22],
+        [minX + 22, maxY - 22],
+        [maxX - 22, maxY - 22],
+      ];
+      // Shuffle deterministically and take 1 or 2.
+      for (let i = corners.length - 1; i > 0; i--) {
+        const j = rng.int(0, i + 1);
+        [corners[i], corners[j]] = [corners[j], corners[i]];
+      }
+      const numCorners = count >= 4 ? 2 : 1;
+      for (let c = 0; c < numCorners && out.length < count; c++) {
+        const [cx, cy] = corners[c];
+        // The corner gets one vertical anchor + 1-2 flat accents.
+        tryPlace(cx, cy, pickVertical, out, 4);
+        if (out.length < count) tryPlace(cx + 18, cy + 6, pickFlat, out, 4);
+        if (out.length < count) tryPlace(cx - 4, cy + 18, pickFlat, out, 4);
+      }
+      // Fill remaining budget with floor scatter elsewhere.
+      while (out.length < count) {
+        const placed = tryPlace(
+          minX + rng.next() * (maxX - minX),
+          minY + rng.next() * (maxY - minY),
+          pickFlat, out, 6,
+        );
+        if (!placed) break;
+      }
+      break;
+    }
+    case 'wallLine': {
+      // Props lined along a single wall, evenly spaced. Reads as a
+      // colonnade or processional path.
+      const wall = ['top', 'bottom', 'left', 'right'][rng.int(0, 4)];
+      const step = Math.max(2, Math.min(5, count));
+      for (let i = 0; i < step && out.length < count; i++) {
+        const t = (i + 0.5) / step;
+        let x = 0, y = 0;
+        switch (wall) {
+          case 'top':    x = minX + t * (maxX - minX); y = minY + 14; break;
+          case 'bottom': x = minX + t * (maxX - minX); y = maxY - 14; break;
+          case 'left':   x = minX + 14; y = minY + t * (maxY - minY); break;
+          case 'right':  x = maxX - 14; y = minY + t * (maxY - minY); break;
+        }
+        tryPlace(x, y, pickVertical, out, 6);
+      }
+      break;
+    }
+    case 'scatter':
+    default: {
+      // Edge-biased scatter — pick points anywhere outside the play
+      // zone, weighted toward the perimeter so the open centre stays
+      // clean for combat.
+      let tries = 0;
+      while (out.length < count && tries < count * 10) {
+        tries++;
+        const x = minX + rng.next() * (maxX - minX);
+        const y = minY + rng.next() * (maxY - minY);
+        if (!isClear(x, y, out)) continue;
+        const kindRoll = rng.next();
+        const kind = kindRoll < 0.55 ? pickFlat(rng) : pickAny(rng);
+        out.push({ kind, x, y, variant: rng.int(0, 16) });
+      }
+      break;
+    }
   }
+
   return out;
 }
 
@@ -100,9 +302,7 @@ export function drawProps(
   props: PropPlacement[],
   t: number,
 ): void {
-  // Pass 1: shadows under every prop — grounds them in the floor.
   for (const p of props) drawPropShadow(ctx, p.kind, p.x, p.y);
-  // Pass 2: prop bodies.
   for (const p of props) drawProp(ctx, p.kind, p.x, p.y, p.variant, t);
 }
 

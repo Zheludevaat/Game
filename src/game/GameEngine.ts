@@ -3587,9 +3587,20 @@ export class GameEngine {
   private currentRoomProps(): PropPlacement[] {
     if (this.roomPropsForRoomId !== this.currentRoom.id) {
       const sphere = sphereForFloor(this.floor.number).id;
-      const count = propCountFor(this.currentRoom.type, sphere, this.currentRoom.seed);
-      this.roomProps = placeProps(sphere, this.currentRoom.seed, count);
-      this.roomPropsForRoomId = this.currentRoom.id;
+      const room = this.currentRoom;
+      const count = propCountFor(room.type, sphere, room.seed);
+      // Tell the prop placer what's already in the room so the chosen
+      // template (symmetric pair / corner cluster / wall line /
+      // scatter) clears the pentagram halo + interactables + doorways.
+      const hasPentagram = room.type === 'enemy' || room.type === 'miniBoss'
+        || room.type === 'boss' || room.type === 'shrine';
+      this.roomProps = placeProps(sphere, room.seed, count, {
+        type: room.type,
+        hasChest: room.hasChest,
+        hasShrine: room.hasShrine,
+        hasPentagram,
+      });
+      this.roomPropsForRoomId = room.id;
     }
     return this.roomProps;
   }
