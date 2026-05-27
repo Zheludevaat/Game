@@ -257,6 +257,9 @@ interface Enemy {
   ai?: AIState;
   /** Active status effects on this enemy. */
   status: StatusEffect[];
+  /** Accumulated walk-phase used to drive a 1 px sprite bob. Ticked
+   *  from updateEnemies whenever the enemy actually moves. */
+  walkPhase: number;
 }
 
 interface AIState {
@@ -1349,6 +1352,9 @@ export class GameEngine {
       state: 'chase', cooldown: 0, facing: { x: 1, y: 0 },
       ai: {},
       status: [],
+      // Random initial phase so a roomful of one enemy type doesn't
+      // bob in lock-step with itself.
+      walkPhase: Math.random() * Math.PI * 2,
     };
     switch (type) {
       case 'lesserShade':
@@ -2982,6 +2988,9 @@ export class GameEngine {
     if (sm <= 0) return;
     e.pos.x += dir.x * speed * sm * dt;
     e.pos.y += dir.y * speed * sm * dt;
+    // Tick walk phase proportional to actual movement — keeps the bob
+    // matched to motion regardless of slows / dashes.
+    e.walkPhase += dt * (speed * sm) * 0.08;
   }
 
   private killEnemy(e: Enemy, idx: number): void {
@@ -4621,8 +4630,12 @@ export class GameEngine {
     for (const e of this.enemies) {
       const sz = getEnemySize(e.visualKey);
       const scale = 2;
+      // 1 px walk bob — stationary frames hold steady, moving frames
+      // lift one pixel on alternating steps. Bosses skip the bob since
+      // their procedural motifs read their own animation.
+      const bob = e.isBoss ? 0 : Math.floor(Math.abs(Math.sin(e.walkPhase)) * 1.5);
       const dx = e.pos.x - (sz.w * scale) / 2;
-      const dy = e.pos.y - (sz.h * scale) + e.radius + 1;
+      const dy = e.pos.y - (sz.h * scale) + e.radius + 1 - bob;
       const tint = e.isBoss ? undefined : floorTint;
       // Umbral Stalker is half-visible unless actively damaged. Players
       // see a faint silhouette outline — readable but not bright.
