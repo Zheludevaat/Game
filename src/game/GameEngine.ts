@@ -5651,6 +5651,107 @@ export class GameEngine {
         ctx.fillRect(x - 4, y - 10, 8, 1);
         ctx.fillRect(x - 4, y - 3, 8, 1);
         // No face — just absolute darkness in the hood. The void itself.
+      } else if (def.id === 'cartographer') {
+        // Wiry leaning figure with a scroll roll under the arm and a quill
+        // tucked behind the ear. Reads as a desk-scholar mid-step.
+        // Robe (leaning forward)
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x - 4, y - 2, 8, 9);
+        ctx.fillRect(x - 3, y + 7, 6, 1);
+        // Hood / hair
+        ctx.fillStyle = '#5b3a86';
+        ctx.fillRect(x - 4, y - 6, 8, 4);
+        // Face shadow
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 3, y - 4, 6, 2);
+        // Quill behind ear
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x + 3, y - 7, 1, 4);
+        // Scroll under arm — pale roll with a darker band
+        ctx.fillStyle = '#dac8ff';
+        ctx.fillRect(x - 8, y + 1, 4, 3);
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 8, y + 1, 4, 1);
+      } else if (def.id === 'smith') {
+        // Broad-shouldered figure with a hammer over the back and an
+        // anvil glinting beside her. Warm gold tones for the Sun.
+        // Anvil
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x + 6, y + 4, 6, 3);
+        ctx.fillStyle = '#1a0f2c';
+        ctx.fillRect(x + 6, y + 7, 6, 1);
+        // Forge glow under anvil
+        ctx.fillStyle = '#ff7a3a';
+        ctx.fillRect(x + 7, y + 6, 4, 1);
+        // Wide robe / apron
+        ctx.fillStyle = '#5a3a18';
+        ctx.fillRect(x - 6, y - 2, 12, 9);
+        // Gold band
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 6, y + 3, 12, 1);
+        // Hood
+        ctx.fillStyle = '#3a2410';
+        ctx.fillRect(x - 5, y - 7, 10, 5);
+        // Face shadow
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 4, y - 5, 8, 2);
+        // Hammer over the shoulder
+        ctx.fillStyle = '#dac8ff';
+        ctx.fillRect(x - 8, y - 6, 2, 6);
+        ctx.fillStyle = '#3a2410';
+        ctx.fillRect(x - 9, y - 7, 4, 3);
+      } else if (def.id === 'veteran') {
+        // Seated cloaked warrior leaning on a notched spear, helm scarred.
+        // Red glow around the spearpoint.
+        // Stone he's seated on
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x - 7, y + 6, 14, 2);
+        // Robe / cloak (drawn dark crimson)
+        ctx.fillStyle = '#2a0e1a';
+        ctx.fillRect(x - 5, y - 2, 10, 8);
+        // Cloak trim
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 5, y + 5, 10, 1);
+        // Scarred helm
+        ctx.fillStyle = '#3a2410';
+        ctx.fillRect(x - 5, y - 7, 10, 5);
+        // Scar across helm
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 4, y - 5, 5, 1);
+        // Face shadow
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 3, y - 4, 6, 2);
+        // Spear leaning across — diagonal blade
+        ctx.fillStyle = '#5a3a18';
+        ctx.fillRect(x + 4, y - 10, 1, 14);
+        // Spearpoint glow
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x + 3, y - 11, 3, 2);
+      } else if (def.id === 'diviner') {
+        // Tall figure with hands spread, a brass-rim mirror floating
+        // before him catching gold light. Robe in violet.
+        // Robe
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x - 5, y - 2, 10, 10);
+        // Hood
+        ctx.fillStyle = '#231142';
+        ctx.fillRect(x - 4, y - 8, 8, 5);
+        // Mirror — brass ring at chest level
+        ctx.fillStyle = '#f4d27a';
+        ctx.fillRect(x - 3, y + 1, 6, 4);
+        ctx.fillStyle = '#1a0f2c';
+        ctx.fillRect(x - 2, y + 2, 4, 2);
+        // Gold flicker INSIDE the mirror
+        ctx.fillStyle = '#ffe6a3';
+        ctx.fillRect(x - 1, y + 2, 1, 1);
+        ctx.fillRect(x + 1, y + 3, 1, 1);
+        // Hands held wide
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 7, y, 2, 2);
+        ctx.fillRect(x + 5, y, 2, 2);
+        // Face shadow
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 3, y - 6, 6, 2);
       } else {
         // Fallback — small robed silhouette so an unauthored NPC still renders.
         ctx.fillStyle = '#3b265c';

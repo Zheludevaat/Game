@@ -81,15 +81,75 @@ export const NPCS: Record<string, NpcDef> = {
     // Slow heal-over-time: +1 HP every second within range.
     passive: { kind: 'hp', amount: 1, radius: 42, every: 1.0 },
   },
+  cartographer: {
+    id: 'cartographer',
+    name: 'The Cartographer',
+    title: 'Scribe of Hermes',
+    sphere: 'mercury',
+    interaction: 'ambient',
+    colour: '#a4faf0',
+    ambientLines: [
+      '"Every door is a sentence."',
+      '"You are four chambers from the stair."',
+      '"Trade me silence for a rumour."',
+    ],
+    passive: { kind: 'mp', amount: 8, radius: 40, every: 5.0 },
+  },
+  smith: {
+    id: 'smith',
+    name: 'The Smith',
+    title: 'Forge-keeper of Helios',
+    sphere: 'sun',
+    interaction: 'ambient',
+    colour: '#f4d27a',
+    ambientLines: [
+      '"Brass and bone."',
+      '"Give me coin and I\'ll give you weight."',
+      '"The Sun forges twice — once with fire, once with patience."',
+    ],
+    passive: { kind: 'coin', amount: 5, radius: 42, every: 4.0 },
+  },
+  veteran: {
+    id: 'veteran',
+    name: 'The Veteran',
+    title: 'Survivor of Ares',
+    sphere: 'mars',
+    interaction: 'ambient',
+    colour: '#e23a4a',
+    ambientLines: [
+      '"I died on Mars. You will not."',
+      '"Strike first. Strike twice. Then run."',
+      '"The spear remembers every hand."',
+    ],
+    passive: { kind: 'essence', amount: 2, radius: 42, every: 8.0 },
+  },
+  diviner: {
+    id: 'diviner',
+    name: 'The Diviner',
+    title: 'Seer of Jove',
+    sphere: 'jupiter',
+    interaction: 'ambient',
+    colour: '#dac8ff',
+    ambientLines: [
+      '"Zeus throws five marks."',
+      '"The third is yours to stand on."',
+      '"Hear the long thunder."',
+    ],
+    passive: { kind: 'mp', amount: 12, radius: 44, every: 6.0 },
+  },
 };
 
 /** Pick the wandering NPC for a given sphere — null if no in-run NPC
  *  is authored for that sphere yet. Each sphere gets at most one
  *  wanderer per the docs/npcs.md plan. */
 export function npcForSphere(sphereId: SphereId): NpcDef | null {
-  if (sphereId === 'moon')   return NPCS.reedCutter;
-  if (sphereId === 'venus')  return NPCS.garlandkeep;
-  if (sphereId === 'saturn') return NPCS.mute;
+  if (sphereId === 'moon')    return NPCS.reedCutter;
+  if (sphereId === 'mercury') return NPCS.cartographer;
+  if (sphereId === 'venus')   return NPCS.garlandkeep;
+  if (sphereId === 'sun')     return NPCS.smith;
+  if (sphereId === 'mars')    return NPCS.veteran;
+  if (sphereId === 'jupiter') return NPCS.diviner;
+  if (sphereId === 'saturn')  return NPCS.mute;
   return null;
 }
 
