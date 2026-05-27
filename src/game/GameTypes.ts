@@ -3,6 +3,13 @@ import { AppliesStatus } from './data/statusEffects';
 
 export type ArchetypeId = 'magus' | 'hermit' | 'star';
 
+/** Run mode — picks the persistence + scoring + resume branch.
+ *  'standard'   — normal run, writes to runHistory + resume.
+ *  'daily'      — seeded by UTC day; writes to dailyHistory.
+ *  'bossRush'   — boss-floor gauntlet; writes bestSeconds + bestFloor.
+ *  'timeAttack' — normal run with composite score; writes timeAttackBest. */
+export type RunMode = 'standard' | 'daily' | 'bossRush' | 'timeAttack';
+
 export interface ArchetypeDef {
   id: ArchetypeId;
   name: string;

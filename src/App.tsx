@@ -18,7 +18,7 @@ import { GameOverScreen } from './components/GameOver';
 import { MetaProgression } from './components/MetaProgression';
 import { TouchControls } from './components/TouchControls';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
-import { ArchetypeId, DailyHistoryEntry, MetaState, RunHistoryEntry, SettingsState } from './game/GameTypes';
+import { ArchetypeId, DailyHistoryEntry, MetaState, RunHistoryEntry, RunMode, SettingsState } from './game/GameTypes';
 import { evaluateAchievements } from './game/data/achievements';
 import { ARCHETYPES } from './game/data/archetypes';
 import { MapOverlay } from './components/MapOverlay';
@@ -78,16 +78,11 @@ export function App(): JSX.Element {
   /** When set, archetype-select fires startRun with timeAttack=true
    *  on confirmation. Cleared on return-to-menu. */
   const [pendingTimeAttack, setPendingTimeAttack] = useState(false);
-  /** True while a Daily Run is in progress — the game-over flow appends
-   *  to meta.dailyHistory instead of meta.runHistory, and the Continue
-   *  button stays disabled. */
-  const dailyModeRef = useRef(false);
-  /** True while a Boss Rush run is in progress — game-over compares the
-   *  runTimer against meta.bossRushBestSeconds and saves the lower. */
-  const bossRushModeRef = useRef(false);
-  /** True while a Time Attack run is in progress — game-over computes
-   *  a composite score (floor + bosses + time bonus) and saves the best. */
-  const timeAttackModeRef = useRef(false);
+  /** Current run mode — drives every game-over branch + the gate on
+   *  resume / mode-specific persistence. Single source of truth that
+   *  replaces the three boolean refs (dailyMode / bossRushMode /
+   *  timeAttackMode) that used to track this in parallel. */
+  const runModeRef = useRef<RunMode>('standard');
   /** Mirror of pendingTimeAttack for the Boss Rush flow — when set,
    *  archetype-select fires startRun with bossRush=true on confirmation. */
   const [pendingBossRush, setPendingBossRush] = useState(false);
@@ -224,19 +219,17 @@ export function App(): JSX.Element {
     };
   }, [screen]);
 
-  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; daily?: boolean; bossRush?: boolean; timeAttack?: boolean }) => {
+  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; mode?: RunMode }) => {
     saveLastArchetype(archetypeId);
     setLastArchetype(archetypeId);
     setSummary(null);
-    dailyModeRef.current = !!opts?.daily;
-    bossRushModeRef.current = !!opts?.bossRush;
-    timeAttackModeRef.current = !!opts?.timeAttack;
+    const mode: RunMode = opts?.mode ?? 'standard';
+    runModeRef.current = mode;
     // First time ever: gate through "The Gate Opens" cinematic, then
     // resume into the actual run on its onDone. Resume flow (opts.floor
     // > 1) skips the cinematic — that's a continuation, not a new run.
-    // Daily Runs + Boss Rush also skip the cinematic to keep the timed
-    // attempt clean.
-    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1 && !opts?.daily && !opts?.bossRush && !opts?.timeAttack;
+    // Non-standard modes skip the cinematic to keep the timed attempt clean.
+    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1 && mode === 'standard';
     if (isFirstRun) {
       setPendingRunStart({ id: archetypeId, floor: opts?.floor, runSeed: opts?.runSeed });
       setScreen('newRunIntro');
@@ -248,7 +241,7 @@ export function App(): JSX.Element {
     // attempted fresh and can't be picked up mid-run from Continue.
     const runSeed = opts?.runSeed ?? Math.floor(Math.random() * 0xffffffff);
     const startingFloor = opts?.floor ?? 1;
-    if (!opts?.daily && !opts?.bossRush && !opts?.timeAttack) {
+    if (mode === 'standard') {
       saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
       setResumeAvailable(true);
     } else {
@@ -285,7 +278,7 @@ export function App(): JSX.Element {
           setEssence((e) => { const ne = e + s.essenceCollected; saveEssence(ne); return ne; });
           // Append the run to history, update per-archetype best, evaluate
           // achievements. setMeta then auto-persists via the existing useEffect.
-          const isDaily = dailyModeRef.current;
+          const isDaily = runModeRef.current === 'daily';
           setMeta((m) => {
             const entry: RunHistoryEntry = {
               date: Date.now(),
@@ -349,7 +342,7 @@ export function App(): JSX.Element {
             // top a fast + shallow Star run).
             let timeAttackBestScore = m.timeAttackBestScore;
             let timeAttackBestFloor = m.timeAttackBestFloor;
-            if (timeAttackModeRef.current) {
+            if (runModeRef.current === 'timeAttack') {
               const seconds = Math.floor(s.runTimerSeconds ?? 0);
               const score = s.floorReached * 1000
                 + s.bossesDefeated * 500
@@ -372,9 +365,7 @@ export function App(): JSX.Element {
               timeAttackBestFloor,
             };
           });
-          dailyModeRef.current = false;
-          bossRushModeRef.current = false;
-          timeAttackModeRef.current = false;
+          runModeRef.current = 'standard';
           saveResume(null);
           setResumeAvailable(false);
           setScreen('gameOver');
@@ -383,7 +374,7 @@ export function App(): JSX.Element {
           // Update resume floor checkpoint — skipped for Daily Runs,
           // Boss Rush, and Time Attack so a player can't reload mid-run
           // to retry the same seed / shave time off their best score.
-          if (!dailyModeRef.current && !bossRushModeRef.current && !timeAttackModeRef.current) {
+          if (runModeRef.current === 'standard') {
             saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
           }
         },
@@ -421,7 +412,7 @@ export function App(): JSX.Element {
         reducedParticles: settings.reducedParticles,
         startingFloor,
         runSeed,
-        bossRushMode: !!opts?.bossRush,
+        bossRushMode: mode === 'bossRush',
         skipTutorial: settings.skipTutorial,
       });
     }, 30);
@@ -521,7 +512,7 @@ export function App(): JSX.Element {
           onDailyRun={() => {
             const day = Math.floor(Date.now() / 86_400_000);
             const arch = ARCHETYPES[day % ARCHETYPES.length].id;
-            startRun(arch, { runSeed: day, daily: true });
+            startRun(arch, { runSeed: day, mode: 'daily' });
           }}
           onBossRush={() => {
             // Boss Rush routes through archetype select so the player
@@ -556,10 +547,10 @@ export function App(): JSX.Element {
           onSelect={(id) => {
             if (pendingBossRush) {
               setPendingBossRush(false);
-              startRun(id, { bossRush: true });
+              startRun(id, { mode: 'bossRush' });
             } else if (pendingTimeAttack) {
               setPendingTimeAttack(false);
-              startRun(id, { timeAttack: true });
+              startRun(id, { mode: 'timeAttack' });
             } else {
               startRun(id);
             }
