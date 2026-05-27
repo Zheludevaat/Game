@@ -133,6 +133,13 @@ export const SHRINE_VARIANTS: Record<ShrineKind, ShrineVariant[]> = {
     { id: 'helios', name: 'Codex of Helios', effect: 'Unlock a fragment, +8 Spell Power',           downside: 'Take 12 corruption damage',
       apply: { spellPower: 8, hpDelta: -12 }, special: { unlockRandomCodex: true } },
   ],
+  // Puzzle altars don't flow through the standard apply table — the
+  // engine intercepts beginShrine for kind==='puzzle' and runs its own
+  // sigil-sequence modal instead. The placeholder variant exists only
+  // so the Record type stays exhaustive.
+  puzzle: [
+    { id: 'sigilLock', name: 'Sigil Lock', effect: 'Match the sequence', downside: 'Failure costs 5 Essence', apply: {} },
+  ],
 };
 
 const KIND_DISPLAY: Record<ShrineKind, string> = {
@@ -145,6 +152,7 @@ const KIND_DISPLAY: Record<ShrineKind, string> = {
   coagulation:  'Coagulation',
   cursed:       'Cursed Altar',
   library:      'Library Tome',
+  puzzle:       'Sigil Lock',
 };
 
 /** Deterministic variant selection from the room seed. Same room offers

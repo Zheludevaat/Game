@@ -228,7 +228,8 @@ export type ShrineKind =
   | 'distillation'
   | 'coagulation'
   | 'cursed'
-  | 'library';
+  | 'library'
+  | 'puzzle';
 
 export interface Floor {
   number: number;

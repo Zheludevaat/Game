@@ -94,6 +94,13 @@ export interface HudSnapshot {
     focus: number;
     coins: number;
   };
+  /** Sigil puzzle modal — target sequence + the player's progress so
+   *  the HUD can render both rows. */
+  pendingPuzzle?: {
+    target: ('up' | 'down' | 'left' | 'right')[];
+    progress: ('up' | 'down' | 'left' | 'right')[];
+    failed: boolean;
+  };
   /** Current combo counter (0 = no chain). Capped at 5. */
   combo: number;
   /** Pulse animation timer (0..0.4) — used to scale the HUD tag on increment. */
@@ -535,6 +542,12 @@ export class GameEngine {
   private pendingShop = false;
   /** Index of the currently focused shop row. */
   private shopFocus = 0;
+  /** Sigil-sequence puzzle modal — set by beginPuzzle, cleared on resolve. */
+  private pendingPuzzle: {
+    target: Array<'up' | 'down' | 'left' | 'right'>;
+    progress: Array<'up' | 'down' | 'left' | 'right'>;
+    failed: boolean;
+  } | null = null;
   private damageNumbers: DamageNumber[] = [];
   private timeAlive = 0;
   private dead = false;
@@ -1620,7 +1633,16 @@ export class GameEngine {
     // holds its breath while the lamp goes out. The cinematic tick
     // (particles, camera shake, embers, dying timer) keeps running below.
     if (!this.dead) {
-      if (this.pendingShop) {
+      if (this.pendingPuzzle) {
+        // Sigil-sequence modal — directional inputs append to the
+        // pattern. Cancel closes without penalty (the altar stays
+        // available for a retry).
+        if (s.uiUp)    this.puzzleInput('up');
+        else if (s.uiDown)  this.puzzleInput('down');
+        else if (s.uiLeft)  this.puzzleInput('left');
+        else if (s.uiRight) this.puzzleInput('right');
+        if (s.uiCancel) this.pendingPuzzle = null;
+      } else if (this.pendingShop) {
         // Shop modal active — D-pad / WASD navigate, confirm buys.
         if (s.uiUp)   this.shopFocus = Math.max(0, this.shopFocus - 1);
         if (s.uiDown) this.shopFocus = Math.min(LAMPWRIGHT_WARES.length - 1, this.shopFocus + 1);
@@ -2483,6 +2505,10 @@ export class GameEngine {
   }
 
   private beginShrine(kind: ShrineKind, seed: number): void {
+    if (kind === 'puzzle') {
+      this.beginPuzzle(seed);
+      return;
+    }
     const variant = pickShrineVariant(kind, seed);
     this.pendingShrine = {
       kind,
@@ -2491,6 +2517,60 @@ export class GameEngine {
       effect: variant.effect,
       downside: variant.downside,
     };
+  }
+
+  /** Open the sigil-sequence puzzle modal. The target pattern is a
+   *  3-input sequence of directional glyphs, seeded deterministically
+   *  on room.seed so re-entry shows the same puzzle. */
+  private beginPuzzle(seed: number): void {
+    const rng = new RNG(seed ^ 0x7c19);
+    const dirs: Array<'up' | 'down' | 'left' | 'right'> = ['up', 'down', 'left', 'right'];
+    const target: Array<'up' | 'down' | 'left' | 'right'> = [];
+    for (let i = 0; i < 3; i++) {
+      target.push(dirs[rng.int(0, dirs.length)]);
+    }
+    this.pendingPuzzle = { target, progress: [], failed: false };
+    audio.sfx('shrine');
+  }
+
+  /** Player input for the puzzle. Returns when the sequence resolves
+   *  (success or failure); leaves the modal open until then. */
+  private puzzleInput(dir: 'up' | 'down' | 'left' | 'right'): void {
+    const pz = this.pendingPuzzle;
+    if (!pz || pz.failed) return;
+    pz.progress.push(dir);
+    const idx = pz.progress.length - 1;
+    if (pz.progress[idx] !== pz.target[idx]) {
+      // Wrong input — fail immediately, lose 5 essence, close modal.
+      pz.failed = true;
+      const p = this.player;
+      p.essence = Math.max(0, p.essence - 5);
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, '−5 ✦', '#e23a4a');
+      audio.sfx('playerHit');
+      this.currentRoom.shrineUsed = true;
+      // Hold the modal briefly so the player sees the red flash, then close.
+      setTimeout(() => { this.pendingPuzzle = null; }, 600);
+      return;
+    }
+    if (pz.progress.length >= pz.target.length) {
+      // Success — grant a random un-owned relic + small particle burst.
+      const p = this.player;
+      const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
+      if (pool.length > 0) {
+        const id = pool[Math.floor(Math.random() * pool.length)];
+        this.grantRelic(id);
+      } else {
+        // Pool exhausted — drop 20 essence as a thank-you.
+        p.essence += 20;
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 12, '+20 ✦', '#ffe6a3');
+      }
+      audio.sfx('shrine');
+      this.particles.burst(p.pos.x, p.pos.y - 6, 32, {
+        colour: '#ffe6a3', life: 1.0, maxLife: 1.0, drag: 0.86,
+      });
+      this.currentRoom.shrineUsed = true;
+      this.pendingPuzzle = null;
+    }
   }
 
   private confirmShrine(accepted: boolean): void {
@@ -6254,6 +6334,11 @@ export class GameEngine {
         })),
         focus: this.shopFocus,
         coins: p.coins,
+      } : undefined,
+      pendingPuzzle: this.pendingPuzzle ? {
+        target: this.pendingPuzzle.target.slice(),
+        progress: this.pendingPuzzle.progress.slice(),
+        failed: this.pendingPuzzle.failed,
       } : undefined,
       combo: this.comboCount,
       comboPulse: this.comboPulse,

@@ -151,6 +151,14 @@ export function HUD({ hud, input, onShopBuy, onShopClose }: Props): JSX.Element 
           onClose={() => onShopClose?.()}
         />
       )}
+
+      {hud.pendingPuzzle && (
+        <PuzzlePrompt
+          target={hud.pendingPuzzle.target}
+          progress={hud.pendingPuzzle.progress}
+          failed={hud.pendingPuzzle.failed}
+        />
+      )}
     </div>
   );
 }
@@ -595,6 +603,84 @@ function ShopPrompt({ wares, focus, coins, onBuy, onClose }: ShopPromptProps): J
             CLOSE
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface PuzzlePromptProps {
+  target: ('up' | 'down' | 'left' | 'right')[];
+  progress: ('up' | 'down' | 'left' | 'right')[];
+  failed: boolean;
+}
+
+const ARROW_GLYPH: Record<'up' | 'down' | 'left' | 'right', string> = {
+  up: '↑',
+  down: '↓',
+  left: '←',
+  right: '→',
+};
+
+function PuzzlePrompt({ target, progress, failed }: PuzzlePromptProps): JSX.Element {
+  return (
+    <div style={{
+      position: 'absolute',
+      left: '50%', top: '50%',
+      transform: 'translate(-50%, -50%)',
+      pointerEvents: 'auto',
+    }}>
+      <div className="pixel-panel" style={{ minWidth: 360, textAlign: 'center' }}>
+        <div className="pixel-subtitle">A sigil locks the altar</div>
+        <div className="pixel-title" style={{ fontSize: 20, margin: '4px 0' }}>Sigil Lock</div>
+        <div className="pixel-divider" />
+        <div className="help-text" style={{ fontSize: 11, marginBottom: 8 }}>
+          Match the three-mark sequence with the direction keys.
+        </div>
+        {/* Target row */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginBottom: 10 }}>
+          {target.map((dir, i) => (
+            <span key={i} style={{
+              display: 'inline-block',
+              width: 30, height: 30,
+              lineHeight: '30px',
+              fontSize: 18,
+              color: 'var(--gold-1)',
+              border: '1px solid var(--gold-3)',
+              background: 'rgba(0,0,0,0.5)',
+            }}>{ARROW_GLYPH[dir]}</span>
+          ))}
+        </div>
+        {/* Progress row */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 18 }}>
+          {target.map((_, i) => {
+            const entered = progress[i];
+            const correct = entered === target[i];
+            const colour = failed && entered && !correct ? '#e23a4a'
+              : entered ? '#6cf6e5'
+              : 'rgba(231,227,215,0.25)';
+            return (
+              <span key={i} style={{
+                display: 'inline-block',
+                width: 30, height: 30,
+                lineHeight: '30px',
+                fontSize: 18,
+                color: colour,
+                border: `1px solid ${colour}`,
+                background: 'rgba(0,0,0,0.5)',
+              }}>{entered ? ARROW_GLYPH[entered] : '·'}</span>
+            );
+          })}
+        </div>
+        <div className="pixel-divider" />
+        {failed ? (
+          <div className="crimson-text" style={{ fontSize: 12, letterSpacing: '0.18em' }}>
+            The sigil shatters. The Abyss takes its tribute.
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: 'var(--bone)' }}>
+            ↑ ↓ ← → — Mark &nbsp;·&nbsp; Esc / B — Step back
+          </div>
+        )}
       </div>
     </div>
   );
