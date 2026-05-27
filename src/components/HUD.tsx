@@ -140,7 +140,13 @@ export function HUD({ hud, input, onShopBuy, onShopClose }: Props): JSX.Element 
       )}
 
       {hud.pendingShrine && (
-        <ShrinePrompt name={hud.pendingShrine.name} effect={hud.pendingShrine.effect} downside={hud.pendingShrine.downside} />
+        <ShrinePrompt
+          name={hud.pendingShrine.name}
+          effect={hud.pendingShrine.effect}
+          downside={hud.pendingShrine.downside}
+          isTouch={isTouch}
+          input={input}
+        />
       )}
 
       {hud.pendingShop && (
@@ -158,6 +164,8 @@ export function HUD({ hud, input, onShopBuy, onShopClose }: Props): JSX.Element 
           target={hud.pendingPuzzle.target}
           progress={hud.pendingPuzzle.progress}
           failed={hud.pendingPuzzle.failed}
+          isTouch={isTouch}
+          input={input}
         />
       )}
     </div>
@@ -548,17 +556,75 @@ function PlayerStatusStrip({ status }: { status: HudSnapshot['playerStatus'] }):
   );
 }
 
-function ShrinePrompt({ name, effect, downside }: { name: string; effect: string; downside: string }): JSX.Element {
+/** Tap button that fires an InputManager touch flag for one frame.
+ *  Used inside modals so iPhone players can drive the same engine
+ *  paths as keyboard arrows / Enter / Escape — InputManager.tick has
+ *  the matching `touchPressedThisFrame[name]` reader for each. */
+function ModalTapButton({
+  input, name, label, accent = '#f4d27a',
+}: {
+  input?: InputManager | null;
+  name: string;
+  label: string;
+  accent?: string;
+}): JSX.Element {
+  const press = (down: boolean): void => { input?.setTouchButton(name, down); };
+  return (
+    <button
+      type="button"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        press(true);
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* */ }
+      }}
+      onPointerUp={(e) => {
+        press(false);
+        try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* */ }
+      }}
+      onPointerCancel={() => press(false)}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{
+        minWidth: 56, minHeight: 44,
+        padding: '8px 14px',
+        background: 'rgba(0,0,0,0.55)',
+        border: `1px solid ${accent}`,
+        color: accent,
+        fontSize: 12,
+        letterSpacing: '0.18em',
+        fontFamily: "'Press Start 2P', monospace, sans-serif",
+        cursor: 'pointer',
+        touchAction: 'none',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ShrinePrompt({
+  name, effect, downside, isTouch, input,
+}: {
+  name: string;
+  effect: string;
+  downside: string;
+  isTouch: boolean;
+  input?: InputManager | null;
+}): JSX.Element {
+  const footer = isTouch
+    ? (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+          <ModalTapButton input={input} name="uiConfirm" label="ACCEPT" accent="#6cf6e5" />
+          <ModalTapButton input={input} name="uiCancel"  label="DECLINE" accent="#e23a4a" />
+        </div>
+      )
+    : (<>Interact / Enter — Accept &nbsp;·&nbsp; Esc / B — Decline</>);
   return (
     <ModalPanel
       subtitle={`A shrine of ${name.toLowerCase()}`}
       title={name}
-      footer={<>Interact / Enter — Accept &nbsp;·&nbsp; Esc / B — Decline</>}
+      footer={footer}
     >
       <div className="glow-text" style={{ fontSize: 13 }}>Boon: <span className="gold-text">{effect}</span></div>
-      {/* Cost as a high-contrast pill — players were committing to
-       *  Distillation / Library shrines without reading the price line.
-       *  The pill keeps the downside from reading like flavour text. */}
       <div style={{ marginTop: 6, display: 'flex', justifyContent: 'center' }}>
         <span style={{
           display: 'inline-block',
@@ -668,6 +734,8 @@ interface PuzzlePromptProps {
   target: ('up' | 'down' | 'left' | 'right')[];
   progress: ('up' | 'down' | 'left' | 'right')[];
   failed: boolean;
+  isTouch: boolean;
+  input?: InputManager | null;
 }
 
 const ARROW_GLYPH: Record<'up' | 'down' | 'left' | 'right', string> = {
@@ -677,7 +745,7 @@ const ARROW_GLYPH: Record<'up' | 'down' | 'left' | 'right', string> = {
   right: '→',
 };
 
-function PuzzlePrompt({ target, progress, failed }: PuzzlePromptProps): JSX.Element {
+function PuzzlePrompt({ target, progress, failed, isTouch, input }: PuzzlePromptProps): JSX.Element {
   const footer = failed
     ? (<span className="crimson-text" style={{ letterSpacing: '0.18em' }}>The sigil shatters. The Abyss takes its tribute.</span>)
     : (<>↑ ↓ ← → — Mark &nbsp;·&nbsp; Esc / B — Step back</>);
@@ -726,6 +794,19 @@ function PuzzlePrompt({ target, progress, failed }: PuzzlePromptProps): JSX.Elem
           );
         })}
       </div>
+      {/* Touch direction pad — only renders on touch input mode. The
+       *  buttons fire the engine's uiUp / uiDown / uiLeft / uiRight
+       *  flags via setTouchButton, identical to keyboard arrow presses. */}
+      {isTouch && (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+          <ModalTapButton input={input} name="uiUp"    label="↑" />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <ModalTapButton input={input} name="uiLeft"  label="←" />
+            <ModalTapButton input={input} name="uiRight" label="→" />
+          </div>
+          <ModalTapButton input={input} name="uiDown"  label="↓" />
+        </div>
+      )}
     </ModalPanel>
   );
 }

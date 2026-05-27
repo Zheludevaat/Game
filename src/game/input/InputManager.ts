@@ -407,6 +407,17 @@ export class InputManager {
       s.cycleConsumablePressed ||= !!this.touchPressedThisFrame['cycleConsumable'];
       s.useConsumablePressed   ||= !!this.touchPressedThisFrame['useConsumable'];
       s.ultimatePressed        ||= !!this.touchPressedThisFrame['ultimate'];
+      // UI inputs from touch — wired so modal-side buttons (shrine accept/
+      // decline, puzzle direction pads, shop pick) can drive the same
+      // engine paths as keyboard arrows / Enter / Escape. Each modal
+      // calls input.setTouchButton('uiConfirm', true) on pointer-down,
+      // (…, false) on pointer-up; edge-detect surfaces the press here.
+      s.uiUp      ||= !!this.touchPressedThisFrame['uiUp'];
+      s.uiDown    ||= !!this.touchPressedThisFrame['uiDown'];
+      s.uiLeft    ||= !!this.touchPressedThisFrame['uiLeft'];
+      s.uiRight   ||= !!this.touchPressedThisFrame['uiRight'];
+      s.uiConfirm ||= !!this.touchPressedThisFrame['uiConfirm'];
+      s.uiCancel  ||= !!this.touchPressedThisFrame['uiCancel'];
     }
 
     // Gamepad
