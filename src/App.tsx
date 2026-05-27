@@ -412,6 +412,7 @@ export function App(): JSX.Element {
         startingFloor,
         runSeed,
         bossRushMode: !!opts?.bossRush,
+        skipTutorial: settings.skipTutorial,
       });
     }, 30);
   }, [meta, settings.reducedParticles]);

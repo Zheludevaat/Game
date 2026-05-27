@@ -391,6 +391,10 @@ export interface EngineConfig {
    *  heal between bosses, ends after Ogdoad (floor 80). Score is the
    *  total elapsed runTimer captured on game-over. */
   bossRushMode?: boolean;
+  /** Skip the first-run tutorial regardless of `meta.seenTutorial`.
+   *  Threaded from SettingsState so the player can opt out without
+   *  resetting their save. */
+  skipTutorial?: boolean;
 }
 
 const ROOM_MARGIN = 18;
@@ -682,7 +686,7 @@ export class GameEngine {
     this.critFlashT = 0;
     this.runTimer = 0;
     // Tutorial fires only on the very first run ever — gated by meta flag.
-    this.tutorialActive = !this.meta.seenTutorial;
+    this.tutorialActive = !this.meta.seenTutorial && !config.skipTutorial;
     this.tutorialDidMove = false;
     this.tutorialDidAttack = false;
     this.tutorialDidDash = false;

@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   touchControls: true,
   pixelScale: 'auto',
   reducedParticles: false,
+  skipTutorial: false,
   gamepadMap: { ...DEFAULT_GAMEPAD_MAP },
 };
 

@@ -288,7 +288,16 @@ function ComboTag({ count, pulse }: { count: number; pulse: number }): JSX.Eleme
         fontSize: 14,
         color: '#ffe6a3',
         letterSpacing: '0.12em',
-        textShadow: '0 0 6px rgba(244, 210, 122, 0.85)',
+        // Dark outline + soft gold glow so the combo number reads
+        // against the bright crit white-flash. The 1 px black border
+        // is faked via four offset text-shadows.
+        textShadow: [
+          '0 0 6px rgba(244, 210, 122, 0.85)',
+          '1px 1px 0 rgba(0,0,0,0.95)',
+          '-1px 1px 0 rgba(0,0,0,0.95)',
+          '1px -1px 0 rgba(0,0,0,0.95)',
+          '-1px -1px 0 rgba(0,0,0,0.95)',
+        ].join(', '),
         transform: `scale(${scale.toFixed(2)})`,
         transformOrigin: 'right center',
         transition: 'transform 0.18s cubic-bezier(.2,.7,.2,1)',

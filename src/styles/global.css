@@ -202,3 +202,27 @@ button {
   animation: tutorial-pulse 2.2s ease-out infinite;
   animation-direction: alternate;
 }
+
+/* Accessibility: honour the OS-level "reduce motion" preference. The
+ * six keyframed UI animations above all pulse / drift / fade, which
+ * can trigger vestibular discomfort. Disabling them holds the UI
+ * still — game-side particles + camera shake stay live since they
+ * carry combat information. Players who want game-side calm should
+ * also enable the in-game Reduced Particles setting. */
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-prompt,
+  .menu-screen,
+  .boss-banner,
+  .minimap-boss-pulse,
+  .glow-pulse,
+  .flame-flicker {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

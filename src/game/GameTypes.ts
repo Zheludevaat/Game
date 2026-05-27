@@ -248,6 +248,10 @@ export interface SettingsState {
   touchControls: boolean;
   pixelScale: 'auto' | '1' | '2' | '3' | '4';
   reducedParticles: boolean;
+  /** Skip the input-aware first-run tutorial prompts on every new run.
+   *  Returning players who reset their save can opt out instead of
+   *  sitting through "Hold WASD to move" again. */
+  skipTutorial: boolean;
   gamepadMap: GamepadMap;
 }
 

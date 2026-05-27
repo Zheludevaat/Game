@@ -61,6 +61,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     { id: 'sfxVolume',   label: 'SFX Volume',   kind: 'slider', min: 0, max: 1, step: 0.05 },
     { id: 'touchControls', label: 'Touch Controls', kind: 'toggle' },
     { id: 'reducedParticles', label: 'Reduce Particles', kind: 'toggle' },
+    { id: 'skipTutorial', label: 'Skip Tutorial', kind: 'toggle' },
     { id: 'pixelScale', label: 'Pixel Scale', kind: 'dropdown', options: PIXEL_SCALE_OPTIONS },
     ...(Object.keys(DEFAULT_GAMEPAD_MAP) as GamepadAction[]).map((action) => ({
       id: `remap.${action}`,
@@ -130,7 +131,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     const row = rows[focus];
     if (!row) return;
     if (row.kind === 'toggle') {
-      const key = row.id as 'touchControls' | 'reducedParticles';
+      const key = row.id as 'touchControls' | 'reducedParticles' | 'skipTutorial';
       set(key, !settings[key] as never);
     } else if (row.kind === 'dropdown') {
       const opts = row.options!;
@@ -163,7 +164,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
       const next = Math.max(row.min!, Math.min(row.max!, +(cur + dir * (row.step ?? 0.05)).toFixed(2)));
       set(key, next as never);
     } else if (row.kind === 'toggle') {
-      const key = row.id as 'touchControls' | 'reducedParticles';
+      const key = row.id as 'touchControls' | 'reducedParticles' | 'skipTutorial';
       set(key, !settings[key] as never);
     } else if (row.kind === 'dropdown') {
       const opts = row.options!;
@@ -213,7 +214,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
       );
     }
     if (row.kind === 'toggle') {
-      const key = row.id as 'touchControls' | 'reducedParticles';
+      const key = row.id as 'touchControls' | 'reducedParticles' | 'skipTutorial';
       const on = settings[key];
       return (
         <div className={'settings-row' + focusedClass} onMouseEnter={() => setFocus(i)}>
