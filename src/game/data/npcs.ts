@@ -9,6 +9,20 @@ import { SphereId } from './spheres';
 
 export type NpcInteraction = 'ambient' | 'limited' | 'full';
 
+/** Render context passed into each NPC's `draw` callback. The engine
+ *  does the halo + ground-shadow prelude before invoking; the callback
+ *  paints the sprite-specific shape on top. */
+export interface NpcDrawCtx {
+  /** Idle bob phase — used for any per-NPC subtle motion if wanted. */
+  phase: number;
+  /** Unique entity id, used by Mendicant for the coin-glint modulo. */
+  entityId: number;
+  /** Accumulated seconds since run start — drives flicker / pulse loops. */
+  timeAlive: number;
+  /** Current sphere accent colour — used by Penitent to tint the lamp. */
+  sphereAccent: string;
+}
+
 export interface NpcDef {
   id: string;
   name: string;
@@ -28,6 +42,239 @@ export interface NpcDef {
     radius: number;
     every: number;
   };
+  /** Sprite-specific draw — called by GameEngine.drawNpcs AFTER the
+   *  shared halo + ground-shadow prelude. If omitted, the fallback
+   *  silhouette in `drawFallbackNpcSprite` renders. */
+  draw?: (ctx: CanvasRenderingContext2D, x: number, y: number, rctx: NpcDrawCtx, def: NpcDef) => void;
+}
+
+/** Fallback sprite — a small robed silhouette so an unauthored NPC
+ *  still renders. The engine calls this when def.draw is undefined. */
+export function drawFallbackNpcSprite(
+  ctx: CanvasRenderingContext2D, x: number, y: number,
+  _rctx: NpcDrawCtx, def: NpcDef,
+): void {
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 4, y - 4, 8, 10);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 3, y - 6, 6, 3);
+}
+
+// hexToRgbString — duplicated here so npc draw closures don't have to
+// import the engine. Identical to the helper in GameEngine.ts.
+function hexToRgbString(hex: string): string {
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
+  return `${(n >> 16) & 0xff}, ${(n >> 8) & 0xff}, ${n & 0xff}`;
+}
+
+// ─── Per-NPC sprite draw functions ──────────────────────────────────
+// Each was inline in GameEngine.drawNpcs (~280 lines across 10 NPCs).
+// Moving them here lets new NPCs ship as a single data-file edit.
+
+function drawReedCutter(ctx: CanvasRenderingContext2D, x: number, y: number, _r: NpcDrawCtx, def: NpcDef): void {
+  // Kneeling silhouette with a sickle + reed-bundle.
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 5, y - 2, 10, 8);
+  ctx.fillStyle = '#231142';
+  ctx.fillRect(x - 4, y - 7, 8, 4);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 4, y - 7, 8, 1);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 3, y - 5, 6, 2);
+  // Sickle — bronze blade leaning across the lap
+  ctx.fillStyle = '#a4faf0';
+  ctx.fillRect(x + 4, y + 1, 4, 1);
+  ctx.fillRect(x + 7, y - 1, 1, 3);
+  // Reed bundle at side
+  ctx.fillStyle = '#cdf6ff';
+  ctx.fillRect(x - 9, y + 2, 3, 4);
+  ctx.fillStyle = '#dac8ff';
+  ctx.fillRect(x - 9, y + 2, 3, 1);
+}
+
+function drawGarlandkeep(ctx: CanvasRenderingContext2D, x: number, y: number, _r: NpcDrawCtx, def: NpcDef): void {
+  // Seated tender with garlands strewn around her.
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 12, y + 5, 2, 2);
+  ctx.fillRect(x + 9, y + 6, 2, 2);
+  ctx.fillRect(x + 3, y + 7, 2, 2);
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 5, y - 1, 10, 9);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 6, y + 3, 12, 1);
+  ctx.fillStyle = '#5b3a86';
+  ctx.fillRect(x - 4, y - 6, 8, 4);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 3, y - 4, 6, 2);
+  ctx.fillStyle = '#ffe6a3';
+  ctx.fillRect(x - 1, y - 6, 2, 1);
+}
+
+function drawMute(ctx: CanvasRenderingContext2D, x: number, y: number, _r: NpcDrawCtx, def: NpcDef): void {
+  // Tall featureless silhouette — the hood swallows the face entirely.
+  ctx.fillStyle = '#1a0f2c';
+  ctx.fillRect(x - 5, y - 4, 10, 12);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 4, y - 10, 8, 7);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 4, y - 10, 8, 1);
+  ctx.fillRect(x - 4, y - 3, 8, 1);
+}
+
+function drawCartographer(ctx: CanvasRenderingContext2D, x: number, y: number, _r: NpcDrawCtx, def: NpcDef): void {
+  // Wiry leaning figure with a scroll roll and a quill behind the ear.
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 4, y - 2, 8, 9);
+  ctx.fillRect(x - 3, y + 7, 6, 1);
+  ctx.fillStyle = '#5b3a86';
+  ctx.fillRect(x - 4, y - 6, 8, 4);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 3, y - 4, 6, 2);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x + 3, y - 7, 1, 4);
+  ctx.fillStyle = '#dac8ff';
+  ctx.fillRect(x - 8, y + 1, 4, 3);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 8, y + 1, 4, 1);
+}
+
+function drawSmith(ctx: CanvasRenderingContext2D, x: number, y: number, _r: NpcDrawCtx, def: NpcDef): void {
+  // Broad-shouldered with a hammer over the back, anvil glinting beside.
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x + 6, y + 4, 6, 3);
+  ctx.fillStyle = '#1a0f2c';
+  ctx.fillRect(x + 6, y + 7, 6, 1);
+  ctx.fillStyle = '#ff7a3a';
+  ctx.fillRect(x + 7, y + 6, 4, 1);
+  ctx.fillStyle = '#5a3a18';
+  ctx.fillRect(x - 6, y - 2, 12, 9);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 6, y + 3, 12, 1);
+  ctx.fillStyle = '#3a2410';
+  ctx.fillRect(x - 5, y - 7, 10, 5);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 4, y - 5, 8, 2);
+  ctx.fillStyle = '#dac8ff';
+  ctx.fillRect(x - 8, y - 6, 2, 6);
+  ctx.fillStyle = '#3a2410';
+  ctx.fillRect(x - 9, y - 7, 4, 3);
+}
+
+function drawVeteran(ctx: CanvasRenderingContext2D, x: number, y: number, _r: NpcDrawCtx, def: NpcDef): void {
+  // Seated cloaked warrior leaning on a notched spear, scar across the helm.
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 7, y + 6, 14, 2);
+  ctx.fillStyle = '#2a0e1a';
+  ctx.fillRect(x - 5, y - 2, 10, 8);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 5, y + 5, 10, 1);
+  ctx.fillStyle = '#3a2410';
+  ctx.fillRect(x - 5, y - 7, 10, 5);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 4, y - 5, 5, 1);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 3, y - 4, 6, 2);
+  ctx.fillStyle = '#5a3a18';
+  ctx.fillRect(x + 4, y - 10, 1, 14);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x + 3, y - 11, 3, 2);
+}
+
+function drawLampwright(ctx: CanvasRenderingContext2D, x: number, y: number, r: NpcDrawCtx, def: NpcDef): void {
+  // Travelling tinker with a backpack frame draped with small lit lamps.
+  ctx.fillStyle = '#3a2410';
+  ctx.fillRect(x - 4, y - 1, 8, 8);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 4, y + 5, 8, 1);
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 4, y - 5, 8, 4);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 3, y - 3, 6, 2);
+  ctx.fillStyle = '#5a3a18';
+  ctx.fillRect(x + 4, y - 8, 1, 12);
+  ctx.fillRect(x + 6, y - 8, 1, 12);
+  const lampSeed = Math.floor(r.timeAlive * 6);
+  for (let li = 0; li < 3; li++) {
+    const lx = x + 4 + (li * 2 % 3);
+    const ly = y - 6 + li * 4;
+    const flick = 0.7 + 0.3 * Math.sin(r.timeAlive * 4 + li + lampSeed * 0.001);
+    ctx.fillStyle = '#1a0f2c';
+    ctx.fillRect(lx, ly, 2, 2);
+    ctx.fillStyle = `rgba(255, 230, 163, ${flick})`;
+    ctx.fillRect(lx, ly - 1, 2, 1);
+  }
+}
+
+function drawMendicant(ctx: CanvasRenderingContext2D, x: number, y: number, r: NpcDrawCtx, def: NpcDef): void {
+  // Hunched figure with an outstretched begging bowl; coin glints
+  // intermittently in the bowl on a time-based modulo.
+  ctx.fillStyle = '#1a0f2c';
+  ctx.fillRect(x - 4, y - 1, 8, 8);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 4, y + 6, 8, 1);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 4, y - 6, 8, 5);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 2, y - 4, 1, 1);
+  ctx.fillRect(x + 1, y - 4, 1, 1);
+  ctx.fillStyle = '#3a2410';
+  ctx.fillRect(x + 4, y + 2, 4, 2);
+  ctx.fillStyle = '#5a3a18';
+  ctx.fillRect(x + 4, y + 1, 4, 1);
+  if ((Math.floor(r.timeAlive) + r.entityId) % 4 === 0) {
+    ctx.fillStyle = '#f4d27a';
+    ctx.fillRect(x + 5, y + 1, 1, 1);
+  }
+}
+
+function drawPenitent(ctx: CanvasRenderingContext2D, x: number, y: number, r: NpcDrawCtx, _def: NpcDef): void {
+  // Kneeling hooded figure cradling a small lamp that burns in the
+  // current sphere's accent colour ("this Warden's lamp"). The accent
+  // comes via NpcDrawCtx instead of sphereForFloor so the data layer
+  // stays decoupled from the engine.
+  const accent = r.sphereAccent;
+  const accentRgb = hexToRgbString(accent);
+  ctx.fillStyle = '#231142';
+  ctx.fillRect(x - 5, y - 1, 10, 7);
+  ctx.fillStyle = '#1a0f2c';
+  ctx.fillRect(x - 4, y - 6, 8, 4);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 3, y - 4, 6, 2);
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 3, y + 3, 6, 2);
+  ctx.fillStyle = '#1a0f2c';
+  ctx.fillRect(x - 2, y + 1, 4, 3);
+  ctx.fillStyle = accent;
+  ctx.fillRect(x - 1, y - 1, 2, 3);
+  ctx.fillStyle = '#ffe6a3';
+  ctx.fillRect(x, y, 1, 2);
+  const lampHalo = ctx.createRadialGradient(x, y, 1, x, y, 10);
+  lampHalo.addColorStop(0, `rgba(${accentRgb}, 0.35)`);
+  lampHalo.addColorStop(1, `rgba(${accentRgb}, 0)`);
+  ctx.fillStyle = lampHalo;
+  ctx.fillRect(x - 10, y - 10, 20, 20);
+}
+
+function drawDiviner(ctx: CanvasRenderingContext2D, x: number, y: number, _r: NpcDrawCtx, def: NpcDef): void {
+  // Tall figure with arms wide, brass-rim mirror at chest level.
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 5, y - 2, 10, 10);
+  ctx.fillStyle = '#231142';
+  ctx.fillRect(x - 4, y - 8, 8, 5);
+  ctx.fillStyle = '#f4d27a';
+  ctx.fillRect(x - 3, y + 1, 6, 4);
+  ctx.fillStyle = '#1a0f2c';
+  ctx.fillRect(x - 2, y + 2, 4, 2);
+  ctx.fillStyle = '#ffe6a3';
+  ctx.fillRect(x - 1, y + 2, 1, 1);
+  ctx.fillRect(x + 1, y + 3, 1, 1);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 7, y, 2, 2);
+  ctx.fillRect(x + 5, y, 2, 2);
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 3, y - 6, 6, 2);
 }
 
 export const NPCS: Record<string, NpcDef> = {
@@ -52,6 +299,7 @@ export const NPCS: Record<string, NpcDef> = {
       '"Stay a moment. The water listens."',
     ],
     passive: { kind: 'essence', amount: 1, radius: 40, every: 2.0 },
+    draw: drawReedCutter,
   },
   garlandkeep: {
     id: 'garlandkeep',
@@ -67,6 +315,7 @@ export const NPCS: Record<string, NpcDef> = {
     ],
     // Drops one HP-token every 10 s the player keeps her company.
     passive: { kind: 'hp', amount: 12, radius: 42, every: 10.0 },
+    draw: drawGarlandkeep,
   },
   mute: {
     id: 'mute',
@@ -80,6 +329,7 @@ export const NPCS: Record<string, NpcDef> = {
     ambientLines: [],
     // Slow heal-over-time: +1 HP every second within range.
     passive: { kind: 'hp', amount: 1, radius: 42, every: 1.0 },
+    draw: drawMute,
   },
   cartographer: {
     id: 'cartographer',
@@ -94,6 +344,7 @@ export const NPCS: Record<string, NpcDef> = {
       '"Trade me silence for a rumour."',
     ],
     passive: { kind: 'mp', amount: 8, radius: 40, every: 5.0 },
+    draw: drawCartographer,
   },
   smith: {
     id: 'smith',
@@ -108,6 +359,7 @@ export const NPCS: Record<string, NpcDef> = {
       '"The Sun forges twice — once with fire, once with patience."',
     ],
     passive: { kind: 'coin', amount: 5, radius: 42, every: 4.0 },
+    draw: drawSmith,
   },
   veteran: {
     id: 'veteran',
@@ -122,6 +374,7 @@ export const NPCS: Record<string, NpcDef> = {
       '"The spear remembers every hand."',
     ],
     passive: { kind: 'essence', amount: 2, radius: 42, every: 8.0 },
+    draw: drawVeteran,
   },
   diviner: {
     id: 'diviner',
@@ -136,6 +389,7 @@ export const NPCS: Record<string, NpcDef> = {
       '"Hear the long thunder."',
     ],
     passive: { kind: 'mp', amount: 12, radius: 44, every: 6.0 },
+    draw: drawDiviner,
   },
   penitent: {
     id: 'penitent',
@@ -148,6 +402,7 @@ export const NPCS: Record<string, NpcDef> = {
     // picks one based on the Warden that just fell. We leave this empty
     // so the default ambient-line surfaced is filled in by the engine.
     ambientLines: [],
+    draw: drawPenitent,
   },
   mendicant: {
     id: 'mendicant',
@@ -166,6 +421,7 @@ export const NPCS: Record<string, NpcDef> = {
     // 4 s, sustained as long as they keep him company. Felt as "alms
     // returned" rather than a vending transaction.
     passive: { kind: 'essence', amount: 1, radius: 38, every: 4.0 },
+    draw: drawMendicant,
   },
   lampwright: {
     id: 'lampwright',
@@ -179,6 +435,7 @@ export const NPCS: Record<string, NpcDef> = {
       '"Take two."',
       '"Coin for the road, initiate."',
     ],
+    draw: drawLampwright,
   },
 };
 

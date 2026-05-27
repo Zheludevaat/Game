@@ -19,7 +19,7 @@ import {
 import {
   ShrineVariant, pickShrineVariant, shrineDisplayName,
 } from './data/shrines';
-import { NPCS, NpcDef, npcForSphere, PENITENT_LINES, LAMPWRIGHT_WARES } from './data/npcs';
+import { NPCS, NpcDef, NpcDrawCtx, drawFallbackNpcSprite, npcForSphere, PENITENT_LINES, LAMPWRIGHT_WARES } from './data/npcs';
 import {
   STATUS_CONFIG, StatusEffect, StatusEffectKind,
   applyStatusEffect, tickStatusEffects, hasStatus, absorbWithShield,
@@ -5923,13 +5923,14 @@ export class GameEngine {
   private drawNpcs(): void {
     if (this.npcs.length === 0) return;
     const ctx = this.ctx;
+    const sphereAccent = sphereForFloor(this.floor.number).accent;
     for (const npc of this.npcs) {
       const def = NPCS[npc.defId];
       if (!def) continue;
       const bob = Math.sin(npc.phase) * 1.2;
       const x = npc.pos.x;
       const y = npc.pos.y + bob;
-      // Soft sphere-coloured halo
+      // Soft sphere-coloured halo (shared prelude for every NPC)
       const rgb = hexToRgbString(def.colour);
       const halo = ctx.createRadialGradient(x, y, 1, x, y, 24);
       halo.addColorStop(0, `rgba(${rgb}, 0.35)`);
@@ -5939,267 +5940,15 @@ export class GameEngine {
       // ground shadow
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fillRect(x - 6, y + 6, 12, 2);
-      // Reed-Cutter — kneeling silhouette, sickle, reed bundle.
-      if (def.id === 'reedCutter') {
-        // Robe body
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x - 5, y - 2, 10, 8);
-        // Hood
-        ctx.fillStyle = '#231142';
-        ctx.fillRect(x - 4, y - 7, 8, 4);
-        // Gold rim
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 4, y - 7, 8, 1);
-        // Face shadow
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 3, y - 5, 6, 2);
-        // Sickle — bronze blade leaning across the lap
-        ctx.fillStyle = '#a4faf0';
-        ctx.fillRect(x + 4, y + 1, 4, 1);
-        ctx.fillRect(x + 7, y - 1, 1, 3);
-        // Reed bundle at side
-        ctx.fillStyle = '#cdf6ff';
-        ctx.fillRect(x - 9, y + 2, 3, 4);
-        ctx.fillStyle = '#dac8ff';
-        ctx.fillRect(x - 9, y + 2, 3, 1);
-      } else if (def.id === 'garlandkeep') {
-        // Seated tender with garlands strewn around her. Pink halo gives
-        // the Venus chamber a warmer feel than the lunar reedlit one.
-        // Garland scatter (three petals on the ground)
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 12, y + 5, 2, 2);
-        ctx.fillRect(x + 9, y + 6, 2, 2);
-        ctx.fillRect(x + 3, y + 7, 2, 2);
-        // Robe body — rose-trimmed
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x - 5, y - 1, 10, 9);
-        // Garland draped across lap
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 6, y + 3, 12, 1);
-        // Hood / shawl
-        ctx.fillStyle = '#5b3a86';
-        ctx.fillRect(x - 4, y - 6, 8, 4);
-        // Face shadow
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 3, y - 4, 6, 2);
-        // Brow rose
-        ctx.fillStyle = '#ffe6a3';
-        ctx.fillRect(x - 1, y - 6, 2, 1);
-      } else if (def.id === 'mute') {
-        // Tall featureless silhouette — the hood swallows the face
-        // entirely; the figure is taller than the others.
-        // Robe body — extra-tall
-        ctx.fillStyle = '#1a0f2c';
-        ctx.fillRect(x - 5, y - 4, 10, 12);
-        // Deep hood
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 4, y - 10, 8, 7);
-        // Faint violet rim — the only colour on the silhouette
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 4, y - 10, 8, 1);
-        ctx.fillRect(x - 4, y - 3, 8, 1);
-        // No face — just absolute darkness in the hood. The void itself.
-      } else if (def.id === 'cartographer') {
-        // Wiry leaning figure with a scroll roll under the arm and a quill
-        // tucked behind the ear. Reads as a desk-scholar mid-step.
-        // Robe (leaning forward)
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x - 4, y - 2, 8, 9);
-        ctx.fillRect(x - 3, y + 7, 6, 1);
-        // Hood / hair
-        ctx.fillStyle = '#5b3a86';
-        ctx.fillRect(x - 4, y - 6, 8, 4);
-        // Face shadow
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 3, y - 4, 6, 2);
-        // Quill behind ear
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x + 3, y - 7, 1, 4);
-        // Scroll under arm — pale roll with a darker band
-        ctx.fillStyle = '#dac8ff';
-        ctx.fillRect(x - 8, y + 1, 4, 3);
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 8, y + 1, 4, 1);
-      } else if (def.id === 'smith') {
-        // Broad-shouldered figure with a hammer over the back and an
-        // anvil glinting beside her. Warm gold tones for the Sun.
-        // Anvil
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x + 6, y + 4, 6, 3);
-        ctx.fillStyle = '#1a0f2c';
-        ctx.fillRect(x + 6, y + 7, 6, 1);
-        // Forge glow under anvil
-        ctx.fillStyle = '#ff7a3a';
-        ctx.fillRect(x + 7, y + 6, 4, 1);
-        // Wide robe / apron
-        ctx.fillStyle = '#5a3a18';
-        ctx.fillRect(x - 6, y - 2, 12, 9);
-        // Gold band
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 6, y + 3, 12, 1);
-        // Hood
-        ctx.fillStyle = '#3a2410';
-        ctx.fillRect(x - 5, y - 7, 10, 5);
-        // Face shadow
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 4, y - 5, 8, 2);
-        // Hammer over the shoulder
-        ctx.fillStyle = '#dac8ff';
-        ctx.fillRect(x - 8, y - 6, 2, 6);
-        ctx.fillStyle = '#3a2410';
-        ctx.fillRect(x - 9, y - 7, 4, 3);
-      } else if (def.id === 'veteran') {
-        // Seated cloaked warrior leaning on a notched spear, helm scarred.
-        // Red glow around the spearpoint.
-        // Stone he's seated on
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x - 7, y + 6, 14, 2);
-        // Robe / cloak (drawn dark crimson)
-        ctx.fillStyle = '#2a0e1a';
-        ctx.fillRect(x - 5, y - 2, 10, 8);
-        // Cloak trim
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 5, y + 5, 10, 1);
-        // Scarred helm
-        ctx.fillStyle = '#3a2410';
-        ctx.fillRect(x - 5, y - 7, 10, 5);
-        // Scar across helm
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 4, y - 5, 5, 1);
-        // Face shadow
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 3, y - 4, 6, 2);
-        // Spear leaning across — diagonal blade
-        ctx.fillStyle = '#5a3a18';
-        ctx.fillRect(x + 4, y - 10, 1, 14);
-        // Spearpoint glow
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x + 3, y - 11, 3, 2);
-      } else if (def.id === 'lampwright') {
-        // Travelling tinker with a backpack frame draped in small lit
-        // lamps. Three lamp halos pulse at slightly different phases
-        // so the silhouette reads as "carrying a constellation."
-        // Robe
-        ctx.fillStyle = '#3a2410';
-        ctx.fillRect(x - 4, y - 1, 8, 8);
-        // Belt / coin pouch
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 4, y + 5, 8, 1);
-        // Hood
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x - 4, y - 5, 8, 4);
-        // Face shadow
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 3, y - 3, 6, 2);
-        // Backpack frame — vertical posts behind the figure
-        ctx.fillStyle = '#5a3a18';
-        ctx.fillRect(x + 4, y - 8, 1, 12);
-        ctx.fillRect(x + 6, y - 8, 1, 12);
-        // Three lit lamps hanging from the frame at staggered heights
-        const lampSeed = Math.floor(this.timeAlive * 6);
-        for (let li = 0; li < 3; li++) {
-          const lx = x + 4 + (li * 2 % 3);
-          const ly = y - 6 + li * 4;
-          const flick = 0.7 + 0.3 * Math.sin(this.timeAlive * 4 + li + lampSeed * 0.001);
-          // Lamp body
-          ctx.fillStyle = '#1a0f2c';
-          ctx.fillRect(lx, ly, 2, 2);
-          // Flame
-          ctx.fillStyle = `rgba(255, 230, 163, ${flick})`;
-          ctx.fillRect(lx, ly - 1, 2, 1);
-        }
-      } else if (def.id === 'mendicant') {
-        // Hunched figure with an outstretched begging bowl, threadbare
-        // cloak with a teal stitched hem, eyes lit teal in the hood
-        // shadow. Universal — appears on any sphere.
-        // Cloak
-        ctx.fillStyle = '#1a0f2c';
-        ctx.fillRect(x - 4, y - 1, 8, 8);
-        // Stitched hem
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 4, y + 6, 8, 1);
-        // Hood
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 4, y - 6, 8, 5);
-        // Two glowing teal eyes
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 2, y - 4, 1, 1);
-        ctx.fillRect(x + 1, y - 4, 1, 1);
-        // Outstretched bowl (small dish to the side, slightly tilted)
-        ctx.fillStyle = '#3a2410';
-        ctx.fillRect(x + 4, y + 2, 4, 2);
-        ctx.fillStyle = '#5a3a18';
-        ctx.fillRect(x + 4, y + 1, 4, 1);
-        // A coin sometimes glints in the bowl
-        if ((Math.floor(this.timeAlive) + npc.id) % 4 === 0) {
-          ctx.fillStyle = '#f4d27a';
-          ctx.fillRect(x + 5, y + 1, 1, 1);
-        }
-      } else if (def.id === 'penitent') {
-        // Kneeling hooded figure, hands resting on a small lamp that
-        // burns in the sphere's accent colour. The colour comes from
-        // sphereForFloor since the penitent's def colour is the default
-        // gold; the per-sphere tint reads as "this Warden's lamp."
-        const accent = sphereForFloor(this.floor.number).accent;
-        const accentRgb = hexToRgbString(accent);
-        // Robe — folded kneel shape
-        ctx.fillStyle = '#231142';
-        ctx.fillRect(x - 5, y - 1, 10, 7);
-        // Hood
-        ctx.fillStyle = '#1a0f2c';
-        ctx.fillRect(x - 4, y - 6, 8, 4);
-        // Face shadow
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 3, y - 4, 6, 2);
-        // Hands cupping the lamp
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x - 3, y + 3, 6, 2);
-        // Lamp body — small dark vessel with a flame in the sphere accent
-        ctx.fillStyle = '#1a0f2c';
-        ctx.fillRect(x - 2, y + 1, 4, 3);
-        ctx.fillStyle = accent;
-        ctx.fillRect(x - 1, y - 1, 2, 3);
-        // Bright flame core
-        ctx.fillStyle = '#ffe6a3';
-        ctx.fillRect(x, y, 1, 2);
-        // Faint sphere-accent halo around the lamp (subtle)
-        const lampHalo = ctx.createRadialGradient(x, y, 1, x, y, 10);
-        lampHalo.addColorStop(0, `rgba(${accentRgb}, 0.35)`);
-        lampHalo.addColorStop(1, `rgba(${accentRgb}, 0)`);
-        ctx.fillStyle = lampHalo;
-        ctx.fillRect(x - 10, y - 10, 20, 20);
-      } else if (def.id === 'diviner') {
-        // Tall figure with hands spread, a brass-rim mirror floating
-        // before him catching gold light. Robe in violet.
-        // Robe
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x - 5, y - 2, 10, 10);
-        // Hood
-        ctx.fillStyle = '#231142';
-        ctx.fillRect(x - 4, y - 8, 8, 5);
-        // Mirror — brass ring at chest level
-        ctx.fillStyle = '#f4d27a';
-        ctx.fillRect(x - 3, y + 1, 6, 4);
-        ctx.fillStyle = '#1a0f2c';
-        ctx.fillRect(x - 2, y + 2, 4, 2);
-        // Gold flicker INSIDE the mirror
-        ctx.fillStyle = '#ffe6a3';
-        ctx.fillRect(x - 1, y + 2, 1, 1);
-        ctx.fillRect(x + 1, y + 3, 1, 1);
-        // Hands held wide
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 7, y, 2, 2);
-        ctx.fillRect(x + 5, y, 2, 2);
-        // Face shadow
-        ctx.fillStyle = '#0a0420';
-        ctx.fillRect(x - 3, y - 6, 6, 2);
-      } else {
-        // Fallback — small robed silhouette so an unauthored NPC still renders.
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(x - 4, y - 4, 8, 10);
-        ctx.fillStyle = def.colour;
-        ctx.fillRect(x - 3, y - 6, 6, 3);
-      }
+      // Per-NPC sprite — each NpcDef carries its own draw callback in
+      // src/game/data/npcs.ts. The fallback handles unauthored ids.
+      const rctx: NpcDrawCtx = {
+        phase: npc.phase,
+        entityId: npc.id,
+        timeAlive: this.timeAlive,
+        sphereAccent,
+      };
+      (def.draw ?? drawFallbackNpcSprite)(ctx, x, y, rctx, def);
     }
   }
 
