@@ -18,8 +18,9 @@ import { GameOverScreen } from './components/GameOver';
 import { MetaProgression } from './components/MetaProgression';
 import { TouchControls } from './components/TouchControls';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
-import { ArchetypeId, MetaState, RunHistoryEntry, SettingsState } from './game/GameTypes';
+import { ArchetypeId, DailyHistoryEntry, MetaState, RunHistoryEntry, SettingsState } from './game/GameTypes';
 import { evaluateAchievements } from './game/data/achievements';
+import { ARCHETYPES } from './game/data/archetypes';
 import { MapOverlay } from './components/MapOverlay';
 import { CodexScreen } from './components/CodexScreen';
 import { CinematicsScreen } from './components/CinematicsScreen';
@@ -74,6 +75,10 @@ export function App(): JSX.Element {
   const [pendingBossIntro, setPendingBossIntro] = useState<string | null>(null);
   // Archetype + run options stashed when a new-run cinematic is queued.
   const [pendingRunStart, setPendingRunStart] = useState<{ id: ArchetypeId; floor?: number; runSeed?: number } | null>(null);
+  /** True while a Daily Run is in progress — the game-over flow appends
+   *  to meta.dailyHistory instead of meta.runHistory, and the Continue
+   *  button stays disabled. */
+  const dailyModeRef = useRef(false);
 
   // --- Loading screen timer ---
   // First-load goes through the Tabula opening film instead of straight to
@@ -207,25 +212,34 @@ export function App(): JSX.Element {
     };
   }, [screen]);
 
-  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number }) => {
+  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; daily?: boolean }) => {
     saveLastArchetype(archetypeId);
     setLastArchetype(archetypeId);
     setSummary(null);
+    dailyModeRef.current = !!opts?.daily;
     // First time ever: gate through "The Gate Opens" cinematic, then
     // resume into the actual run on its onDone. Resume flow (opts.floor
     // > 1) skips the cinematic — that's a continuation, not a new run.
-    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1;
+    // Daily Runs also skip the cinematic to keep the timed attempt clean.
+    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1 && !opts?.daily;
     if (isFirstRun) {
       setPendingRunStart({ id: archetypeId, floor: opts?.floor, runSeed: opts?.runSeed });
       setScreen('newRunIntro');
       return;
     }
     setScreen('game');
-    // Persist a resume entry — used by Continue button next time
+    // Persist a resume entry — used by Continue button next time. Daily
+    // Runs don't write resume state, since each day's seed must be
+    // attempted fresh and can't be picked up mid-run from Continue.
     const runSeed = opts?.runSeed ?? Math.floor(Math.random() * 0xffffffff);
     const startingFloor = opts?.floor ?? 1;
-    saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
-    setResumeAvailable(true);
+    if (!opts?.daily) {
+      saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
+      setResumeAvailable(true);
+    } else {
+      saveResume(null);
+      setResumeAvailable(false);
+    }
     setTimeout(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -256,6 +270,7 @@ export function App(): JSX.Element {
           setEssence((e) => { const ne = e + s.essenceCollected; saveEssence(ne); return ne; });
           // Append the run to history, update per-archetype best, evaluate
           // achievements. setMeta then auto-persists via the existing useEffect.
+          const isDaily = dailyModeRef.current;
           setMeta((m) => {
             const entry: RunHistoryEntry = {
               date: Date.now(),
@@ -266,20 +281,54 @@ export function App(): JSX.Element {
               ascensionLevel: m.ascensionLevel ?? 0,
               deathCause: s.ogdoadReached ? 'descend' : s.deathCause,
             };
-            const history = [entry, ...(m.runHistory ?? [])].slice(0, 20);
+            // Daily Runs don't pollute the normal history rail — they
+            // get their own dailyHistory list. Achievements still
+            // evaluate so a daily that achieves something counts.
+            const history = isDaily
+              ? (m.runHistory ?? [])
+              : [entry, ...(m.runHistory ?? [])].slice(0, 20);
+            let dailyHistory = m.dailyHistory ?? [];
+            let lastDailyDate = m.lastDailyDate;
+            if (isDaily) {
+              const score = s.floorReached * 1000 + s.essenceCollected + s.bossesDefeated * 500;
+              const dayIndex = Math.floor(Date.now() / 86_400_000);
+              const dailyEntry: DailyHistoryEntry = {
+                dayIndex,
+                date: Date.now(),
+                archetype: archetypeId,
+                floorReached: s.floorReached,
+                bossesDefeated: s.bossesDefeated,
+                essenceCollected: s.essenceCollected,
+                ogdoadReached: !!s.ogdoadReached,
+                score,
+              };
+              dailyHistory = [dailyEntry, ...dailyHistory].slice(0, 30);
+              lastDailyDate = dayIndex;
+            }
             const pab = { ...(m.perArchetypeBest ?? {}) };
             pab[archetypeId] = Math.max(pab[archetypeId] ?? 0, s.floorReached);
             const newAchievements = evaluateAchievements(s, { ...m, perArchetypeBest: pab }, m.ascensionLevel ?? 0);
             const achievements = [...(m.achievements ?? []), ...newAchievements];
-            return { ...m, runHistory: history, perArchetypeBest: pab, achievements };
+            return {
+              ...m,
+              runHistory: history,
+              perArchetypeBest: pab,
+              achievements,
+              dailyHistory,
+              lastDailyDate,
+            };
           });
+          dailyModeRef.current = false;
           saveResume(null);
           setResumeAvailable(false);
           setScreen('gameOver');
         },
         onFloorChange: (n) => {
-          // Update resume floor checkpoint
-          saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
+          // Update resume floor checkpoint — skipped for Daily Runs so
+          // a player can't reload mid-run to retry the same seed.
+          if (!dailyModeRef.current) {
+            saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
+          }
         },
         onCodexUnlock: (id) => {
           setMeta((m) => {
@@ -396,9 +445,19 @@ export function App(): JSX.Element {
           resumeAvailable={resumeAvailable}
           codexUnlocked={meta.unlockedCodex.length}
           codexTotal={CODEX.length}
+          dailyAttemptedToday={(meta.lastDailyDate ?? -1) >= Math.floor(Date.now() / 86_400_000)}
+          dailyArchetypeName={(() => {
+            const day = Math.floor(Date.now() / 86_400_000);
+            return ARCHETYPES[day % ARCHETYPES.length].name;
+          })()}
           onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
           onCinematics={() => setScreen('cinematics')}
           onNewRun={() => setScreen('archetype')}
+          onDailyRun={() => {
+            const day = Math.floor(Date.now() / 86_400_000);
+            const arch = ARCHETYPES[day % ARCHETYPES.length].id;
+            startRun(arch, { runSeed: day, daily: true });
+          }}
           onContinue={() => {
             const r = loadResume();
             if (!r) { setScreen('archetype'); return; }

@@ -8,7 +8,12 @@ interface Props {
   resumeAvailable: boolean;
   codexUnlocked: number;
   codexTotal: number;
+  /** True if the player has already attempted today's Daily Run. */
+  dailyAttemptedToday: boolean;
+  /** Display name of the archetype the Daily Run is locked to today. */
+  dailyArchetypeName: string;
   onNewRun: () => void;
+  onDailyRun: () => void;
   onContinue: () => void;
   onMeta: () => void;
   onSettings: () => void;
@@ -117,6 +122,7 @@ export function MainMenu(p: Props): JSX.Element {
 
   const items = [
     { onActivate: p.onNewRun },
+    { onActivate: p.dailyAttemptedToday ? () => undefined : p.onDailyRun, disabled: p.dailyAttemptedToday },
     { onActivate: p.resumeAvailable ? p.onContinue : () => undefined, disabled: !p.resumeAvailable },
     { onActivate: p.onCodex },
     { onActivate: p.onCinematics },
@@ -139,21 +145,29 @@ export function MainMenu(p: Props): JSX.Element {
         </div>
         <div className="main-menu-grid">
           <PixelButton onClick={p.onNewRun} focused={focus === 0}>New Run</PixelButton>
-          <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 1}>
+          <PixelButton
+            onClick={p.onDailyRun}
+            disabled={p.dailyAttemptedToday}
+            focused={focus === 1}
+            badge={p.dailyAttemptedToday ? 'DONE' : p.dailyArchetypeName.split(' ').slice(-1)[0]}
+          >
+            Daily Run {p.dailyAttemptedToday ? '' : ''}
+          </PixelButton>
+          <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 2}>
             Continue {p.resumeAvailable ? '' : '(none)'}
           </PixelButton>
-          <PixelButton onClick={p.onCodex} focused={focus === 2} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
+          <PixelButton onClick={p.onCodex} focused={focus === 3} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
             Codex Hermeticum
           </PixelButton>
-          <PixelButton onClick={p.onCinematics} focused={focus === 3} badge="▶">
+          <PixelButton onClick={p.onCinematics} focused={focus === 4} badge="▶">
             Cinematics
           </PixelButton>
-          <PixelButton onClick={p.onMeta} focused={focus === 4} badge={`✦ ${p.essence}`}>
+          <PixelButton onClick={p.onMeta} focused={focus === 5} badge={`✦ ${p.essence}`}>
             Meta Progression
           </PixelButton>
-          <PixelButton onClick={p.onSettings} focused={focus === 5}>Settings</PixelButton>
-          <PixelButton onClick={p.onController} focused={focus === 6}>Controller Test</PixelButton>
-          <PixelButton onClick={p.onHowTo} focused={focus === 7}>How to Play</PixelButton>
+          <PixelButton onClick={p.onSettings} focused={focus === 6}>Settings</PixelButton>
+          <PixelButton onClick={p.onController} focused={focus === 7}>Controller Test</PixelButton>
+          <PixelButton onClick={p.onHowTo} focused={focus === 8}>How to Play</PixelButton>
         </div>
         <div className="main-menu-stats" style={{ marginTop: 18, fontSize: 11, letterSpacing: '0.3em', color: 'var(--teal)' }}>
           Best Floor: <span className="gold-text">{p.bestFloor}</span> &nbsp;·&nbsp; Essence: <span className="gold-text">{p.essence}</span>

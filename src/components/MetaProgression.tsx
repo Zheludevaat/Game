@@ -183,6 +183,25 @@ export function MetaProgression({ essence, meta, onSpend, onSetAscension, onBack
             </div>
           </>
         )}
+        {(meta.dailyHistory ?? []).length > 0 && (
+          <>
+            <div className="pixel-divider" />
+            <div style={{ marginBottom: 8 }}>
+              <div className="glow-text" style={{ fontSize: 12, letterSpacing: '0.2em', marginBottom: 6 }}>DAILY RUN RECORD</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10 }}>
+                {(meta.dailyHistory ?? []).slice(0, 8).map((r) => (
+                  <div key={r.date} style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.85 }}>
+                    <span>{new Date(r.date).toISOString().slice(0, 10)}</span>
+                    <span>{r.archetype.padEnd(7)}</span>
+                    <span>Fl {r.floorReached}</span>
+                    <span className="gold-text">{r.score}</span>
+                    {r.ogdoadReached && <span className="gold-text">✦CLEAR</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         <div className="pixel-divider" />
         <div style={{ textAlign: 'center' }}>
           <PixelButton onClick={onBack} focused={focus === UPGRADES.length}>Back</PixelButton>

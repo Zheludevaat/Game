@@ -257,6 +257,25 @@ export interface MetaState {
   achievements?: string[];
   /** Current ascension level (0 = standard, 1..5 unlocks after each Ogdoad). */
   ascensionLevel?: number;
+  /** Last UTC day-index (Date.now() / 86_400_000) the player attempted
+   *  the Daily Run. Cleared on save reset. */
+  lastDailyDate?: number;
+  /** Most-recent daily attempt records (cap 30, newest first). */
+  dailyHistory?: DailyHistoryEntry[];
+}
+
+export interface DailyHistoryEntry {
+  /** UTC day-index — floor(Date.now() / 86_400_000) on the day of the attempt. */
+  dayIndex: number;
+  /** Date.now() captured at run-end for display ordering. */
+  date: number;
+  archetype: ArchetypeId;
+  floorReached: number;
+  bossesDefeated: number;
+  essenceCollected: number;
+  /** Composite score — floor×1000 + essence + bosses×500. Higher is better. */
+  score: number;
+  ogdoadReached: boolean;
 }
 
 export interface RunHistoryEntry {
