@@ -186,10 +186,23 @@ export function generateFloor(opts: GenOptions): Floor {
     r.enemiesSpawned = true;
     sanctuarySpawned = true;
   }
+  // Lampwright marketplace — 5 % per floor at floors 5+, mutually
+  // exclusive with the sphere wanderer slot. Rarer than the Mendicant,
+  // pricier per visit, but the only reliable source of consumables
+  // outside chest drops.
+  if (others.length && !sanctuarySpawned && floor >= 5 && rng.chance(0.05)) {
+    const r = others.pop()!;
+    r.type = 'sanctuary';
+    r.name = pickRoomName('sanctuary', rng);
+    r.cleared = true;
+    r.enemiesSpawned = true;
+    r.sanctuaryNpcId = 'lampwright';
+    sanctuarySpawned = true;
+  }
   // Mendicant sanctuary — a rare independent roll on top. 7 % per
-  // floor, and only when the sphere sanctuary didn't already land
-  // (so a floor can't have two sanctuaries). The engine reads
-  // sanctuaryNpcId to know which NPC to populate.
+  // floor, and only when no other sanctuary landed (so a floor can't
+  // double up). The engine reads sanctuaryNpcId to know which NPC to
+  // populate.
   if (others.length && !sanctuarySpawned && rng.chance(0.07)) {
     const r = others.pop()!;
     r.type = 'sanctuary';

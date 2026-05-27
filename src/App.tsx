@@ -548,7 +548,12 @@ export function App(): JSX.Element {
       )}
 
       {showCanvas && hud && (
-        <HUD hud={hud} input={inputRef.current} />
+        <HUD
+          hud={hud}
+          input={inputRef.current}
+          onShopBuy={(idx) => engineRef.current?.shopBuyAt(idx)}
+          onShopClose={() => engineRef.current?.shopClose()}
+        />
       )}
 
       {/* Touch overlay rule:

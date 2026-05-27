@@ -167,7 +167,35 @@ export const NPCS: Record<string, NpcDef> = {
     // returned" rather than a vending transaction.
     passive: { kind: 'essence', amount: 1, radius: 38, every: 4.0 },
   },
+  lampwright: {
+    id: 'lampwright',
+    name: 'The Lampwright',
+    title: 'Travelling Tinker',
+    sphere: null,
+    interaction: 'full',
+    colour: '#ffe6a3',
+    ambientLines: [
+      '"Some descend with one lamp. Some come back with none."',
+      '"Take two."',
+      '"Coin for the road, initiate."',
+    ],
+  },
 };
+
+/** Lampwright shop catalogue — three consumables at coin prices.
+ *  Selected by index inside the shop modal. */
+export interface LampwrightWare {
+  consumableId: 'healingPhial' | 'manaPhial' | 'cleansingSalt';
+  cost: number;
+  label: string;
+  description: string;
+}
+
+export const LAMPWRIGHT_WARES: LampwrightWare[] = [
+  { consumableId: 'healingPhial', cost: 25, label: 'Healing Phial',  description: 'A phial of bottled light. Restores 25 HP.' },
+  { consumableId: 'manaPhial',    cost: 30, label: 'Mana Phial',     description: 'A phial of cobalt vapour. Restores 30 MP.' },
+  { consumableId: 'cleansingSalt',cost: 40, label: 'Cleansing Salt', description: 'Strips debuffs, grants a small shield.' },
+];
 
 /** Sphere-keyed lament spoken by the Penitent over a fallen Warden's
  *  lamp. The engine picks the line for the current sphere when the

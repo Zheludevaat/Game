@@ -19,7 +19,7 @@ import {
 import {
   ShrineVariant, pickShrineVariant, shrineDisplayName,
 } from './data/shrines';
-import { NPCS, NpcDef, npcForSphere, PENITENT_LINES } from './data/npcs';
+import { NPCS, NpcDef, npcForSphere, PENITENT_LINES, LAMPWRIGHT_WARES } from './data/npcs';
 import {
   STATUS_CONFIG, StatusEffect, StatusEffectKind,
   applyStatusEffect, tickStatusEffects, hasStatus, absorbWithShield,
@@ -86,6 +86,14 @@ export interface HudSnapshot {
     shrineIntact: boolean;
   }[];
   pendingShrine?: { name: string; effect: string; downside: string };
+  /** Lampwright shop modal — wares + currently-focused index. The host
+   *  renders one button per ware; clicking a button fires the engine's
+   *  shop-buy via setTouchButton-style edge plumbing. */
+  pendingShop?: {
+    wares: { label: string; description: string; cost: number; affordable: boolean; canAccept: boolean }[];
+    focus: number;
+    coins: number;
+  };
   /** Current combo counter (0 = no chain). Capped at 5. */
   combo: number;
   /** Pulse animation timer (0..0.4) — used to scale the HUD tag on increment. */
@@ -523,6 +531,10 @@ export class GameEngine {
     effect: string;
     downside: string;
   } | null = null;
+  /** Lampwright shop modal — true while the player is browsing wares. */
+  private pendingShop = false;
+  /** Index of the currently focused shop row. */
+  private shopFocus = 0;
   private damageNumbers: DamageNumber[] = [];
   private timeAlive = 0;
   private dead = false;
@@ -1604,7 +1616,13 @@ export class GameEngine {
     // holds its breath while the lamp goes out. The cinematic tick
     // (particles, camera shake, embers, dying timer) keeps running below.
     if (!this.dead) {
-      if (this.pendingShrine) {
+      if (this.pendingShop) {
+        // Shop modal active — D-pad / WASD navigate, confirm buys.
+        if (s.uiUp)   this.shopFocus = Math.max(0, this.shopFocus - 1);
+        if (s.uiDown) this.shopFocus = Math.min(LAMPWRIGHT_WARES.length - 1, this.shopFocus + 1);
+        if (s.uiConfirm || s.interactPressed) this.tryShopBuy(this.shopFocus);
+        if (s.uiCancel) this.pendingShop = false;
+      } else if (this.pendingShrine) {
         // Shrine modal active — block movement, wait for confirm/cancel
         if (s.uiConfirm || s.interactPressed) this.confirmShrine(true);
         if (s.uiCancel) this.confirmShrine(false);
@@ -2307,6 +2325,20 @@ export class GameEngine {
         return;
       }
     }
+    // Lampwright vendor — opens a shop modal when the player presses
+    // interact within range of his sanctuary stall.
+    if (room.type === 'sanctuary' && room.sanctuaryNpcId === 'lampwright') {
+      for (const npc of this.npcs) {
+        if (npc.defId !== 'lampwright') continue;
+        const d = Math.hypot(p.pos.x - npc.pos.x, p.pos.y - npc.pos.y);
+        if (d < 36) {
+          this.pendingShop = true;
+          this.shopFocus = 0;
+          audio.sfx('shrine');
+          return;
+        }
+      }
+    }
     // Nothing in range — surface a transient hint so the player knows
     // the press was registered. Useful both for diagnosing the
     // "interact doesn't work" report (it DID fire, just nothing was
@@ -2314,10 +2346,34 @@ export class GameEngine {
     if (
       (room.hasChest && !room.chestOpened) ||
       (room.hasShrine && !room.shrineUsed) ||
-      room.type === 'exit'
+      room.type === 'exit' ||
+      (room.type === 'sanctuary' && room.sanctuaryNpcId === 'lampwright')
     ) {
       this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'TOO FAR', '#9b6cff');
     }
+  }
+
+  /** Lampwright transaction — checks coin balance, deducts on buy,
+   *  hands the chosen consumable through the existing grantConsumable
+   *  pipeline. Insufficient coins surfaces a "NOT ENOUGH" hint. */
+  private tryShopBuy(idx: number): void {
+    if (!this.pendingShop) return;
+    const ware = LAMPWRIGHT_WARES[idx];
+    if (!ware) return;
+    const p = this.player;
+    if (p.coins < ware.cost) {
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'NOT ENOUGH', '#e23a4a');
+      return;
+    }
+    // Inventory check — refuse the sale if the player already has
+    // max stacks of this consumable so the player can't waste coins.
+    if (!this.canAcceptConsumable(ware.consumableId)) {
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'FULL', '#9b6cff');
+      return;
+    }
+    p.coins -= ware.cost;
+    this.grantConsumable(ware.consumableId);
+    audio.sfx('chest');
   }
 
   private isNearCenter(pos: Vec): boolean {
@@ -5761,6 +5817,39 @@ export class GameEngine {
         // Spearpoint glow
         ctx.fillStyle = def.colour;
         ctx.fillRect(x + 3, y - 11, 3, 2);
+      } else if (def.id === 'lampwright') {
+        // Travelling tinker with a backpack frame draped in small lit
+        // lamps. Three lamp halos pulse at slightly different phases
+        // so the silhouette reads as "carrying a constellation."
+        // Robe
+        ctx.fillStyle = '#3a2410';
+        ctx.fillRect(x - 4, y - 1, 8, 8);
+        // Belt / coin pouch
+        ctx.fillStyle = def.colour;
+        ctx.fillRect(x - 4, y + 5, 8, 1);
+        // Hood
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x - 4, y - 5, 8, 4);
+        // Face shadow
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 3, y - 3, 6, 2);
+        // Backpack frame — vertical posts behind the figure
+        ctx.fillStyle = '#5a3a18';
+        ctx.fillRect(x + 4, y - 8, 1, 12);
+        ctx.fillRect(x + 6, y - 8, 1, 12);
+        // Three lit lamps hanging from the frame at staggered heights
+        const lampSeed = Math.floor(this.timeAlive * 6);
+        for (let li = 0; li < 3; li++) {
+          const lx = x + 4 + (li * 2 % 3);
+          const ly = y - 6 + li * 4;
+          const flick = 0.7 + 0.3 * Math.sin(this.timeAlive * 4 + li + lampSeed * 0.001);
+          // Lamp body
+          ctx.fillStyle = '#1a0f2c';
+          ctx.fillRect(lx, ly, 2, 2);
+          // Flame
+          ctx.fillStyle = `rgba(255, 230, 163, ${flick})`;
+          ctx.fillRect(lx, ly - 1, 2, 1);
+        }
       } else if (def.id === 'mendicant') {
         // Hunched figure with an outstretched begging bowl, threadbare
         // cloak with a teal stitched hem, eyes lit teal in the hood
@@ -6131,6 +6220,15 @@ export class GameEngine {
         effect: this.pendingShrine.effect,
         downside: this.pendingShrine.downside,
       } : undefined,
+      pendingShop: this.pendingShop ? {
+        wares: LAMPWRIGHT_WARES.map((w) => ({
+          label: w.label, description: w.description, cost: w.cost,
+          affordable: p.coins >= w.cost,
+          canAccept: this.canAcceptConsumable(w.consumableId),
+        })),
+        focus: this.shopFocus,
+        coins: p.coins,
+      } : undefined,
       combo: this.comboCount,
       comboPulse: this.comboPulse,
       playerStatus: p.status.map((s) => ({ kind: s.kind, remaining: s.remaining, stacks: s.stacks })),
@@ -6220,4 +6318,16 @@ export class GameEngine {
   // --- public test hook ---------------------------------------------------
 
   getSummary(): RunSummary { return this.summary; }
+
+  /** Host bridge — the HUD's Lampwright modal calls this on a tap so
+   *  the shop transaction routes through the same path as the
+   *  keyboard / controller confirm. */
+  public shopBuyAt(idx: number): void {
+    this.shopFocus = idx;
+    this.tryShopBuy(idx);
+  }
+  /** Host bridge — closes the shop modal from the HUD. */
+  public shopClose(): void {
+    this.pendingShop = false;
+  }
 }

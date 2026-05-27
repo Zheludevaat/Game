@@ -7,9 +7,16 @@ import { RELIC_SYNERGIES } from '../game/data/relicSynergies';
 import { STATUS_CONFIG } from '../game/data/statusEffects';
 import { InputManager } from '../game/input/InputManager';
 
-interface Props { hud: HudSnapshot; input?: InputManager | null }
+interface Props {
+  hud: HudSnapshot;
+  input?: InputManager | null;
+  /** Lampwright shop callbacks — touch users tap rows directly since
+   *  the engine's uiUp/uiDown/uiConfirm wiring is keyboard / pad only. */
+  onShopBuy?: (idx: number) => void;
+  onShopClose?: () => void;
+}
 
-export function HUD({ hud, input }: Props): JSX.Element {
+export function HUD({ hud, input, onShopBuy, onShopClose }: Props): JSX.Element {
   // Always-visible "pause" affordance — so a player whose Bluetooth
   // controller has a non-firing Start button can still reach the menu.
   // Hidden on touch devices since TouchControls renders its own dedicated
@@ -133,6 +140,16 @@ export function HUD({ hud, input }: Props): JSX.Element {
 
       {hud.pendingShrine && (
         <ShrinePrompt name={hud.pendingShrine.name} effect={hud.pendingShrine.effect} downside={hud.pendingShrine.downside} />
+      )}
+
+      {hud.pendingShop && (
+        <ShopPrompt
+          wares={hud.pendingShop.wares}
+          focus={hud.pendingShop.focus}
+          coins={hud.pendingShop.coins}
+          onBuy={(idx) => onShopBuy?.(idx)}
+          onClose={() => onShopClose?.()}
+        />
       )}
     </div>
   );
@@ -483,6 +500,99 @@ function ShrinePrompt({ name, effect, downside }: { name: string; effect: string
         <div className="pixel-divider" />
         <div style={{ fontSize: 11, color: 'var(--bone)' }}>
           Interact / Enter — Accept &nbsp;·&nbsp; Esc / B — Decline
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ShopWareView {
+  label: string;
+  description: string;
+  cost: number;
+  affordable: boolean;
+  canAccept: boolean;
+}
+
+interface ShopPromptProps {
+  wares: ShopWareView[];
+  focus: number;
+  coins: number;
+  onBuy: (idx: number) => void;
+  onClose: () => void;
+}
+
+function ShopPrompt({ wares, focus, coins, onBuy, onClose }: ShopPromptProps): JSX.Element {
+  return (
+    <div style={{
+      position: 'absolute',
+      left: '50%', top: '50%',
+      transform: 'translate(-50%, -50%)',
+      pointerEvents: 'auto',
+    }}>
+      <div className="pixel-panel" style={{ minWidth: 360, textAlign: 'center' }}>
+        <div className="pixel-subtitle">The Lampwright opens his pack</div>
+        <div className="pixel-title" style={{ fontSize: 20, margin: '4px 0' }}>Wares for the Lamp</div>
+        <div className="pixel-divider" />
+        <div style={{ fontSize: 11, color: 'var(--gold-1)', marginBottom: 6 }}>
+          $ {coins} coins
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {wares.map((w, i) => {
+            const enabled = w.affordable && w.canAccept;
+            const tag = !w.canAccept ? 'FULL' : !w.affordable ? 'NEED COIN' : 'BUY';
+            return (
+              <button
+                key={w.label}
+                type="button"
+                onClick={() => onBuy(i)}
+                disabled={!enabled}
+                onPointerDown={(e) => e.preventDefault()}
+                style={{
+                  textAlign: 'left',
+                  padding: '6px 10px',
+                  background: i === focus ? 'rgba(244, 210, 122, 0.18)' : 'rgba(0, 0, 0, 0.45)',
+                  border: `1px solid ${i === focus ? '#f4d27a' : '#3b265c'}`,
+                  color: enabled ? 'var(--bone)' : 'rgba(231,227,215,0.4)',
+                  cursor: enabled ? 'pointer' : 'not-allowed',
+                  letterSpacing: '0.06em',
+                  fontSize: 12,
+                  fontFamily: "'Press Start 2P', monospace, sans-serif",
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span className="gold-text">{w.label}</span>
+                  <span>$ {w.cost} · {tag}</span>
+                </div>
+                <div className="help-text" style={{ fontSize: 9, marginTop: 4, fontFamily: 'inherit' }}>
+                  {w.description}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="pixel-divider" />
+        <div style={{ fontSize: 11, color: 'var(--bone)' }}>
+          ↑ / ↓ — Pick &nbsp;·&nbsp; Interact / Enter — Buy &nbsp;·&nbsp; Esc / B — Leave
+        </div>
+        <div style={{ marginTop: 6 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            onPointerDown={(e) => e.preventDefault()}
+            style={{
+              padding: '4px 12px',
+              background: 'transparent',
+              border: '1px solid var(--gold-3)',
+              color: 'var(--bone)',
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              cursor: 'pointer',
+              fontFamily: "'Press Start 2P', monospace, sans-serif",
+            }}
+          >
+            CLOSE
+          </button>
         </div>
       </div>
     </div>
