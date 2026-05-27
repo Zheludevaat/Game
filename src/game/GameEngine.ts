@@ -1000,9 +1000,11 @@ export class GameEngine {
       this.player.consumableIdx = this.player.consumables.length - 1;
     }
     this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, c.name, c.colour);
-    this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 16, {
-      colour: c.colour, life: 0.7, maxLife: 0.7, drag: 0.86,
-    });
+    if (!this.reducedParticles) {
+      this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 16, {
+        colour: c.colour, life: 0.7, maxLife: 0.7, drag: 0.86,
+      });
+    }
   }
 
   private cycleConsumable(): void {
@@ -1029,9 +1031,11 @@ export class GameEngine {
       }
     }
     audio.sfx('shrine');
-    this.particles.burst(p.pos.x, p.pos.y - 6, 18, {
-      colour: def.colour, life: 0.8, maxLife: 0.8, drag: 0.84,
-    });
+    if (!this.reducedParticles) {
+      this.particles.burst(p.pos.x, p.pos.y - 6, 18, {
+        colour: def.colour, life: 0.8, maxLife: 0.8, drag: 0.84,
+      });
+    }
   }
 
   private applyConsumableEffect(id: ConsumableId): void {
@@ -1054,16 +1058,18 @@ export class GameEngine {
       case 'emberBomb': {
         const radius = 64;
         // Visual ring telegraph + burst.
-        this.particles.burst(p.pos.x, p.pos.y, 28, {
-          colour: '#ff7a3a', life: 0.8, maxLife: 0.8, drag: 0.85,
-        });
-        for (let i = 0; i < 18; i++) {
-          const a = (i / 18) * Math.PI * 2;
-          this.particles.emit({
-            x: p.pos.x, y: p.pos.y,
-            vx: Math.cos(a) * 180, vy: Math.sin(a) * 180,
-            life: 0.32, maxLife: 0.32, size: 1.8, colour: '#ffe6a3', drag: 0.78,
+        if (!this.reducedParticles) {
+          this.particles.burst(p.pos.x, p.pos.y, 28, {
+            colour: '#ff7a3a', life: 0.8, maxLife: 0.8, drag: 0.85,
           });
+          for (let i = 0; i < 18; i++) {
+            const a = (i / 18) * Math.PI * 2;
+            this.particles.emit({
+              x: p.pos.x, y: p.pos.y,
+              vx: Math.cos(a) * 180, vy: Math.sin(a) * 180,
+              life: 0.32, maxLife: 0.32, size: 1.8, colour: '#ffe6a3', drag: 0.78,
+            });
+          }
         }
         for (const e of this.enemies) {
           if (e.hp <= 0) continue;
@@ -1081,13 +1087,15 @@ export class GameEngine {
         this.timeStopUntil = Math.max(this.timeStopUntil, this.timeAlive + 1.5);
         this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'TIME STOP', '#ffe6a3');
         // Halo ring radiating outward.
-        for (let i = 0; i < 14; i++) {
-          const a = (i / 14) * Math.PI * 2;
-          this.particles.emit({
-            x: p.pos.x, y: p.pos.y,
-            vx: Math.cos(a) * 80, vy: Math.sin(a) * 80,
-            life: 0.6, maxLife: 0.6, size: 1.5, colour: '#ffe6a3', drag: 0.86,
-          });
+        if (!this.reducedParticles) {
+          for (let i = 0; i < 14; i++) {
+            const a = (i / 14) * Math.PI * 2;
+            this.particles.emit({
+              x: p.pos.x, y: p.pos.y,
+              vx: Math.cos(a) * 80, vy: Math.sin(a) * 80,
+              life: 0.6, maxLife: 0.6, size: 1.5, colour: '#ffe6a3', drag: 0.86,
+            });
+          }
         }
         break;
       }
