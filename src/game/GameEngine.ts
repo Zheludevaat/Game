@@ -847,6 +847,31 @@ export class GameEngine {
     return this.player.synergies.includes(id);
   }
 
+  /** Subset of the loot-pool relics that the player doesn't already own.
+   *  Used by every "drop a fresh relic" path — secret room, treasure
+   *  loot, chest mimic, Alchemical Mint coin/essence reward, post-boss
+   *  guaranteed drop. */
+  private unownedRelics(): RelicId[] {
+    const owned = new Set(this.player.relics);
+    return RELIC_IDS.filter((id) => !owned.has(id));
+  }
+
+  /** Side effects that fire on any player-source critical hit — Pulse
+   *  Heart heal + Pulse Crown bonus drop. Inlined twice (melee + spell
+   *  projectile) before; now shared. */
+  private onPlayerCrit(enemyPos: Vec): void {
+    if (!this.player.relics.includes('pulseHeart')) return;
+    const pulseCrown = this.hasSynergy('pulseCrown');
+    this.healPlayer(pulseCrown ? 4 : 2);
+    if (pulseCrown && Math.random() < SYNERGY.pulseCrownHeartChance) {
+      this.pickups.push({
+        id: nid(),
+        pos: { x: enemyPos.x, y: enemyPos.y },
+        kind: 'hp', value: 12, life: 18,
+      });
+    }
+  }
+
   /** Look at the player's relic list, grant any synergies that have
    *  freshly completed, fire a screen overlay + sfx, and apply any
    *  one-shot stat mods. Called once after every grantRelic. */
@@ -2127,16 +2152,7 @@ export class GameEngine {
         appliesStatus: w.appliesStatus,
       });
       if (w.healOnKill && r.killed) this.healPlayer(w.healOnKill);
-      if (p.relics.includes('pulseHeart') && r.isCrit) {
-        this.healPlayer(this.hasSynergy('pulseCrown') ? 4 : 2);
-        if (this.hasSynergy('pulseCrown') && Math.random() < SYNERGY.pulseCrownHeartChance) {
-          this.pickups.push({
-            id: nid(),
-            pos: { x: e.pos.x, y: e.pos.y },
-            kind: 'hp', value: 12, life: 18,
-          });
-        }
-      }
+      if (r.isCrit) this.onPlayerCrit(e.pos);
       // Iron Hook (pullsToward) — draw a brief line from player to
       // enemy in the weapon's swing colour. Reads as a chain-tug.
       // 140 ms life; ticked + rendered alongside dashTrail.
@@ -2495,8 +2511,7 @@ export class GameEngine {
     // unlit corridor and walking through. Falls through to the normal
     // loot path if no un-owned relic exists.
     if (this.currentRoom.type === 'secret') {
-      const owned = new Set(this.player.relics);
-      const pool = RELIC_IDS.filter((id) => !owned.has(id));
+      const pool = this.unownedRelics();
       if (pool.length > 0) {
         const id = pool[Math.floor(Math.random() * pool.length)];
         this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: id, life: 30 });
@@ -2532,8 +2547,7 @@ export class GameEngine {
     }
     if (r < 0.38) {
       // relic
-      const owned = new Set(this.player.relics);
-      const pool = RELIC_IDS.filter((id) => !owned.has(id));
+      const pool = this.unownedRelics();
       if (pool.length > 0) {
         const id = pool[Math.floor(Math.random() * pool.length)];
         this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: id, life: 20 });
@@ -2642,7 +2656,7 @@ export class GameEngine {
     if (pz.progress.length >= pz.target.length) {
       // Success — grant a random un-owned relic + small particle burst.
       const p = this.player;
-      const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
+      const pool = this.unownedRelics();
       if (pool.length > 0) {
         const id = pool[Math.floor(Math.random() * pool.length)];
         this.grantRelic(id);
@@ -2704,7 +2718,7 @@ export class GameEngine {
       // Engine specials
       const sp = variant.special;
       if (sp?.grantRandomRelic) {
-        const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
+        const pool = this.unownedRelics();
         if (pool.length) this.grantRelic(pool[Math.floor(Math.random() * pool.length)]);
       }
       if (sp?.spawnShades) {
@@ -3521,7 +3535,7 @@ export class GameEngine {
       if (this.summary.bossesDefeated >= 2) this.unlockCodex('ogdoad.beauty');
       if (this.summary.bossesDefeated >= 3) this.unlockCodex('ogdoad.theurgy');
       // drop relic and lots of essence
-      const pool = RELIC_IDS.filter((id) => !this.player.relics.includes(id));
+      const pool = this.unownedRelics();
       if (pool.length) {
         const id = pool[Math.floor(Math.random() * pool.length)];
         this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'relic', value: 0, relic: id, life: 30 });
@@ -3608,7 +3622,7 @@ export class GameEngine {
       this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'essence', value: 1, life: 12 });
     }
     if (e.isMiniBoss && Math.random() < 0.5) {
-      const pool = RELIC_IDS.filter((id) => !this.player.relics.includes(id));
+      const pool = this.unownedRelics();
       if (pool.length) {
         const id = pool[Math.floor(Math.random() * pool.length)];
         this.pickups.push({ id: nid(), pos: { x: e.pos.x, y: e.pos.y - 6 }, kind: 'relic', value: 0, relic: id, life: 20 });
@@ -4033,16 +4047,7 @@ export class GameEngine {
               fromPlayer: true, appliesStatus: prStatus,
             });
             if (pr.healOnKill && r.killed) this.healPlayer(pr.healOnKill);
-            if (this.player.relics.includes('pulseHeart') && r.isCrit) {
-              this.healPlayer(this.hasSynergy('pulseCrown') ? 4 : 2);
-              if (this.hasSynergy('pulseCrown') && Math.random() < SYNERGY.pulseCrownHeartChance) {
-                this.pickups.push({
-                  id: nid(),
-                  pos: { x: e.pos.x, y: e.pos.y },
-                  kind: 'hp', value: 12, life: 18,
-                });
-              }
-            }
+            if (r.isCrit) this.onPlayerCrit(e.pos);
             const explodeR = pr.explodeRadius ?? 0;
             // Every spell impact gets a small burst + shake so the hit reads
             // as an event, not just a number popping up.
@@ -4187,7 +4192,7 @@ export class GameEngine {
       p.pickupTally += 1;
       if (p.pickupTally >= SYNERGY.alchemicalMintEvery) {
         p.pickupTally = 0;
-        const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
+        const pool = this.unownedRelics();
         if (pool.length > 0) {
           const id = pool[Math.floor(Math.random() * pool.length)];
           this.pickups.push({
