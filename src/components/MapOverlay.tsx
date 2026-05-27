@@ -21,6 +21,7 @@ export function MapOverlay({ hud, onClose }: Props): JSX.Element {
           <div style={{ position: 'relative', width: w, height: h }}>
             {hud.rooms.map((r) => {
               if (!r.discovered) return null;
+              const isBoss = r.type === 'boss' && !r.current;
               return (
                 <div key={`${r.gx},${r.gy}`} style={{
                   position: 'absolute',
@@ -30,7 +31,23 @@ export function MapOverlay({ hud, onClose }: Props): JSX.Element {
                   background: colourForRoom(r.type, r.current),
                   border: r.current ? '2px solid #fff' : '1px solid #221636',
                   boxShadow: r.current ? '0 0 14px rgba(244,210,122,0.7)' : 'none',
-                }} />
+                  animation: isBoss ? 'minimap-boss-pulse 1.4s ease-in-out infinite' : undefined,
+                }}>
+                  {r.chestIntact && (
+                    <span style={{
+                      position: 'absolute', left: 2, top: 2,
+                      width: 6, height: 6,
+                      background: '#f4d27a', boxShadow: '0 0 4px #f4d27a',
+                    }} />
+                  )}
+                  {r.shrineIntact && (
+                    <span style={{
+                      position: 'absolute', right: 2, bottom: 2,
+                      width: 6, height: 6,
+                      background: '#9b6cff', boxShadow: '0 0 4px #9b6cff',
+                    }} />
+                  )}
+                </div>
               );
             })}
           </div>
@@ -43,6 +60,9 @@ export function MapOverlay({ hud, onClose }: Props): JSX.Element {
           <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#a4faf0', marginRight: 4 }} />Exit</span>
           <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#ff7a5a', marginRight: 4 }} />Mini-Boss</span>
           <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#ff3a4a', marginRight: 4 }} />Boss</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#ff9a4a', marginRight: 4 }} />Trap</span>
+          <span><span style={{ display: 'inline-block', width: 6, height: 6, background: '#f4d27a', marginRight: 4, verticalAlign: 'middle' }} />Chest</span>
+          <span><span style={{ display: 'inline-block', width: 6, height: 6, background: '#9b6cff', marginRight: 4, verticalAlign: 'middle' }} />Shrine</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
           <PixelButton onClick={onClose}>Close</PixelButton>

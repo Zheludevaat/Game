@@ -70,7 +70,17 @@ export interface HudSnapshot {
   controllerActive: boolean;
   hint?: string;
   // For minimap
-  rooms: { gx: number; gy: number; type: RoomType; discovered: boolean; current: boolean }[];
+  rooms: {
+    gx: number;
+    gy: number;
+    type: RoomType;
+    discovered: boolean;
+    current: boolean;
+    /** Has an unopened chest in the room. Minimap renders a chest pip. */
+    chestIntact: boolean;
+    /** Has an untouched shrine. Minimap renders a shrine pip. */
+    shrineIntact: boolean;
+  }[];
   pendingShrine?: { name: string; effect: string; downside: string };
   /** Current combo counter (0 = no chain). Capped at 5. */
   combo: number;
@@ -5330,6 +5340,10 @@ export class GameEngine {
       type: r.type as RoomType,
       discovered: revealAll || r.discovered,
       current: r.id === this.currentRoom.id,
+      // Surface chest / shrine state so the minimap can hint at
+      // unfinished content in already-visited rooms.
+      chestIntact: r.hasChest && !r.chestOpened && (revealAll || r.discovered),
+      shrineIntact: r.hasShrine && !r.shrineUsed && (revealAll || r.discovered),
     }));
 
     this.cbs.onHud({

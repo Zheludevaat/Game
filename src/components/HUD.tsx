@@ -153,6 +153,7 @@ function Minimap({ rooms }: { rooms: HudSnapshot['rooms'] }): JSX.Element {
         {rooms.map((r) => {
           if (!r.discovered) return null;
           const colour = colourForRoom(r.type, r.current);
+          const isBoss = r.type === 'boss' && !r.current;
           return (
             <div key={`${r.gx},${r.gy}`} style={{
               position: 'absolute',
@@ -161,7 +162,25 @@ function Minimap({ rooms }: { rooms: HudSnapshot['rooms'] }): JSX.Element {
               width: cell, height: cell,
               background: colour,
               border: r.current ? '1px solid #fff' : '1px solid #221636',
-            }} />
+              animation: isBoss ? 'minimap-boss-pulse 1.4s ease-in-out infinite' : undefined,
+            }}>
+              {/* Content pips — small dots in the cell when an
+                  unfinished chest or shrine remains. */}
+              {r.chestIntact && (
+                <span style={{
+                  position: 'absolute', left: 1, top: 1,
+                  width: 3, height: 3, background: '#f4d27a',
+                  boxShadow: '0 0 3px #f4d27a',
+                }} />
+              )}
+              {r.shrineIntact && (
+                <span style={{
+                  position: 'absolute', right: 1, bottom: 1,
+                  width: 3, height: 3, background: '#9b6cff',
+                  boxShadow: '0 0 3px #9b6cff',
+                }} />
+              )}
+            </div>
           );
         })}
       </div>
