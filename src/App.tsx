@@ -445,6 +445,8 @@ export function App(): JSX.Element {
           resumeAvailable={resumeAvailable}
           codexUnlocked={meta.unlockedCodex.length}
           codexTotal={CODEX.length}
+          meta={meta}
+          lastArchetype={lastArchetype}
           dailyAttemptedToday={(meta.lastDailyDate ?? -1) >= Math.floor(Date.now() / 86_400_000)}
           dailyArchetypeName={(() => {
             const day = Math.floor(Date.now() / 86_400_000);

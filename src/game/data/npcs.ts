@@ -1,0 +1,153 @@
+// Non-hostile NPC data — kicks off the deferred Track 3 work tracked
+// in docs/npcs.md. Phase A here ships only the Hierophant on the main
+// menu (the rest of the roster lives in-run and arrives in later
+// phases). The full data shape mirrors the eventual NpcDef so the
+// engine-side extensions can land without re-typing.
+
+import { ArchetypeId, MetaState } from '../GameTypes';
+import { SphereId } from './spheres';
+
+export type NpcInteraction = 'ambient' | 'limited' | 'full';
+
+export interface NpcDef {
+  id: string;
+  name: string;
+  title: string;
+  sphere: SphereId | null; // null = universal / hub
+  interaction: NpcInteraction;
+  /** Hint colour for the portrait outline + caption tag. */
+  colour: string;
+}
+
+export const NPCS: Record<string, NpcDef> = {
+  hierophant: {
+    id: 'hierophant',
+    name: 'The Hierophant',
+    title: 'Keeper of the First Threshold',
+    sphere: null,
+    interaction: 'full',
+    colour: '#ffe6a3',
+  },
+};
+
+/** A single dialogue line — speaker line plus an optional follow-up
+ *  string the menu uses to label the "next" advance button. */
+export interface NpcLine {
+  text: string;
+  /** Optional emoji-style cue used by the portrait state (subtle gesture). */
+  cue?: 'still' | 'gesture' | 'turn';
+}
+
+/** Pick the Hierophant's greeting for the current player state.
+ *  Reads `MetaState.runHistory[0]` for the most recent death cause,
+ *  `MetaState.ogdoadReached` for the Ogdoad win count, and the daily
+ *  history for the latest seeded attempt — returns 1-3 ordered lines
+ *  that the menu cycles through on advance. */
+export function pickHierophantGreeting(
+  meta: MetaState,
+  archetype: ArchetypeId | null,
+): NpcLine[] {
+  const lastRun = meta.runHistory?.[0];
+  const ogdoadCount = meta.ogdoadReached ?? 0;
+  const lastDaily = meta.dailyHistory?.[0];
+  const todayIndex = Math.floor(Date.now() / 86_400_000);
+  const dailyCleared = lastDaily && lastDaily.dayIndex === todayIndex && lastDaily.ogdoadReached;
+
+  // First-time greeting — no prior runs at all. Sets the stage.
+  if (!lastRun) {
+    return [
+      { text: '"You are not the first to read the Tabula."', cue: 'still' },
+      { text: '"You will not be the last. Take this lamp."', cue: 'gesture' },
+      { text: '"Descend, initiate. The Seven wait."', cue: 'turn' },
+    ];
+  }
+
+  // Last run was an Ogdoad clear — congratulatory but warning.
+  if (lastRun.deathCause === 'descend') {
+    return [
+      { text: '"The Eighth opens, and you walk through it."', cue: 'gesture' },
+      { text: '"Few do. Fewer return without losing themselves."', cue: 'still' },
+      { text: '"Will you climb again, or stay in the Crown a while?"', cue: 'turn' },
+    ];
+  }
+
+  // Today's daily was cleared
+  if (dailyCleared) {
+    return [
+      { text: '"Today\'s seal — broken before noon."', cue: 'gesture' },
+      { text: '"Tomorrow brings another."', cue: 'still' },
+    ];
+  }
+
+  // After several Ogdoad clears
+  if (ogdoadCount >= 3) {
+    return [
+      { text: '"You have stood beyond the seventh, more than once."', cue: 'gesture' },
+      { text: '"What is left for the soul that has seen its own?"', cue: 'still' },
+    ];
+  }
+
+  // Slain by a Warden — name them
+  const wardenLines: Record<string, string[]> = {
+    seleneBoss: [
+      '"Selene swallowed your light again. Of course."',
+      '"The Moon counts patience as her only virtue. Match hers."',
+    ],
+    hermesBoss: [
+      '"Hermes ran circles. He always does."',
+      '"Trade speed for measure, initiate."',
+    ],
+    aphroditeBoss: [
+      '"The Garlandkeep\'s mother wept over you."',
+      '"Mercy is a blade. Sharpen yours."',
+    ],
+    heliosBoss: [
+      '"Helios burned. You did not duck."',
+      '"Stand sideways to the Sun next time."',
+    ],
+    aresBoss: [
+      '"Ares took you. He takes all of us, eventually."',
+      '"Strike first. Strike twice. Then run."',
+    ],
+    zeusBoss: [
+      '"Zeus heard your prayer and answered with thunder."',
+      '"Listen to the storm before you stand in it."',
+    ],
+    kronosBoss: [
+      '"Kronos folded your time. He has plenty."',
+      '"He keeps every hour you spend in him. Take some back."',
+    ],
+  };
+  if (lastRun.deathCause && wardenLines[lastRun.deathCause]) {
+    return wardenLines[lastRun.deathCause].map((text) => ({ text }));
+  }
+
+  // Slain by a hazard
+  if (lastRun.deathCause?.startsWith('hazard:')) {
+    return [
+      { text: '"The stones killed you. The stones are not your enemy."', cue: 'still' },
+      { text: '"Read the floor before the floor reads you."', cue: 'gesture' },
+    ];
+  }
+
+  // Slain by a regular enemy — mild rebuke + encouragement
+  if (lastRun.deathCause) {
+    return [
+      { text: '"The Abyss is patient. You are not."', cue: 'still' },
+      { text: '"Begin again."', cue: 'turn' },
+    ];
+  }
+
+  // Default — quit out, or unknown cause
+  const archGreeting = archetype === 'magus'
+    ? '"The Word is yours to speak. Speak it well."'
+    : archetype === 'hermit'
+    ? '"The lamp is heavy. Carry it lower."'
+    : archetype === 'star'
+    ? '"You are light. Light bends, but it does not break."'
+    : '"Take the lamp. Choose the form."';
+  return [
+    { text: '"Returning, initiate?"', cue: 'gesture' },
+    { text: archGreeting, cue: 'still' },
+  ];
+}
