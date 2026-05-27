@@ -285,6 +285,10 @@ export interface MetaState {
   /** Best Boss Rush clear time in seconds. Set on a full eight-boss
    *  clear; undefined if never cleared. Lower is better. */
   bossRushBestSeconds?: number;
+  /** Highest floor reached across all Boss Rush attempts, including
+   *  failed runs. Surfaces partial progress on the menu badge so a
+   *  floor-50 death feels recognisably different from a floor-10 death. */
+  bossRushBestFloor?: number;
   /** Best Time Attack score (composite: floor + bosses + time bonus).
    *  Higher is better. Undefined if never attempted. */
   timeAttackBestScore?: number;

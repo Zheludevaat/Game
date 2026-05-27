@@ -28,10 +28,11 @@ export interface CodexEntry {
   text: string;
   // How the player unlocks this fragment. Used for hint text and routing.
   unlock: {
-    kind: 'opening' | 'firstFloor' | 'sphereReached' | 'sphereBoss' | 'shrine' | 'victory' | 'death';
+    kind: 'opening' | 'firstFloor' | 'sphereReached' | 'sphereBoss' | 'shrine' | 'victory' | 'death' | 'npc';
     sphere?: SphereId;          // for sphereReached / sphereBoss
     shrineKind?: string;        // for shrine (matches ShrineKind)
     minVictories?: number;      // for victory-gated entries
+    npcId?: string;             // for npc (matches NpcDef.id)
   };
 }
 
@@ -336,6 +337,34 @@ export const CODEX: CodexEntry[] = [
     text:
       'My son: the man who is to be reborn is born again of God, of the Will of God, the holy Logos. He casts off the bodily senses that he may know himself; he separates from the cosmos of birth, that he may belong no more to the Twelve Tormentors — and so, when he is recompounded of the powers, he comes to be of god\'s race.',
     unlock: { kind: 'death' },
+  },
+  // ─── NPC encounters ──────────────────────────────────────────────────
+  {
+    id: 'npc.mute',
+    chapter: 'ogdoad',
+    title: 'On the Saturnian Silence',
+    source: 'Collected sayings of the Pilgrims',
+    text:
+      'The Saturnian does not teach. He simply waits — and that, in itself, is the teaching. The man who would learn from him learns first the meaning of patience, and afterward the meaning of patience again, until at last there is nothing left of the man but patience itself, and Kronos opens his hand.',
+    unlock: { kind: 'npc', npcId: 'mute' },
+  },
+  {
+    id: 'npc.penitent',
+    chapter: 'ascent',
+    title: 'The Penitent at the Lamp',
+    source: 'Fragments of the After-Vigil',
+    text:
+      'They knelt where the Warden had fallen, hands upon the lamp the Warden had carried. They wept not for the Warden — but for the lamp, which now had no keeper, and for themselves, who had taken from the lamp without giving back. So it was that every defeated god received a mourner, and the lamps of the spheres burned a little longer.',
+    unlock: { kind: 'npc', npcId: 'penitent' },
+  },
+  {
+    id: 'npc.lampwright',
+    chapter: 'ascent',
+    title: 'The Lampwright\'s Catalogue',
+    source: 'Travelling-tinker chant, abridged',
+    text:
+      'Some descend with one lamp. Some come back with none. The wise descend with two — one for the road, one for the dark room at its end. Coin for the road, initiate, coin for the road. The Lampwright keeps no records and forgets every face the moment it has paid him; this is his mercy, and the only one he offers.',
+    unlock: { kind: 'npc', npcId: 'lampwright' },
   },
 ];
 

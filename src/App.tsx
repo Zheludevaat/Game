@@ -328,10 +328,19 @@ export function App(): JSX.Element {
             // writes for incomplete runs so a failed attempt doesn't
             // shadow a real victory.
             let bossRushBestSeconds = m.bossRushBestSeconds;
+            let bossRushBestFloor = m.bossRushBestFloor;
             if (s.bossRush && s.bossRushCleared && (s.runTimerSeconds ?? Infinity) > 0) {
               const t = Math.floor(s.runTimerSeconds ?? 0);
               if (bossRushBestSeconds == null || t < bossRushBestSeconds) {
                 bossRushBestSeconds = t;
+              }
+            }
+            // Partial-credit: any Boss Rush attempt (failed or cleared)
+            // updates bossRushBestFloor so the menu shows F30 instead
+            // of NEW after a floor-30 death.
+            if (s.bossRush) {
+              if (bossRushBestFloor == null || s.floorReached > bossRushBestFloor) {
+                bossRushBestFloor = s.floorReached;
               }
             }
             // Time Attack: composite score = floor × 1000 + bosses × 500
@@ -358,6 +367,7 @@ export function App(): JSX.Element {
               dailyHistory,
               lastDailyDate,
               bossRushBestSeconds,
+              bossRushBestFloor,
               timeAttackBestScore,
               timeAttackBestFloor,
             };
@@ -503,6 +513,7 @@ export function App(): JSX.Element {
           })()}
           bossRushUnlocked={(meta.ogdoadReached ?? 0) >= 1}
           bossRushBestSeconds={meta.bossRushBestSeconds}
+          bossRushBestFloor={meta.bossRushBestFloor}
           timeAttackBestScore={meta.timeAttackBestScore}
           onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
           onCinematics={() => setScreen('cinematics')}

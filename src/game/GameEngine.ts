@@ -347,6 +347,10 @@ interface NpcEntity {
    *  Penitent to carry its sphere-keyed lament without mutating the
    *  shared NpcDef. */
   spokenLine?: string;
+  /** True once the player has stepped within codex-contact range
+   *  (smaller than ambient range). Used to fire one-shot codex
+   *  unlocks for NPCs that have a matching `npc.<id>` codex entry. */
+  firstContacted?: boolean;
 }
 
 interface Familiar {
@@ -4471,6 +4475,16 @@ export class GameEngine {
             ?? def.ambientLines![npc.ambientIdx % def.ambientLines!.length];
           npc.spokenAmbient = true;
           this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, line, def.colour);
+        }
+      }
+      // Codex unlock on first close-proximity contact. Independent of
+      // ambient lines so the silent Mute still triggers his entry.
+      // unlockCodex itself no-ops if the entry is already known.
+      if (!npc.firstContacted) {
+        const d = Math.hypot(p.pos.x - npc.pos.x, p.pos.y - npc.pos.y);
+        if (d < 56) {
+          npc.firstContacted = true;
+          this.unlockCodex(`npc.${def.id}`);
         }
       }
       // Passive gift — accumulate proximity time, fire when interval met.

@@ -24,6 +24,8 @@ interface Props {
   bossRushUnlocked: boolean;
   /** Persistent best Boss Rush clear time in seconds. */
   bossRushBestSeconds?: number;
+  /** Highest floor reached across all Boss Rush attempts (including failed). */
+  bossRushBestFloor?: number;
   /** Persistent best Time Attack score (composite). */
   timeAttackBestScore?: number;
   onNewRun: () => void;
@@ -190,10 +192,18 @@ export function MainMenu(p: Props): JSX.Element {
             focused={focus === 2}
             badge={(() => {
               if (!p.bossRushUnlocked) return 'LOCKED';
-              if (p.bossRushBestSeconds == null) return 'NEW';
-              const m = Math.floor(p.bossRushBestSeconds / 60);
-              const s = p.bossRushBestSeconds % 60;
-              return `${m}:${String(s).padStart(2, '0')}`;
+              if (p.bossRushBestSeconds != null) {
+                const m = Math.floor(p.bossRushBestSeconds / 60);
+                const s = p.bossRushBestSeconds % 60;
+                return `${m}:${String(s).padStart(2, '0')}`;
+              }
+              // No clear yet but partial progress earned — show the
+              // highest floor reached so a floor-50 death reads
+              // differently from a floor-10 death.
+              if (p.bossRushBestFloor != null && p.bossRushBestFloor > 0) {
+                return `F${p.bossRushBestFloor}`;
+              }
+              return 'NEW';
             })()}
           >
             Boss Rush {p.bossRushUnlocked ? '' : '(clear Ogdoad to unlock)'}
