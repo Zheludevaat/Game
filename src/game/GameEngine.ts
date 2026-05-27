@@ -302,6 +302,10 @@ interface AIState {
   chargeTimer?: number;
   chargeDir?: Vec;
   prepTimer?: number;
+  /** Cooldown gating the one-shot "windup pip" played when a contact
+   *  mook first enters close range — keeps the SFX from machine-gunning
+   *  while the player kites in and out. */
+  windupCue?: number;
 }
 
 interface Projectile {
@@ -476,6 +480,18 @@ interface RoomClearEffect {
   x: number; y: number;
 }
 
+/** One-shot expanding ring drawn at a known game-logic radius — used
+ *  so ultimates (Lantern Flare, Word of Power) telegraph their ACTUAL
+ *  damage hitbox instead of letting the player infer it from particle
+ *  drag curves. */
+interface RadiusPulse {
+  t: number;
+  duration: number;
+  x: number; y: number;
+  radius: number;
+  colour: string;
+}
+
 interface FloorBanner {
   t: number;
   duration: number;
@@ -550,6 +566,7 @@ export class GameEngine {
   private floorBanner: FloorBanner | null = null;
   private bossBannerTimer = 0;
   private roomClearEffects: RoomClearEffect[] = [];
+  private radiusPulses: RadiusPulse[] = [];
   private bossSnapshot: { hp: number; maxHp: number; name: string } | null = null;
   // Set to true the first time the player enters this run's boss room.
   // Stays true across deaths inside the same run; reset on a new run.
@@ -1243,6 +1260,9 @@ export class GameEngine {
         // for the brief flash. Reads as a defensive panic button.
         const radius = 90;
         const flareDmg = Math.round(p.attack * p.damageMul * ULTIMATE_DAMAGE_MUL.lanternFlare);
+        // Outline the actual damage radius so the player learns the
+        // hitbox, not just the particle drag curve.
+        this.radiusPulses.push({ t: 0, duration: 0.45, x: p.pos.x, y: p.pos.y - 4, radius, colour: u.colour });
         for (const e of this.enemies) {
           if (e.hp <= 0) continue;
           const d = Math.hypot(e.pos.x - p.pos.x, e.pos.y - p.pos.y);
@@ -1332,6 +1352,7 @@ export class GameEngine {
     this.bossSnapshot = null;
     this.bossBannerTimer = 0;
     this.roomClearEffects = [];
+    this.radiusPulses = [];
     this.cbs.onFloorChange(n);
     const startRoom = this.floor.rooms.find((r) => r.id === this.floor.startRoomId)!;
     this.enterRoom(startRoom, { x: ROOM_W / 2, y: ROOM_H / 2 });
@@ -1444,8 +1465,7 @@ export class GameEngine {
       // gives each Warden's arrival its own tonal signature.
       audio.playBossStinger(sphereForFloor(this.floor.number).id);
       this.bossBannerTimer = 2.2;
-      this.camera.shakeT = 0.8;
-      this.camera.shakeMag = 5;
+      this.requestShake(0.8, 5);
       // First time this run that we step into THIS sphere's boss room,
       // ask the host to play the cinematic. The host decides whether to
       // actually play (gated on MetaState.bossesSeen + settings).
@@ -1752,6 +1772,11 @@ export class GameEngine {
       const e = this.roomClearEffects[i];
       e.t += dt;
       if (e.t > e.duration) this.roomClearEffects.splice(i, 1);
+    }
+    for (let i = this.radiusPulses.length - 1; i >= 0; i--) {
+      const r = this.radiusPulses[i];
+      r.t += dt;
+      if (r.t > r.duration) this.radiusPulses.splice(i, 1);
     }
   }
 
@@ -2786,6 +2811,23 @@ export class GameEngine {
       const n = d > 0 ? { x: toP.x / d, y: toP.y / d } : { x: 0, y: 0 };
       e.facing = n;
 
+      // Close-range telegraph for contact-only mooks. Lesser Shade /
+      // Mercury Imp deal damage purely by touching; without a windup
+      // tell, new players can't see them coming. Pulse the flash field
+      // while in bite range (existing draw path tints the sprite for
+      // free) and fire a one-shot SFX on the rising edge.
+      if (e.type === 'lesserShade' || e.type === 'mercuryImp') {
+        if (!e.ai) e.ai = {};
+        e.ai.windupCue = Math.max(0, (e.ai.windupCue ?? 0) - dt);
+        if (d < e.radius + PLAYER_RADIUS + 14) {
+          e.flash = Math.max(e.flash, 0.16);
+          if (e.ai.windupCue <= 0) {
+            audio.sfx('enemyWindup');
+            e.ai.windupCue = 0.9;
+          }
+        }
+      }
+
       // Stunned enemies skip movement + attack logic but still take
       // damage and tick statuses. They get a yellow halo via the
       // status-icon render path.
@@ -3032,10 +3074,10 @@ export class GameEngine {
 
   private updateWarden(e: Enemy, dt: number, n: Vec, d: number): void {
     if (e.phase == null) e.phase = 1;
-    if (e.phase === 1 && e.hp / e.maxHp < 0.6) { e.phase = 2; this.camera.shakeT = 0.6; this.camera.shakeMag = 4; audio.sfx('bossWarn'); }
+    if (e.phase === 1 && e.hp / e.maxHp < 0.6) { e.phase = 2; this.requestShake(0.6, 4); audio.sfx('bossWarn'); }
     if (e.phase === 2 && e.hp / e.maxHp < 0.3) {
       e.phase = 3;
-      this.camera.shakeT = 0.7; this.camera.shakeMag = 5.5;
+      this.requestShake(0.7, 5.5);
       audio.sfx('bossWarn');
       // Phase-3 escalation — layer a bright crit ping on top of the
       // bossWarn so "this is the final form" reads louder than the
@@ -3273,7 +3315,7 @@ export class GameEngine {
         if (!this.reducedParticles) {
           this.particles.burst(e.pos.x, e.pos.y, 20, { colour: '#ff7a5a', life: 0.45, maxLife: 0.45, drag: 0.85 });
         }
-        this.camera.shakeT = 0.2; this.camera.shakeMag = 3;
+        this.requestShake(0.2, 3);
         audio.sfx('dash');
       },
     });
@@ -3307,7 +3349,7 @@ export class GameEngine {
   private kronosStopTime(e: Enemy): void {
     this.timeStopUntil = this.timeAlive + 1.5;
     // Flash + heavy shake to telegraph the freeze
-    this.camera.shakeT = 0.4; this.camera.shakeMag = 4;
+    this.requestShake(0.4, 4);
     if (!this.reducedParticles) {
       this.particles.burst(e.pos.x, e.pos.y, 30, { colour: '#9b6cff', life: 1.2, maxLife: 1.2, drag: 0.9 });
     }
@@ -3535,7 +3577,7 @@ export class GameEngine {
     if (e.isBoss) {
       this.summary.bossesDefeated += 1;
       audio.sfx('bossDeath');
-      this.camera.shakeT = 1.0; this.camera.shakeMag = 6;
+      this.requestShake(1.0, 6);
       // The Warden of this sphere has fallen — the soul surrenders its tribute.
       const sph = sphereForFloor(this.floor.number);
       this.unlockCodex(`asc.${sph.id}`);
@@ -3670,6 +3712,16 @@ export class GameEngine {
     if (delta > 0) this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 8, `+${delta}`, DAMAGE_COLOURS.heal);
   }
 
+  /** Request a camera shake — every gameplay source funnels through here
+   *  so a tiny crit can't step DOWN a boss-phase or ultimate shake that's
+   *  already in flight (the previous Math.max scatter could be bypassed
+   *  by direct `=` writes), and a stacked frame can't push magnitude
+   *  past the nausea-inducing ceiling. */
+  private requestShake(t: number, mag: number): void {
+    this.camera.shakeT = Math.max(this.camera.shakeT, t);
+    this.camera.shakeMag = Math.min(6, Math.max(this.camera.shakeMag, mag));
+  }
+
   private damageEnemy(
     e: Enemy,
     rawDmg: number,
@@ -3715,17 +3767,22 @@ export class GameEngine {
       // reads instantly even if the damage number scrolls past quickly.
       this.critFlashT = 0.08;
       audio.sfx('crit');
+      // Crit identity must survive reduced-particles — the ring is the
+      // signature read of "that was a crit" from across the room. Drop
+      // the burst on reduced, but keep the 4-particle ring at minimum
+      // so the geometry still telegraphs the moment.
+      const ringCount = this.reducedParticles ? 4 : 12;
       if (!this.reducedParticles) {
         this.particles.burst(e.pos.x, e.pos.y - 4, 18, { colour: '#fff7d6', life: 0.55, maxLife: 0.55, drag: 0.84 });
-        // Expanding gold ring — telegraphs the crit even from across the room.
-        for (let i = 0; i < 12; i++) {
-          const a = (i / 12) * Math.PI * 2;
-          this.particles.emit({
-            x: e.pos.x, y: e.pos.y - 4,
-            vx: Math.cos(a) * 140, vy: Math.sin(a) * 140,
-            life: 0.26, maxLife: 0.26, size: 1.6, colour: '#ffe6a3', drag: 0.78,
-          });
-        }
+      }
+      // Expanding gold ring — telegraphs the crit even from across the room.
+      for (let i = 0; i < ringCount; i++) {
+        const a = (i / ringCount) * Math.PI * 2;
+        this.particles.emit({
+          x: e.pos.x, y: e.pos.y - 4,
+          vx: Math.cos(a) * 140, vy: Math.sin(a) * 140,
+          life: 0.26, maxLife: 0.26, size: 1.6, colour: '#ffe6a3', drag: 0.78,
+        });
       }
     } else {
       // Tint non-crit hit numbers by the current sphere's accent so
@@ -3735,14 +3792,18 @@ export class GameEngine {
       const sphereTint = sphereForFloor(this.floor.number).accent;
       this.spawnDamageNumber(e.pos.x, e.pos.y - 10, `${dmg}`, sphereTint);
     }
-    // Brief hit-pause on damage landing. Every hit gets a 2-frame
-    // pause for "punch" feel; big hits get 4 frames. Avoid stacking
-    // beyond timeAlive + 0.06 so multi-hits don't lock the world.
-    const pauseDur = dmg >= 8 ? HIT_PAUSE.std : HIT_PAUSE.short;
-    this.hitPauseUntil = Math.min(
-      this.timeAlive + 0.06,
-      Math.max(this.hitPauseUntil, this.timeAlive + pauseDur),
-    );
+    // Brief hit-pause on damage landing — the first hit in a volley
+    // gets the punch; subsequent hits while we're STILL in pause are
+    // free-floated so a 5-hit Twin Sickles flurry doesn't stutter five
+    // separate sub-pauses. The 0.06 s ceiling stays as a paranoia
+    // clamp on simultaneous-frame chains.
+    if (this.timeAlive >= this.hitPauseUntil) {
+      const pauseDur = dmg >= 8 ? HIT_PAUSE.std : HIT_PAUSE.short;
+      this.hitPauseUntil = Math.min(
+        this.timeAlive + 0.06,
+        this.timeAlive + pauseDur,
+      );
+    }
     this.spawnHitFx(e.pos.x, e.pos.y, prevX, prevY, nx, ny, knockStrength);
 
     // Status application — roll once per hit per source.
@@ -3760,9 +3821,12 @@ export class GameEngine {
           duration: dur,
           magnitude: as.magnitude,
         });
-        if (newlyApplied && !this.reducedParticles) {
+        if (newlyApplied) {
+          // Status application burst — keep a 4-particle minimum even
+          // under reduced-particles so "this enemy just got burned" is
+          // a visible event, not invisible.
           const cfg = STATUS_CONFIG[as.kind];
-          this.particles.burst(e.pos.x, e.pos.y - 6, 8, {
+          this.particles.burst(e.pos.x, e.pos.y - 6, this.reducedParticles ? 4 : 8, {
             colour: cfg.colour, life: 0.5, maxLife: 0.5, drag: 0.86,
           });
         }
@@ -4090,7 +4154,7 @@ export class GameEngine {
                 }
               }
               this.particles.burst(pr.pos.x, pr.pos.y, 26, { colour: pr.colour, life: 0.6, maxLife: 0.6, drag: 0.85 });
-              this.camera.shakeT = 0.12; this.camera.shakeMag = 2;
+              this.requestShake(0.12, 2);
               this.projectiles.splice(i, 1);
               break;
             }
@@ -4382,7 +4446,7 @@ export class GameEngine {
           if (hit) this.damagePlayer(s.damage, 'sigil');
         }
         this.particles.burst(s.pos.x, s.pos.y, 32, { colour, life: 0.8, maxLife: 0.8 });
-        this.camera.shakeT = 0.2; this.camera.shakeMag = 2.5;
+        this.requestShake(0.2, 2.5);
         audio.sfx(s.fromPlayer ? 'spell' : 'enemyHit');
       }
       if (s.timer > s.delay + 0.4) this.sigils.splice(i, 1);
@@ -4610,10 +4674,16 @@ export class GameEngine {
   }
 
   private spawnDamageNumber(x: number, y: number, value: string, colour: string): void {
+    // Spread x + jitter y so multi-hit volleys (Twin Sickles, Crystallized
+    // Tear flurry, a spell hitting multiple enemies in one frame) fan
+    // outward instead of stacking into one illegible column. Wider
+    // horizontal spread (±20 px) reads as "different hits, same target"
+    // far more cleanly than the old ±10 px lockstep.
     this.damageNumbers.push({
       id: nid(),
-      x, y,
-      vx: (Math.random() - 0.5) * 20,
+      x: x + (Math.random() - 0.5) * 14,
+      y: y + (Math.random() - 0.5) * 6,
+      vx: (Math.random() - 0.5) * 44,
       vy: -30 - Math.random() * 20,
       life: 0.8, maxLife: 0.8,
       value: Number(value.replace(/[^\d-]/g, '')) || 0,
@@ -5361,14 +5431,27 @@ export class GameEngine {
       // lift one pixel on alternating steps. Bosses skip the bob since
       // their procedural motifs read their own animation.
       const bob = e.isBoss ? 0 : Math.floor(Math.abs(Math.sin(e.walkPhase)) * 1.5);
-      const dx = e.pos.x - (sz.w * scale) / 2;
-      const dy = e.pos.y - (sz.h * scale) + e.radius + 1 - bob;
+      // Mini-bosses draw at +15 % scale and sit under a soft amber halo
+      // so the player can tell from across the room that this room is
+      // harder than usual — bosses get the banner, regular mooks get
+      // the floor tint, mini-bosses used to share the mook silhouette.
+      const drawScale = e.isMiniBoss && !e.isBoss ? scale * 1.15 : scale;
+      const dx = e.pos.x - (sz.w * drawScale) / 2;
+      const dy = e.pos.y - (sz.h * drawScale) + e.radius + 1 - bob;
       const tint = e.isBoss ? undefined : floorTint;
+      if (e.isMiniBoss && !e.isBoss) {
+        const haloPulse = 0.65 + 0.35 * Math.sin(this.timeAlive * 4);
+        const halo = this.ctx.createRadialGradient(e.pos.x, e.pos.y, 4, e.pos.x, e.pos.y, e.radius * 2.6);
+        halo.addColorStop(0, `rgba(255, 122, 58, ${0.45 * haloPulse})`);
+        halo.addColorStop(1, 'rgba(255, 122, 58, 0)');
+        this.ctx.fillStyle = halo;
+        this.ctx.fillRect(e.pos.x - e.radius * 2.6, e.pos.y - e.radius * 2.6, e.radius * 5.2, e.radius * 5.2);
+      }
       // Umbral Stalker is half-visible unless actively damaged. Players
       // see a faint silhouette outline — readable but not bright.
       const stealth = e.type === 'umbralStalker' && e.flash <= 0;
       if (stealth) this.ctx.globalAlpha = 0.35;
-      drawEnemy(this.ctx, e.visualKey, dx, dy, scale, e.flash, e.facing.x < 0, tint);
+      drawEnemy(this.ctx, e.visualKey, dx, dy, drawScale, e.flash, e.facing.x < 0, tint);
       if (stealth) this.ctx.globalAlpha = 1;
       // shadow
       this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -5433,19 +5516,29 @@ export class GameEngine {
     const ctx = this.ctx;
     // Subtle pulse — every status throbs to read "this is active."
     const pulse = 0.7 + 0.3 * Math.sin(this.timeAlive * 7 + s.kind.charCodeAt(0));
+    // Pip grows with stack count so a 3-stack burn is visibly heavier
+    // than a 1-stack chip from across the room.
+    const size = Math.min(8, 5 + Math.max(0, s.stacks - 1));
+    const half = (size / 2) | 0;
+    // Soft coloured halo via shadowBlur — reads at distance even when
+    // the pip itself is one pixel high. Painted under the pip so the
+    // crisp filled square keeps its edge for close-range readability.
+    ctx.save();
+    ctx.shadowColor = cfg.colour;
+    ctx.shadowBlur = 8;
     ctx.fillStyle = cfg.colour;
     ctx.globalAlpha = pulse;
-    ctx.fillRect(cx - 2, cy - 2, 5, 5);
-    ctx.globalAlpha = 1;
+    ctx.fillRect(cx - half, cy - half, size, size);
+    ctx.restore();
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(cx - 2, cy - 2, 5, 1);
-    ctx.fillRect(cx - 2, cy + 2, 5, 1);
-    ctx.fillRect(cx - 2, cy - 2, 1, 5);
-    ctx.fillRect(cx + 2, cy - 2, 1, 5);
+    ctx.fillRect(cx - half, cy - half,     size, 1);
+    ctx.fillRect(cx - half, cy + half - 1, size, 1);
+    ctx.fillRect(cx - half,     cy - half, 1, size);
+    ctx.fillRect(cx + half - 1, cy - half, 1, size);
     // Stack-count notch (burn / poison go up to 3-4 stacks).
     if (s.stacks > 1) {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(cx + 1, cy + 3, s.stacks, 1);
+      ctx.fillRect(cx + 1, cy + half + 1, s.stacks, 1);
     }
   }
 
@@ -6155,6 +6248,20 @@ export class GameEngine {
       ctx.beginPath();
       ctx.arc(e.x, e.y, 12 + t * 120, 0, Math.PI * 2);
       ctx.stroke();
+    }
+    // Radius pulses — one-shot rings drawn at a known damage radius so
+    // ultimates / AOE spells communicate their actual hitbox, not the
+    // particle ring's drag-curve approximation.
+    for (const r of this.radiusPulses) {
+      const t = r.t / r.duration;
+      ctx.save();
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = r.colour;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
   }
 

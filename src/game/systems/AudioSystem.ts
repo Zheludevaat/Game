@@ -3,7 +3,7 @@ export type SfxName =
   | 'chest' | 'shrine' | 'descend' | 'bossWarn' | 'bossDeath' | 'pickup'
   | 'doorLock' | 'doorOpen' | 'crit' | 'dotTick'
   | 'ultimateMagus' | 'ultimateHermit' | 'ultimateStar'
-  | 'synergy' | 'roomClear' | 'auraTick';
+  | 'synergy' | 'roomClear' | 'auraTick' | 'enemyWindup';
 
 interface VoiceSpec {
   type: OscillatorType;
@@ -490,6 +490,15 @@ export class AudioSystem {
         // stacked aura on a roomful of enemies doesn't drown the kit.
         this.playLayered([
           { type: 'sine', freq: 660, end: 660, attack: 0.003, decay: 0.08, peak: 0.04 },
+        ]);
+        break;
+      case 'enemyWindup':
+        // Soft sawtooth click — fires once when a contact mook
+        // (Lesser Shade / Mercury Imp) closes into bite range so the
+        // player gets an audio "this thing is on you" warning that
+        // contact-damage enemies otherwise never produce.
+        this.playLayered([
+          { type: 'sawtooth', freq: 320, end: 140, attack: 0.005, decay: 0.10, peak: 0.10 },
         ]);
         break;
     }
