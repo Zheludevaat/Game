@@ -548,6 +548,11 @@ export class GameEngine {
     progress: Array<'up' | 'down' | 'left' | 'right'>;
     failed: boolean;
   } | null = null;
+  /** Hold the puzzle modal open for this many seconds after a failure
+   *  so the player can read the red flash before the modal closes.
+   *  Ticked down in updatePlayer; when it crosses zero, pendingPuzzle
+   *  is cleared. Replaces a brittle setTimeout. */
+  private puzzleHoldTimer = 0;
   private damageNumbers: DamageNumber[] = [];
   private timeAlive = 0;
   private dead = false;
@@ -1111,15 +1116,27 @@ export class GameEngine {
         const baseLife = 1.4;
         const aimedAngles = sources.map((e) => Math.atan2(e.pos.y - p.pos.y, e.pos.x - p.pos.x));
         const allAngles = aimedAngles.slice();
-        // Pad up to 6 directions with evenly-spaced angles offset from
-        // the player's facing, so the salvo always reads as a full
-        // starburst even with no enemies in the room.
+        // Pad up to 6 directions with angles that don't collide with
+        // the aimed ones — divide the circle into 12 slots and skip
+        // any slot too close to an already-claimed angle. Falls back
+        // to a plain fan around facing if every slot is taken.
         const base = Math.atan2(p.facing.y, p.facing.x);
-        let pad = 0;
-        while (allAngles.length < 6) {
-          const a = base + (pad * Math.PI * 2) / 6;
-          allAngles.push(a);
-          pad += 1;
+        const minSep = Math.PI / 6; // 30° minimum separation
+        for (let slot = 0; slot < 12 && allAngles.length < 6; slot++) {
+          const a = base + (slot * Math.PI * 2) / 12;
+          // Skip slots that overlap a homing shot — both look like the
+          // same line otherwise.
+          const tooClose = allAngles.some((other) => {
+            let diff = Math.abs(((a - other + Math.PI) % (Math.PI * 2)) - Math.PI);
+            if (diff > Math.PI) diff = Math.PI * 2 - diff;
+            return diff < minSep;
+          });
+          if (!tooClose) allAngles.push(a);
+        }
+        // Last-resort fill — if every slot was rejected (3 enemies in
+        // a tight cluster), just fan the remaining shots evenly.
+        for (let pad = 0; allAngles.length < 6; pad++) {
+          allAngles.push(base + ((pad + 1) * Math.PI * 2) / 7);
         }
         for (const a of allAngles) {
           this.projectiles.push({
@@ -1714,6 +1731,14 @@ export class GameEngine {
     p.spellCooldown = Math.max(0, p.spellCooldown - dt);
     p.ultimateCd = Math.max(0, p.ultimateCd - dt);
     p.mp = Math.min(p.maxMp, p.mp + p.manaRegen * dt);
+    // Puzzle failure hold — tick down so the modal stays visible for
+    // the duration of the red flash, then close cleanly.
+    if (this.puzzleHoldTimer > 0) {
+      this.puzzleHoldTimer = Math.max(0, this.puzzleHoldTimer - dt);
+      if (this.puzzleHoldTimer === 0 && this.pendingPuzzle?.failed) {
+        this.pendingPuzzle = null;
+      }
+    }
     // Hermes' Wake — periodic AOE around the player while the aura
     // window is active. The spell def carries the radius / damage /
     // status; we read it back via p.auraSpellId rather than capturing
@@ -2184,12 +2209,15 @@ export class GameEngine {
       // Hermes' Wake — sets an aura window on the player. updatePlayer
       // ticks damage to nearby enemies on the auraNextTick cadence.
       // Re-casting refreshes both the expiry and the next tick so the
-      // effective uptime never drops below one full duration.
+      // effective uptime never drops below one full duration. Label
+      // the cast as REFRESHED when the aura was already live so the
+      // player sees the buff was extended (not absorbed).
+      const wasActive = p.auraSpellId === sp.id && this.timeAlive < p.auraExpiresAt;
       p.auraExpiresAt = this.timeAlive + sp.life;
       p.auraSpellId = sp.id;
       p.auraNextTick = this.timeAlive + (sp.auraTickEvery ?? 0.32);
       audio.sfx('spell');
-      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, 'WAKE', sp.projColour);
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, wasActive ? 'EXTENDED' : 'WAKE', sp.projColour);
       if (!this.reducedParticles) {
         // Initial outward ring telegraphs the aura's reach.
         for (let i = 0; i < 18; i++) {
@@ -2541,15 +2569,20 @@ export class GameEngine {
     pz.progress.push(dir);
     const idx = pz.progress.length - 1;
     if (pz.progress[idx] !== pz.target[idx]) {
-      // Wrong input — fail immediately, lose 5 essence, close modal.
+      // Wrong input — fail immediately, lose 5 essence, mark the
+      // shrine done. The modal stays visible until the engine's
+      // puzzleHoldTimer drops to zero (driven by updatePlayer below)
+      // so the player can read the failure flash. Using a fixed-tick
+      // timer instead of setTimeout keeps puzzleInput from racing
+      // against a stale closure if the player keeps mashing
+      // directional inputs while the modal lingers.
       pz.failed = true;
       const p = this.player;
       p.essence = Math.max(0, p.essence - 5);
       this.spawnDamageNumber(p.pos.x, p.pos.y - 12, '−5 ✦', '#e23a4a');
       audio.sfx('playerHit');
       this.currentRoom.shrineUsed = true;
-      // Hold the modal briefly so the player sees the red flash, then close.
-      setTimeout(() => { this.pendingPuzzle = null; }, 600);
+      this.puzzleHoldTimer = 0.6;
       return;
     }
     if (pz.progress.length >= pz.target.length) {
@@ -3982,9 +4015,11 @@ export class GameEngine {
         if (d < pr.radius + PLAYER_RADIUS) {
           // Mirror Sigil ward — while the buff is up and charges remain,
           // the next enemy bolt bounces back instead of damaging the
-          // caster. One charge spent per intercept.
+          // caster. One charge spent per intercept. Skip if the player
+          // is already in i-frames (or dead) so the charge doesn't burn
+          // on a hit that would have been ignored anyway.
           const p = this.player;
-          if (p.reflectCharges > 0 && this.timeAlive < p.reflectExpiresAt) {
+          if (p.iframes <= 0 && !this.dead && p.reflectCharges > 0 && this.timeAlive < p.reflectExpiresAt) {
             p.reflectCharges -= 1;
             pr.fromPlayer = true;
             pr.vel.x *= -1.4; pr.vel.y *= -1.4;
@@ -4365,9 +4400,13 @@ export class GameEngine {
             }
           }
         } else {
-          // Player wandered off — decay slowly so the player can take
-          // a half-second pause without resetting the whole interval.
-          npc.proximityT = Math.max(0, npc.proximityT - dt * 0.5);
+          // Player wandered off — decay at one-fifth the build-up rate
+          // so a brief retreat to dodge a hazard doesn't reset the whole
+          // proximity interval. A 2 s NPC like the Reed-Cutter
+          // tolerates ~10 s of "stepped away" before the timer empties,
+          // which matches how the player actually moves through a
+          // sanctuary chamber.
+          npc.proximityT = Math.max(0, npc.proximityT - dt * 0.2);
         }
       }
     }

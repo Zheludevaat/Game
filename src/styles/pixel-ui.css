@@ -246,7 +246,16 @@
   text-shadow: 0 0 6px rgba(0,0,0,0.85);
 }
 
-.hud-top-left   { top: calc(12px + var(--safe-top)); left: calc(12px + var(--safe-left)); }
+.hud-top-left   {
+  top: calc(12px + var(--safe-top)); left: calc(12px + var(--safe-left));
+  /* Cap the top-left strip's vertical reach so the consumable +
+     ultimate + synergy + status pills don't bleed off-screen on a
+     short landscape phone. The strip scrolls if needed. */
+  max-height: calc(100vh - 24px - var(--safe-top) - var(--safe-bottom));
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.hud-top-left::-webkit-scrollbar { display: none; }
 .hud-top-right  { top: calc(12px + var(--safe-top)); right: calc(12px + var(--safe-right)); text-align: right; }
 .hud-bottom-left  { bottom: calc(12px + var(--safe-bottom)); left: calc(12px + var(--safe-left)); }
 .hud-bottom-right { bottom: calc(12px + var(--safe-bottom)); right: calc(12px + var(--safe-right)); text-align: right; }
