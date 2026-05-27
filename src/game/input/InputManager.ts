@@ -15,8 +15,6 @@ export interface InputState {
   interactPressed: boolean;
   pausePressed: boolean;
   mapPressed: boolean;
-  useItemPressed: boolean;
-  cycleRelicPressed: boolean;
   cycleWeaponPressed: boolean;
   cycleSpellPressed: boolean;
   uiUp: boolean;
@@ -158,7 +156,21 @@ export class InputManager {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.gamepadMap);
       if (raw) {
-        this.mapping = { ...DEFAULT_GAMEPAD_MAP, ...JSON.parse(raw) };
+        const parsed = JSON.parse(raw) as Partial<GamepadMap> & { useItem?: number; cycleRelic?: number };
+        // Migrate keys renamed in this build: the old `useItem` /
+        // `cycleRelic` slots were actually wired in-game to cycle spell
+        // and cycle weapon respectively. Carry the user's saved
+        // indices over so a returning player doesn't lose their
+        // remap when the names changed.
+        if (parsed.useItem != null && parsed.cycleSpell == null) {
+          parsed.cycleSpell = parsed.useItem;
+        }
+        if (parsed.cycleRelic != null && parsed.cycleWeapon == null) {
+          parsed.cycleWeapon = parsed.cycleRelic;
+        }
+        delete parsed.useItem;
+        delete parsed.cycleRelic;
+        this.mapping = { ...DEFAULT_GAMEPAD_MAP, ...parsed };
         this.mappingIsCustom = true;
       }
     } catch { /* */ }
@@ -238,7 +250,6 @@ export class InputManager {
       attackPressed: false, attackHeld: false,
       dashPressed: false, spellPressed: false, spellHeld: false,
       interactPressed: false, pausePressed: false, mapPressed: false,
-      useItemPressed: false, cycleRelicPressed: false,
       cycleWeaponPressed: false, cycleSpellPressed: false,
       uiUp: false, uiDown: false, uiLeft: false, uiRight: false,
       uiConfirm: false, uiCancel: false,
@@ -266,8 +277,6 @@ export class InputManager {
     s.interactPressed ||= this.keysPressedThisFrame.has('KeyE') || this.keysPressedThisFrame.has('Enter');
     s.pausePressed    ||= this.keysPressedThisFrame.has('Escape') || this.keysPressedThisFrame.has('KeyP');
     s.mapPressed      ||= this.keysPressedThisFrame.has('KeyM') || this.keysPressedThisFrame.has('Tab');
-    s.useItemPressed  ||= this.keysPressedThisFrame.has('KeyU');
-    s.cycleRelicPressed ||= this.keysPressedThisFrame.has('KeyT');
     s.cycleWeaponPressed ||= this.keysPressedThisFrame.has('KeyQ');
     s.cycleSpellPressed  ||= this.keysPressedThisFrame.has('KeyR');
 
@@ -326,10 +335,8 @@ export class InputManager {
       s.interactPressed ||= this.padPressed(m.interact);
       s.pausePressed    ||= this.padPressed(m.pause);
       s.mapPressed      ||= this.padPressed(m.map);
-      s.useItemPressed  ||= this.padPressed(m.useItem);
-      s.cycleRelicPressed ||= this.padPressed(m.cycleRelic);
-      s.cycleWeaponPressed ||= this.padPressed(m.cycleRelic);
-      s.cycleSpellPressed  ||= this.padPressed(m.useItem);
+      s.cycleWeaponPressed ||= this.padPressed(m.cycleWeapon);
+      s.cycleSpellPressed  ||= this.padPressed(m.cycleSpell);
 
       s.uiUp     ||= this.padPressed(m.dpadUp);
       s.uiDown   ||= this.padPressed(m.dpadDown);

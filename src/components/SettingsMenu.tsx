@@ -29,6 +29,23 @@ interface RowDef {
 
 const PIXEL_SCALE_OPTIONS = ['auto', '1', '2', '3', '4'];
 
+// Human-readable labels for each pad binding row. Source of truth lives
+// in controlMappings.ts — keep these in sync if you add a new action.
+const PAD_LABELS: Record<GamepadAction, string> = {
+  attack: 'Attack',
+  dash: 'Dash',
+  spell: 'Spell',
+  interact: 'Interact / Use',
+  pause: 'Pause',
+  map: 'Map',
+  cycleWeapon: 'Cycle Weapon',
+  cycleSpell: 'Cycle Spell',
+  dpadUp: 'D-pad Up',
+  dpadDown: 'D-pad Down',
+  dpadLeft: 'D-pad Left',
+  dpadRight: 'D-pad Right',
+};
+
 export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBack }: Props): JSX.Element {
   const [confirm, setConfirm] = useState(false);
   const [remapping, setRemapping] = useState<GamepadAction | null>(null);
@@ -44,7 +61,10 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     { id: 'pixelScale', label: 'Pixel Scale', kind: 'dropdown', options: PIXEL_SCALE_OPTIONS },
     ...(Object.keys(DEFAULT_GAMEPAD_MAP) as GamepadAction[]).map((action) => ({
       id: `remap.${action}`,
-      label: `Pad: ${action}`,
+      // Friendlier labels — the raw key names ("cycleWeapon") read as
+      // identifiers, not button assignments. Whatever a binding
+      // ACTUALLY does in-game must match what the row says.
+      label: `Pad: ${PAD_LABELS[action] ?? action}`,
       kind: 'remap' as const,
       action,
     })),

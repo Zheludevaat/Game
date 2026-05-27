@@ -34,10 +34,21 @@ export function loadSettings(): SettingsState {
     const raw = localStorage.getItem(STORAGE_KEYS.settings);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw);
+    // Migrate the renamed gamepad bindings — `useItem` and `cycleRelic`
+    // were displayed in Settings but actually drove cycle-spell /
+    // cycle-weapon in-game, which was the source of the "controls
+    // differ between settings and the actual game" complaint. Carry
+    // any custom indices over to the new keys so a returning player
+    // doesn't lose their remap, then drop the old labels.
+    const padRaw = (parsed.gamepadMap ?? {}) as Partial<typeof DEFAULT_GAMEPAD_MAP> & { useItem?: number; cycleRelic?: number };
+    if (padRaw.useItem != null && padRaw.cycleSpell == null) padRaw.cycleSpell = padRaw.useItem;
+    if (padRaw.cycleRelic != null && padRaw.cycleWeapon == null) padRaw.cycleWeapon = padRaw.cycleRelic;
+    delete padRaw.useItem;
+    delete padRaw.cycleRelic;
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      gamepadMap: { ...DEFAULT_GAMEPAD_MAP, ...(parsed.gamepadMap ?? {}) },
+      gamepadMap: { ...DEFAULT_GAMEPAD_MAP, ...padRaw },
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

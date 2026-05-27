@@ -5,8 +5,8 @@ export type ActionName =
   | 'interact'
   | 'pause'
   | 'map'
-  | 'useItem'
-  | 'cycleRelic';
+  | 'cycleWeapon'
+  | 'cycleSpell';
 
 export interface GamepadMap {
   attack: number;
@@ -15,8 +15,8 @@ export interface GamepadMap {
   interact: number;
   pause: number;
   map: number;
-  useItem: number;
-  cycleRelic: number;
+  cycleWeapon: number;
+  cycleSpell: number;
   // D-pad
   dpadUp: number;
   dpadDown: number;
@@ -41,14 +41,14 @@ export interface GamepadMap {
 // pad.id and apply a swapped preset so the action a Switch player
 // presses by NAME ("press A to attack") does what they expect.
 export const DEFAULT_GAMEPAD_MAP: GamepadMap = {
-  attack: 0,      // A / Cross  (Xbox A, bottom)
-  dash: 1,        // B / Circle (Xbox B, right)
-  spell: 2,       // X / Square (Xbox X, left)
-  interact: 3,    // Y / Triangle (Xbox Y, top)
-  useItem: 4,     // LB / L1
-  cycleRelic: 5,  // RB / R1
-  pause: 9,       // Start / Menu / +
-  map: 8,         // Select / Share / −
+  attack: 0,        // A / Cross  (Xbox A, bottom)
+  dash: 1,          // B / Circle (Xbox B, right)
+  spell: 2,         // X / Square (Xbox X, left)
+  interact: 3,      // Y / Triangle (Xbox Y, top)
+  cycleSpell: 4,    // LB / L1 — cycles between known spells
+  cycleWeapon: 5,   // RB / R1 — cycles between known weapons
+  pause: 9,         // Start / Menu / +
+  map: 8,           // Select / Share / −
   dpadUp: 12,
   dpadDown: 13,
   dpadLeft: 14,
@@ -59,14 +59,14 @@ export const DEFAULT_GAMEPAD_MAP: GamepadMap = {
 // index 1) is the primary action and labelled "B" (bottom, index 0) is
 // the secondary, matching Nintendo's house style.
 export const SWITCH_GAMEPAD_MAP: GamepadMap = {
-  attack: 1,      // A button (Nintendo right)
-  dash: 0,        // B button (Nintendo bottom)
-  spell: 3,       // X button (Nintendo top)
-  interact: 2,    // Y button (Nintendo left)
-  useItem: 4,     // L
-  cycleRelic: 5,  // R
-  pause: 9,       // + (Plus)
-  map: 8,         // − (Minus)
+  attack: 1,        // A button (Nintendo right)
+  dash: 0,          // B button (Nintendo bottom)
+  spell: 3,         // X button (Nintendo top)
+  interact: 2,      // Y button (Nintendo left)
+  cycleSpell: 4,    // L
+  cycleWeapon: 5,   // R
+  pause: 9,         // + (Plus)
+  map: 8,           // − (Minus)
   dpadUp: 12,
   dpadDown: 13,
   dpadLeft: 14,
