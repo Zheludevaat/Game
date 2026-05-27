@@ -58,6 +58,24 @@ export const CODEX: CodexEntry[] = [
       'And in a little while all things were changed before me, and I beheld a vision without bound — all become Light, sweet and joyful exceedingly. And as I gazed I came to love that sight.',
     unlock: { kind: 'firstFloor' },
   },
+  {
+    id: 'awaken.tabula',
+    chapter: 'awakening',
+    title: 'The Emerald Tablet',
+    source: 'Tabula Smaragdina (Newton\'s English rendering, c. 1680)',
+    text:
+      'That which is below is as that which is above, and that which is above is as that which is below — to do the miracles of one only thing. And as all things have been and arose from One by the mediation of One, so all things have their birth from this one thing by adaptation.',
+    unlock: { kind: 'firstFloor' },
+  },
+  {
+    id: 'awaken.silence',
+    chapter: 'awakening',
+    title: 'On the Silence Before Speech',
+    source: 'Corpus Hermeticum X.5 (Mead trans.)',
+    text:
+      'For to speak of God is impossible, even unto those who can in some sense apprehend Him. The Good, my son, cannot be set forth in words; it can be known only by mind and heart together. Where speech ends, knowledge begins; and where knowledge ends, that which is unspeakable begins.',
+    unlock: { kind: 'sphereReached', sphere: 'mercury' },
+  },
 
   // ─── II. THE DESCENT OF THE ANTHROPOS ─────────────────────────────────
   {
@@ -86,6 +104,24 @@ export const CODEX: CodexEntry[] = [
     text:
       'And Man, who had all authority over the cosmos of mortals, broke through the vault of the spheres and showed to Nature below the beautiful form of God. And Nature, seeing the beauty he had brought, smiled with love — for she had beheld the reflection of fairest Man upon the water, and his shadow on the earth. And he, seeing this form like to himself in her, loved it, and willed to dwell there. And in that willing, he descended.',
     unlock: { kind: 'sphereReached', sphere: 'venus' },
+  },
+  {
+    id: 'descent.dual',
+    chapter: 'descent',
+    title: 'The Dual Nature',
+    source: 'Corpus Hermeticum I.15 (Mead trans., paraphrased)',
+    text:
+      'Wherefore, of all things upon the earth, Man alone is twofold — mortal in body by reason of the body, but deathless in essence by reason of the Man-eternal within him. For though he is deathless and has authority over all things, he yet suffers all that mortals suffer, being subject unto fate — for he is bound to the body even while above the harmony of the spheres.',
+    unlock: { kind: 'sphereReached', sphere: 'sun' },
+  },
+  {
+    id: 'descent.tomb',
+    chapter: 'descent',
+    title: 'The Body, a Tomb',
+    source: 'Plato, Cratylus 400c & Phaedo 62b (Jowett trans.)',
+    text:
+      'Some affirm the body (σῶμα) is the tomb (σῆμα) of the soul, in which it is buried for the present life. Others say it is so called because the soul gives signs through it; and others, again, that it is the prison-house in which the soul is detained — by Zeus, by Necessity, by its own consenting fall — until that which it owes is paid.',
+    unlock: { kind: 'sphereReached', sphere: 'mars' },
   },
 
   // ─── III. THE SEVEN GOVERNORS ────────────────────────────────────────
@@ -326,6 +362,24 @@ export const CODEX: CodexEntry[] = [
     text:
       'It is not pure thought that unites theurgists to the gods. For what would prevent contemplative philosophers from achieving theurgic union with them? Rather, it is the perfection of acts unspeakable and beyond all conception — the power of the ineffable symbols which are intelligible to the gods alone — that establishes union.',
     unlock: { kind: 'victory', minVictories: 3 },
+  },
+  {
+    id: 'ogdoad.one',
+    chapter: 'ogdoad',
+    title: 'On the One',
+    source: 'Plotinus, Enneads VI.9.6 (MacKenna trans.)',
+    text:
+      'The One is all things and no one of them: the source of all things is not all things; and yet it IS all things, for they all stand as it were in retreat toward it; yet, more truly, they have not yet come into being — but they will. For all that came into being has its proper place beneath the One.',
+    unlock: { kind: 'victory', minVictories: 4 },
+  },
+  {
+    id: 'ogdoad.silenthymn',
+    chapter: 'ogdoad',
+    title: 'The Secret Hymn',
+    source: 'Corpus Hermeticum XIII.17 (Mead trans.)',
+    text:
+      '"Now, father, what shall I sing? for I have nothing of myself left but Thee." "Sing, my son, what no tongue can sing, and what no ear can hear. Let every faculty in thee, by itself, hymn God within thee — Mind to Mind, Word to Word, Light to Light. Be silent, son, and listen to the silence; for that which is in thee uncreated is the only voice that the Father hears."',
+    unlock: { kind: 'victory', minVictories: 2 },
   },
 
   // ─── DEATH & RETURN ───────────────────────────────────────────────────
