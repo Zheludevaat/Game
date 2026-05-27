@@ -17,6 +17,9 @@ import {
   RELIC_SYNERGIES, SYNERGY_IDS, SynergyId, synergiesFromRelics,
 } from './data/relicSynergies';
 import {
+  ShrineVariant, pickShrineVariant, shrineDisplayName,
+} from './data/shrines';
+import {
   STATUS_CONFIG, StatusEffect, StatusEffectKind,
   applyStatusEffect, tickStatusEffects, hasStatus, absorbWithShield,
   speedMultiplierFromStatus,
@@ -453,7 +456,13 @@ export class GameEngine {
   // Set to true the first time the player enters this run's boss room.
   // Stays true across deaths inside the same run; reset on a new run.
   private bossIntroPlayedThisRun = false;
-  private pendingShrine: { kind: ShrineKind; name: string; effect: string; downside: string } | null = null;
+  private pendingShrine: {
+    kind: ShrineKind;
+    variant: ShrineVariant;
+    name: string;
+    effect: string;
+    downside: string;
+  } | null = null;
   private damageNumbers: DamageNumber[] = [];
   private timeAlive = 0;
   private dead = false;
@@ -2064,7 +2073,7 @@ export class GameEngine {
     if (room.hasShrine && !room.shrineUsed) {
       const cx = ROOM_W / 2, cy = ROOM_H / 2 - 8;
       if (dist(p.pos, { x: cx, y: cy }) < 34) {
-        this.beginShrine(room.shrineKind!);
+        this.beginShrine(room.shrineKind!, room.seed);
         return;
       }
     }
@@ -2161,84 +2170,82 @@ export class GameEngine {
     this.particles.burst(x, y, 30, { colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.9 });
   }
 
-  private beginShrine(kind: ShrineKind): void {
-    const map: Record<ShrineKind, { name: string; effect: string; downside: string }> = {
-      calcination: { name: 'Calcination', effect: '+8 Attack', downside: '-10 Max Health' },
-      dissolution: { name: 'Dissolution', effect: 'Restore Mana', downside: '-1 Armor (temporary)' },
-      separation:  { name: 'Separation',  effect: '+12 Speed',  downside: '-3 Attack' },
-      conjunction: { name: 'Conjunction', effect: 'Gain a relic', downside: 'Spawns extra shades' },
-      fermentation:{ name: 'Fermentation',effect: '+2 Luck',     downside: 'Take 8 corruption damage' },
-      distillation:{ name: 'Distillation',effect: 'Fully restore mana', downside: '-12 Coins' },
-      coagulation: { name: 'Coagulation', effect: '+2 Armor',    downside: 'Dash slower' },
-      cursed:      { name: 'Cursed Altar', effect: '+12 Attack, +2 Crit Luck', downside: '-25% Max Health, -2 Armor' },
-      library:     { name: 'Library Tome', effect: 'Unlock a codex page, +6 Spell Power', downside: 'Costs 10 Essence' },
+  private beginShrine(kind: ShrineKind, seed: number): void {
+    const variant = pickShrineVariant(kind, seed);
+    this.pendingShrine = {
+      kind,
+      variant,
+      name: shrineDisplayName(kind, variant.name),
+      effect: variant.effect,
+      downside: variant.downside,
     };
-    this.pendingShrine = { kind, ...map[kind] };
   }
 
   private confirmShrine(accepted: boolean): void {
     if (!this.pendingShrine) return;
     const room = this.currentRoom;
     const kind = this.pendingShrine.kind;
+    const variant = this.pendingShrine.variant;
     if (accepted) {
       const p = this.player;
-      switch (kind) {
-        case 'calcination':
-          p.attack += 8; p.maxHp = Math.max(20, p.maxHp - 10); p.hp = Math.min(p.hp, p.maxHp);
-          break;
-        case 'dissolution':
-          p.mp = Math.min(p.maxMp, p.mp + 60);
-          p.armor = Math.max(0, p.armor - 1);
-          break;
-        case 'separation':
-          p.speed += 12; p.attack = Math.max(2, p.attack - 3);
-          break;
-        case 'conjunction': {
-          const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
-          if (pool.length) this.grantRelic(pool[Math.floor(Math.random() * pool.length)]);
-          // spawn extra shades
-          for (let i = 0; i < 3; i++) {
-            this.spawnEnemy('lesserShade', {
-              x: ROOM_W * 0.3 + Math.random() * ROOM_W * 0.4,
-              y: ROOM_H * 0.3 + Math.random() * ROOM_H * 0.4,
-            }, this.floor.number);
-          }
-          // Need to lock doors since enemies appeared
-          if (this.enemies.length > 0) room.cleared = false;
-          break;
-        }
-        case 'fermentation':
-          p.luck += 2; p.hp = Math.max(1, p.hp - 8);
-          break;
-        case 'distillation':
-          p.mp = p.maxMp;
-          p.coins = Math.max(0, p.coins - 12);
-          break;
-        case 'coagulation':
-          p.armor += 2;
-          break;
-        case 'cursed':
-          p.attack += 12;
-          p.luck += 2;
-          p.maxHp = Math.max(20, Math.floor(p.maxHp * 0.75));
-          p.hp = Math.min(p.hp, p.maxHp);
-          p.armor = Math.max(0, p.armor - 2);
-          break;
-        case 'library': {
-          // Unlock a random un-owned codex page + permanent spell-power
-          // bump. Essence cost models the "donation."
-          p.essence = Math.max(0, p.essence - 10);
-          p.spellPower += 6;
-          // Use the existing unlockCodex system — pick from the import.
-          const owned = new Set(this.meta.unlockedCodex);
-          const candidates = CODEX.filter((c) => !owned.has(c.id));
-          if (candidates.length > 0) {
-            const c = candidates[Math.floor(Math.random() * candidates.length)];
-            this.unlockCodex(c.id);
-          }
-          break;
+      const eff = variant.apply;
+      if (eff.attack)       p.attack       = Math.max(2, p.attack + eff.attack);
+      if (eff.spellPower)   p.spellPower   = Math.max(2, p.spellPower + eff.spellPower);
+      if (eff.speed)        p.speed       += eff.speed;
+      if (eff.armor)        p.armor        = Math.max(0, p.armor + eff.armor);
+      if (eff.luck)         p.luck         = Math.max(0, p.luck + eff.luck);
+      if (eff.manaRegen)    p.manaRegen   += eff.manaRegen;
+      if (eff.dashCdMaxAdd) p.dashCdMax   += eff.dashCdMaxAdd;
+      if (eff.maxHpAdd) {
+        p.maxHp = Math.max(20, p.maxHp + eff.maxHpAdd);
+        p.hp = Math.min(p.hp, p.maxHp);
+      }
+      if (eff.maxHpScale != null) {
+        p.maxHp = Math.max(20, Math.floor(p.maxHp * eff.maxHpScale));
+        p.hp = Math.min(p.hp, p.maxHp);
+      }
+      if (eff.maxMpAdd) {
+        p.maxMp = Math.max(20, p.maxMp + eff.maxMpAdd);
+        p.mp = Math.min(p.mp, p.maxMp);
+      }
+      if (eff.hpDelta) {
+        if (eff.hpDelta < 0) {
+          // Treat negative as DoT-style — bypasses shield + armor flow
+          // for a clean "corruption" feel; can't bring HP below 1.
+          p.hp = Math.max(1, p.hp + eff.hpDelta);
+        } else {
+          this.healPlayer(eff.hpDelta);
         }
       }
+      if (eff.mpDelta)        p.mp = Math.max(0, Math.min(p.maxMp, p.mp + eff.mpDelta));
+      if (eff.mpRestoreFull)  p.mp = p.maxMp;
+      if (eff.coinsDelta)     p.coins = Math.max(0, p.coins + eff.coinsDelta);
+      if (eff.essenceDelta)   p.essence = Math.max(0, p.essence + eff.essenceDelta);
+
+      // Engine specials
+      const sp = variant.special;
+      if (sp?.grantRandomRelic) {
+        const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
+        if (pool.length) this.grantRelic(pool[Math.floor(Math.random() * pool.length)]);
+      }
+      if (sp?.spawnShades) {
+        for (let i = 0; i < sp.spawnShades; i++) {
+          this.spawnEnemy('lesserShade', {
+            x: ROOM_W * 0.3 + Math.random() * ROOM_W * 0.4,
+            y: ROOM_H * 0.3 + Math.random() * ROOM_H * 0.4,
+          }, this.floor.number);
+        }
+        if (this.enemies.length > 0) room.cleared = false;
+      }
+      if (sp?.unlockRandomCodex) {
+        const owned = new Set(this.meta.unlockedCodex);
+        const candidates = CODEX.filter((c) => !owned.has(c.id));
+        if (candidates.length > 0) {
+          const c = candidates[Math.floor(Math.random() * candidates.length)];
+          this.unlockCodex(c.id);
+        }
+      }
+
       room.shrineUsed = true;
       audio.sfx('shrine');
       this.particles.burst(ROOM_W / 2, ROOM_H / 2 - 16, 36, { colour: PALETTE.teal, life: 1.4, maxLife: 1.4 });
