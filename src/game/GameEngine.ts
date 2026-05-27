@@ -3988,43 +3988,46 @@ export class GameEngine {
     this.camera.shakeMag = Math.max(this.camera.shakeMag, 3 + dmgFrac * 4);
     audio.sfx('playerHit');
     this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `${dmg}`, DAMAGE_COLOURS.error);
-    // Visual response — sphere-tinted crimson burst at the player so
-    // taking damage reads as an EVENT, not just a number popping. Mirror
-    // of the damageEnemy burst on the inverse side of the exchange.
-    if (!this.reducedParticles) {
-      const accent = sphereForFloor(this.floor.number).accent;
-      // Crimson gore — visceral
-      for (let i = 0; i < 8; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const sp = 70 + Math.random() * 50;
-        this.particles.emit({
-          x: p.pos.x, y: p.pos.y - 4,
-          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-          life: 0.35, maxLife: 0.35, size: 1.4, colour: '#e23a4a', drag: 0.88,
-        });
-      }
-      // Sphere-accent glints layered over — the room theme bleeds in.
-      for (let i = 0; i < 6; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const sp = 50 + Math.random() * 40;
-        this.particles.emit({
-          x: p.pos.x, y: p.pos.y - 4,
-          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-          life: 0.32, maxLife: 0.32, size: 1.2, colour: accent, drag: 0.88,
-        });
-      }
-      // Bright impact ring — small white pop so the hit reads instantly.
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        this.particles.emit({
-          x: p.pos.x, y: p.pos.y - 4,
-          vx: Math.cos(a) * 100, vy: Math.sin(a) * 100,
-          life: 0.18, maxLife: 0.18, size: 1.3, colour: '#ffffff', drag: 0.8,
-        });
-      }
-    }
+    this.spawnPlayerHitFx(p.pos.x, p.pos.y - 4);
     // Damage breaks the combo chain.
     this.comboCount = 0;
+  }
+
+  /** Player-side mirror of spawnHitFx — crimson gore + sphere-tinted
+   *  glint + bright impact ring at the player position. Sits next to
+   *  damagePlayer for symmetry with damageEnemy / spawnHitFx. */
+  private spawnPlayerHitFx(x: number, y: number): void {
+    if (this.reducedParticles) return;
+    const accent = sphereForFloor(this.floor.number).accent;
+    // Crimson gore — visceral
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 70 + Math.random() * 50;
+      this.particles.emit({
+        x, y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.35, maxLife: 0.35, size: 1.4, colour: '#e23a4a', drag: 0.88,
+      });
+    }
+    // Sphere-accent glints layered over — the room theme bleeds in.
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 50 + Math.random() * 40;
+      this.particles.emit({
+        x, y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.32, maxLife: 0.32, size: 1.2, colour: accent, drag: 0.88,
+      });
+    }
+    // Bright impact ring — small white pop so the hit reads instantly.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      this.particles.emit({
+        x, y,
+        vx: Math.cos(a) * 100, vy: Math.sin(a) * 100,
+        life: 0.18, maxLife: 0.18, size: 1.3, colour: '#ffffff', drag: 0.8,
+      });
+    }
   }
 
   private updateProjectiles(dt: number): void {
