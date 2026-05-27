@@ -587,6 +587,9 @@ export class GameEngine {
   // dashing. Render them BEFORE the player so the latest position
   // sits on top of fading ghosts.
   private dashTrail: { x: number; y: number; facing: Vec; walkPhase: number; t: number }[] = [];
+  /** Iron Hook pull-line visualisations — one per successful melee hit
+   *  with a `pullsToward` weapon. Line fades over ~140 ms. */
+  private hookPulls: { from: Vec; to: Vec; t: number; colour: string }[] = [];
   private dashTrailAccum = 0;
   /** visualKey of whatever last hurt the player — captured into
    *  RunSummary.deathCause when the player dies. Cleared on mount. */
@@ -679,6 +682,7 @@ export class GameEngine {
     this.gameOverFired = false;
     this.dashTrail = [];
     this.dashTrailAccum = 0;
+    this.hookPulls = [];
     this.lastDamageSource = null;
     this.comboCount = 0;
     this.comboLastHitT = 0;
@@ -2150,15 +2154,52 @@ export class GameEngine {
           });
         }
       }
+      // Iron Hook (pullsToward) — draw a brief line from player to
+      // enemy in the weapon's swing colour. Reads as a chain-tug.
+      // 140 ms life; ticked + rendered alongside dashTrail.
+      if (w.pullsToward) {
+        this.hookPulls.push({
+          from: { x: p.pos.x, y: p.pos.y - 6 },
+          to: { x: e.pos.x, y: e.pos.y - 4 },
+          t: 0,
+          colour: w.swingColour,
+        });
+      }
     }
     audio.sfx('attack');
+
+    // Per-swing camera shake + hit-pause — overhead slams hit harder,
+    // flurry weapons give a rhythmic micro-punch per individual hit,
+    // lunge stays neutral. These are outside the reducedParticles gate
+    // because they're combat feedback, not visual fluff.
+    switch (w.swingType) {
+      case 'overhead':
+        this.camera.shakeT = Math.max(this.camera.shakeT, 0.28);
+        this.camera.shakeMag = Math.max(this.camera.shakeMag, 4.5);
+        this.hitPauseUntil = Math.max(this.hitPauseUntil, this.timeAlive + 0.08);
+        break;
+      case 'flurry':
+        // Each individual hit in a flurry produces a small punch — the
+        // chain of hits reads as a rhythm. Lower magnitude so 4-hit
+        // flurries don't strobe the camera.
+        this.camera.shakeT = Math.max(this.camera.shakeT, 0.08);
+        this.camera.shakeMag = Math.max(this.camera.shakeMag, 1.8);
+        break;
+      case 'thrust':
+        this.camera.shakeT = Math.max(this.camera.shakeT, 0.14);
+        this.camera.shakeMag = Math.max(this.camera.shakeMag, 2.6);
+        break;
+      default:
+        // arc / lunge — modest default shake.
+        this.camera.shakeT = Math.max(this.camera.shakeT, 0.16);
+        this.camera.shakeMag = Math.max(this.camera.shakeMag, 2.4);
+    }
 
     // Particles styled per swing type
     if (!this.reducedParticles) {
       const palette = [w.swingColour, w.accentColour];
       if (w.swingType === 'overhead') {
-        // heavy slam: radial burst + shake
-        this.camera.shakeT = 0.18; this.camera.shakeMag = 3;
+        // heavy slam: radial burst
         for (let i = 0; i < 14; i++) {
           const a = baseAngle + (i / 14 - 0.5) * w.arcHalf * 2;
           this.particles.emit({
@@ -3684,7 +3725,12 @@ export class GameEngine {
         }
       }
     } else {
-      this.spawnDamageNumber(e.pos.x, e.pos.y - 10, `${dmg}`, '#ffd97a');
+      // Tint non-crit hit numbers by the current sphere's accent so
+      // combat numbers carry per-sphere identity — gold on Sun,
+      // crimson on Mars, violet on Saturn, etc. Crits stay gold so
+      // they still pop as the brightest moment.
+      const sphereTint = sphereForFloor(this.floor.number).accent;
+      this.spawnDamageNumber(e.pos.x, e.pos.y - 10, `${dmg}`, sphereTint);
     }
     // Brief hit-pause on damage landing. Every hit gets a 2-frame
     // pause for "punch" feel; big hits get 4 frames. Avoid stacking
@@ -4582,6 +4628,12 @@ export class GameEngine {
     for (let i = this.dashTrail.length - 1; i >= 0; i--) {
       this.dashTrail[i].t += dt;
       if (this.dashTrail[i].t > 0.28) this.dashTrail.splice(i, 1);
+    }
+    // Iron Hook chain visualisation — same lifetime pattern as dash
+    // ghosts, kept here so a single update site handles both.
+    for (let i = this.hookPulls.length - 1; i >= 0; i--) {
+      this.hookPulls[i].t += dt;
+      if (this.hookPulls[i].t > 0.14) this.hookPulls.splice(i, 1);
     }
   }
 
@@ -5519,10 +5571,38 @@ export class GameEngine {
     }
   }
 
+  /** Draw the Iron Hook chain segments — a brief line in the weapon's
+   *  swing colour from the player to each enemy the pull-weapon
+   *  connected with this swing. 140 ms life with alpha fade. */
+  private drawHookPulls(): void {
+    if (this.hookPulls.length === 0) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    for (const h of this.hookPulls) {
+      const tNorm = Math.min(1, h.t / 0.14);
+      const alpha = (1 - tNorm) * 0.85;
+      if (alpha <= 0.02) continue;
+      ctx.strokeStyle = h.colour;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.moveTo(h.from.x, h.from.y);
+      ctx.lineTo(h.to.x, h.to.y);
+      ctx.stroke();
+      // A small bright dot at the hooked end so the chain reads as
+      // anchored, not just floating.
+      ctx.fillStyle = '#ffe6a3';
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.fillRect(h.to.x - 1, h.to.y - 1, 2, 2);
+    }
+    ctx.restore();
+  }
+
   private drawPlayer(): void {
     const p = this.player;
     // Dash afterimages — drawn first so the live sprite sits on top.
     this.drawDashTrail();
+    this.drawHookPulls();
     // Dash cooldown ring under the feet. Reads as a cyan halo when
     // ready; shrinks to nothing while on cooldown.
     if (!this.dead && p.dashCdMax > 0) {
