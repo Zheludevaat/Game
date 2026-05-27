@@ -4,6 +4,10 @@
 // props here are NON-COLLIDING (visual only). Obstacles that block
 // movement live in data/hazards.ts since they need engine-side
 // gameplay code.
+//
+// Sizing: every prop's centre is the (x,y) passed in. Props extend
+// roughly 12–22 px in each direction so they read at game scale on
+// iPhone landscape (~1.5× zoom) without crowding the floor.
 
 import { RNG } from '../math/rng';
 import { ROOM_H, ROOM_W, TILE } from '../constants';
@@ -40,14 +44,12 @@ const PROPS_BY_SPHERE: Record<SphereId, PropKind[]> = {
   ogdoad:  ['starGlyph', 'crystalSpire', 'voidRune'],
 };
 
-/** The exclusion-zone radius around the room centre — props never
- *  spawn here so the play space stays clean. Also avoid doorway
- *  corridors so doors are never half-blocked by decor. */
-const CENTRE_EXCLUSION = 56;
-const DOORWAY_HALF = 28;
+/** Exclusion zone around the room centre — props never spawn here
+ *  so the play space stays clean. Also avoid doorway corridors. */
+const CENTRE_EXCLUSION = 60;
+const DOORWAY_HALF = 32;
 
-/** Deterministic list of props to render in a given room. Stateless;
- *  called every frame inside drawRoom. */
+/** Deterministic list of props to render in a given room. */
 export function placeProps(
   sphere: SphereId,
   roomSeed: number,
@@ -58,19 +60,16 @@ export function placeProps(
   const rng = new RNG(roomSeed ^ 0xa7f3b2c1);
   const out: PropPlacement[] = [];
   let tries = 0;
-  while (out.length < count && tries < count * 6) {
+  while (out.length < count && tries < count * 8) {
     tries++;
     const x = TILE * 2 + rng.next() * (ROOM_W - TILE * 4);
     const y = TILE * 3 + rng.next() * (ROOM_H - TILE * 6);
-    // Skip if inside the central play zone.
     if (Math.hypot(x - ROOM_W / 2, y - ROOM_H / 2) < CENTRE_EXCLUSION) continue;
-    // Skip if inside a doorway lane (the slot the player walks through).
-    if (Math.abs(x - ROOM_W / 2) < DOORWAY_HALF && (y < TILE * 2 + 8 || y > ROOM_H - TILE * 2 - 8)) continue;
-    if (Math.abs(y - ROOM_H / 2) < DOORWAY_HALF && (x < TILE * 2 + 8 || x > ROOM_W - TILE * 2 - 8)) continue;
-    // Skip if too close to an already-placed prop (no stacking).
+    if (Math.abs(x - ROOM_W / 2) < DOORWAY_HALF && (y < TILE * 2 + 10 || y > ROOM_H - TILE * 2 - 10)) continue;
+    if (Math.abs(y - ROOM_H / 2) < DOORWAY_HALF && (x < TILE * 2 + 10 || x > ROOM_W - TILE * 2 - 10)) continue;
     let tooClose = false;
     for (const p of out) {
-      if (Math.hypot(p.x - x, p.y - y) < 28) { tooClose = true; break; }
+      if (Math.hypot(p.x - x, p.y - y) < 36) { tooClose = true; break; }
     }
     if (tooClose) continue;
     const kind = palette[rng.int(0, palette.length)];
@@ -80,34 +79,91 @@ export function placeProps(
   return out;
 }
 
-/** Pick a count for this room — combat rooms get 3-5 props for
- *  scene-dressing; smaller utility rooms (shrine, treasure, exit) get
- *  1-2 so the relevant interactable isn't visually crowded. */
 export function propCountFor(roomType: string, sphere: SphereId, roomSeed: number): number {
   const rng = new RNG(roomSeed ^ 0xb2e4c8f9);
   void sphere;
   switch (roomType) {
     case 'start':    return rng.int(1, 3);
-    case 'enemy':    return rng.int(3, 6);
+    case 'enemy':    return rng.int(2, 5);
     case 'treasure': return rng.int(1, 3);
-    case 'shrine':   return rng.int(1, 2);
+    case 'shrine':   return rng.int(1, 3);
     case 'locked':   return rng.int(2, 4);
     case 'miniBoss': return rng.int(2, 4);
     case 'exit':     return rng.int(1, 3);
-    case 'boss':     return 0; // boss arena stays clean
+    case 'boss':     return 0;
     default:         return rng.int(1, 3);
   }
 }
 
-/** Draw all props for a room. Single entry point — keeps drawRoom
- *  uncluttered. `t` is timeAlive for any subtle animation. */
 export function drawProps(
   ctx: CanvasRenderingContext2D,
   props: PropPlacement[],
   t: number,
 ): void {
-  for (const p of props) {
-    drawProp(ctx, p.kind, p.x, p.y, p.variant, t);
+  // Pass 1: shadows under every prop — grounds them in the floor.
+  for (const p of props) drawPropShadow(ctx, p.kind, p.x, p.y);
+  // Pass 2: prop bodies.
+  for (const p of props) drawProp(ctx, p.kind, p.x, p.y, p.variant, t);
+}
+
+/** Drop-shadow ellipse under each prop. Width keyed to prop kind so
+ *  tall props (pillars, columns, statues) get longer shadows. */
+function drawPropShadow(ctx: CanvasRenderingContext2D, kind: PropKind, x: number, y: number): void {
+  const w = shadowWidthFor(kind);
+  if (w <= 0) return;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + shadowOffsetFor(kind), w, w * 0.35, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function shadowWidthFor(kind: PropKind): number {
+  switch (kind) {
+    case 'brokenColumn':
+    case 'rosePillar':
+    case 'brassPillar':
+    case 'decayingStatue':
+    case 'crystalSpire':
+      return 12;
+    case 'hourglass':
+    case 'lightningRod':
+    case 'scytheRack':
+    case 'weaponRack':
+      return 9;
+    case 'brazier':
+    case 'sunDial':
+    case 'mirrorDisk':
+    case 'fountain':
+    case 'brassGear':
+    case 'starGlyph':
+    case 'voidRune':
+      return 10;
+    case 'tidePool':
+    case 'mosaicShard':
+    case 'reedClump':
+    case 'chainPile':
+    case 'bonePile':
+    case 'vineCluster':
+    case 'throneMark':
+      return 0; // flat-on-floor props don't need a shadow
+    default:
+      return 8;
+  }
+}
+function shadowOffsetFor(kind: PropKind): number {
+  switch (kind) {
+    case 'brokenColumn':
+    case 'rosePillar':
+    case 'brassPillar':
+    case 'decayingStatue':
+    case 'crystalSpire':
+      return 7;
+    case 'lightningRod':
+    case 'scytheRack':
+    case 'hourglass':
+      return 6;
+    default:
+      return 5;
   }
 }
 
@@ -115,344 +171,841 @@ function drawProp(ctx: CanvasRenderingContext2D, kind: PropKind, x: number, y: n
   switch (kind) {
     // ─── MOON ───────────────────────────────────────────────────────
     case 'tidePool': {
-      // Oval water markings, faint silvery shimmer.
-      ctx.fillStyle = '#1a2a4a';
-      ctx.beginPath(); ctx.ellipse(x, y, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#2c4068';
-      ctx.beginPath(); ctx.ellipse(x, y, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
-      const sh = 0.55 + Math.sin(t * 1.5 + v) * 0.30;
-      ctx.fillStyle = `rgba(205, 214, 220, ${sh})`;
-      ctx.fillRect(x - 3, y - 1, 6, 1);
+      // Larger oval pool with rippling surface + faint silver glints.
+      ctx.fillStyle = '#08182f';
+      ctx.beginPath(); ctx.ellipse(x, y, 16, 8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#152944';
+      ctx.beginPath(); ctx.ellipse(x, y, 14, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#243c5e';
+      ctx.beginPath(); ctx.ellipse(x, y - 1, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+      // Ripple highlights — three offset arcs that bob with time.
+      const sh = 0.5 + Math.sin(t * 1.4 + v) * 0.3;
+      ctx.strokeStyle = `rgba(180, 200, 235, ${sh})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(x - 1, y - 2, 8, 3, 0, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(x + 2, y + 1, 5, 2, 0, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
+      // Tiny silver glint
+      ctx.fillStyle = `rgba(220, 235, 245, ${sh * 0.9})`;
+      ctx.fillRect(x - 4, y - 3, 2, 1);
       break;
     }
     case 'reedClump': {
-      // Three vertical reeds.
-      ctx.fillStyle = '#1a3320';
-      ctx.fillRect(x - 3, y - 1, 1, 8);
-      ctx.fillRect(x,     y - 3, 1, 10);
-      ctx.fillRect(x + 3, y - 2, 1, 9);
-      ctx.fillStyle = '#3b6a3f';
-      ctx.fillRect(x - 3, y - 1, 1, 4);
-      ctx.fillRect(x,     y - 3, 1, 5);
-      ctx.fillRect(x + 3, y - 2, 1, 4);
+      // Cluster of 5 reeds with subtle sway.
+      const sway = Math.sin(t * 1.2 + v) * 0.5;
+      ctx.fillStyle = '#08120a';
+      // Shadow stems (the dark backing layer)
+      for (let i = -2; i <= 2; i++) {
+        const ox = i * 2 + sway * (i / 2);
+        ctx.fillRect(x + ox - 1, y - 12 + Math.abs(i) * 1.5, 1, 14 - Math.abs(i) * 2);
+      }
+      // Lit stems
+      ctx.fillStyle = '#3a6e3a';
+      for (let i = -2; i <= 2; i++) {
+        const ox = i * 2 + sway * (i / 2);
+        ctx.fillRect(x + ox, y - 11 + Math.abs(i) * 1.5, 1, 12 - Math.abs(i) * 2);
+      }
+      // Tops — pale silver tip
+      ctx.fillStyle = '#aac8a0';
+      for (let i = -2; i <= 2; i++) {
+        const ox = i * 2 + sway * (i / 2);
+        ctx.fillRect(x + ox, y - 11 + Math.abs(i) * 1.5, 1, 2);
+      }
+      // Base tuft
+      ctx.fillStyle = '#1a3322';
+      ctx.fillRect(x - 4, y + 1, 9, 2);
       break;
     }
     case 'driftwood': {
-      // Sideways pale log with dark knots.
-      ctx.fillStyle = '#3a2c1d';
-      ctx.fillRect(x - 9, y - 2, 18, 4);
-      ctx.fillStyle = '#6b5236';
-      ctx.fillRect(x - 9, y - 2, 18, 1);
+      // Larger pale log with dark knots, sitting at a slight angle.
       ctx.fillStyle = '#1a0f08';
-      ctx.fillRect(x - 4, y - 1, 1, 1);
-      ctx.fillRect(x + 2, y, 1, 1);
+      ctx.fillRect(x - 13, y - 3, 26, 6);
+      ctx.fillStyle = '#3a2c1d';
+      ctx.fillRect(x - 13, y - 2, 26, 5);
+      ctx.fillStyle = '#6b5236';
+      ctx.fillRect(x - 13, y - 2, 26, 2);
+      // bark grain
+      ctx.fillStyle = '#4a3a2a';
+      ctx.fillRect(x - 9, y - 1, 4, 1);
+      ctx.fillRect(x + 2, y, 5, 1);
+      // knots
+      ctx.fillStyle = '#0a0604';
+      ctx.fillRect(x - 6, y - 1, 2, 2);
+      ctx.fillRect(x + 4, y, 2, 1);
+      // moss
+      ctx.fillStyle = '#3a6e3a';
+      ctx.fillRect(x - 11, y - 3, 3, 1);
+      ctx.fillRect(x + 7, y - 3, 4, 1);
       break;
     }
 
     // ─── MERCURY ────────────────────────────────────────────────────
     case 'brassGear': {
-      // Slowly-rotating gear wheel.
-      const rot = t * 0.6 + v * 0.4;
+      // Larger gear with hub spokes, slowly rotates.
+      const rot = t * 0.5 + v * 0.4;
       ctx.save();
       ctx.translate(x, y); ctx.rotate(rot);
-      ctx.fillStyle = '#7a5a1a';
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        ctx.fillRect(Math.cos(a) * 7 - 1, Math.sin(a) * 7 - 1, 2, 2);
-      }
-      ctx.fillStyle = '#c8983f';
-      ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+      // Outer ring
       ctx.fillStyle = '#3a2410';
+      ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+      // Teeth (12 outer pegs)
+      ctx.fillStyle = '#7a5a1a';
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        ctx.fillRect(Math.cos(a) * 11 - 1.5, Math.sin(a) * 11 - 1.5, 3, 3);
+      }
+      // Inner body
+      ctx.fillStyle = '#c8983f';
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#7a5a1a';
+      ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+      // Spokes
+      ctx.fillStyle = '#3a2410';
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        ctx.fillRect(Math.cos(a) * 2 - 1, Math.sin(a) * 2 - 0.5, 4, 1);
+      }
+      // Hub
+      ctx.fillStyle = '#1a0f04';
       ctx.beginPath(); ctx.arc(0, 0, 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       break;
     }
     case 'mosaicShard': {
-      // Cracked tile fragments on the floor.
+      // Cluster of cracked teal tiles with grout lines.
+      ctx.fillStyle = '#0a302e';
+      ctx.fillRect(x - 9, y - 6, 18, 12);
+      // Individual tile faces
       ctx.fillStyle = '#1f8a86';
-      ctx.fillRect(x - 5, y - 3, 4, 3);
-      ctx.fillRect(x + 1, y - 2, 3, 4);
-      ctx.fillRect(x - 3, y + 1, 5, 2);
+      ctx.fillRect(x - 8, y - 5, 7, 5);
+      ctx.fillRect(x,     y - 5, 8, 4);
+      ctx.fillRect(x - 8, y + 1, 8, 4);
+      ctx.fillRect(x + 1, y + 1, 7, 4);
+      // Highlights — pale teal edges
       ctx.fillStyle = '#6cf6e5';
-      ctx.fillRect(x - 5, y - 3, 4, 1);
-      ctx.fillRect(x + 1, y - 2, 3, 1);
+      ctx.fillRect(x - 8, y - 5, 7, 1);
+      ctx.fillRect(x,     y - 5, 8, 1);
+      // Crack — diagonal line of grout colour
+      ctx.fillStyle = '#0a302e';
+      ctx.fillRect(x - 4, y - 3, 1, 7);
+      ctx.fillRect(x - 3, y - 4, 1, 1);
+      ctx.fillRect(x + 2, y - 1, 1, 5);
       break;
     }
     case 'chainPile': {
-      // Three coiled chain links.
-      ctx.fillStyle = '#3a3a4a';
-      ctx.beginPath(); ctx.ellipse(x - 3, y, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(x + 1, y - 1, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(x + 4, y + 1, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#6a6a7a';
-      ctx.fillRect(x - 4, y - 1, 1, 1);
-      ctx.fillRect(x,     y - 2, 1, 1);
+      // Five interlinked iron rings in a tangled coil.
+      const links = [
+        { dx: -6, dy: -1, ra: 4, rb: 2 },
+        { dx: -1, dy: -3, ra: 4, rb: 2 },
+        { dx: 4, dy: -2, ra: 4, rb: 2 },
+        { dx: -3, dy: 2, ra: 4, rb: 2 },
+        { dx: 3, dy: 3, ra: 4, rb: 2 },
+      ];
+      for (const l of links) {
+        ctx.strokeStyle = '#1a1a2a';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(x + l.dx, y + l.dy, l.ra, l.rb, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#5a5a6a';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(x + l.dx, y + l.dy, l.ra - 1, l.rb - 1, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      // Top highlights
+      ctx.fillStyle = '#9a9aaa';
+      ctx.fillRect(x - 6, y - 3, 1, 1);
+      ctx.fillRect(x + 3, y - 4, 1, 1);
       break;
     }
 
     // ─── VENUS ──────────────────────────────────────────────────────
     case 'rosePillar': {
-      // Short stone pillar with a rose at the top.
-      ctx.fillStyle = '#4a3a32';
-      ctx.fillRect(x - 4, y - 8, 8, 11);
-      ctx.fillStyle = '#7a5a52';
-      ctx.fillRect(x - 4, y - 8, 8, 2);
+      // Tall marble pillar with garlanded rose at the top.
+      const baseY = y + 6;
+      // Base
+      ctx.fillStyle = '#1a121a';
+      ctx.fillRect(x - 7, baseY, 14, 3);
+      ctx.fillStyle = '#4a3a4a';
+      ctx.fillRect(x - 6, baseY + 1, 12, 2);
+      // Shaft
+      ctx.fillStyle = '#1a121a';
+      ctx.fillRect(x - 5, y - 14, 10, 20);
+      ctx.fillStyle = '#5a4a5a';
+      ctx.fillRect(x - 4, y - 14, 8, 20);
+      ctx.fillStyle = '#7a5a7a';
+      ctx.fillRect(x - 4, y - 14, 1, 20);
+      ctx.fillStyle = '#3a2a3a';
+      ctx.fillRect(x + 3, y - 14, 1, 20);
+      // Capital
+      ctx.fillStyle = '#1a121a';
+      ctx.fillRect(x - 6, y - 16, 12, 3);
+      ctx.fillStyle = '#7a5a7a';
+      ctx.fillRect(x - 6, y - 16, 12, 1);
+      // Rose on top — petals layered
+      ctx.fillStyle = '#1a0810';
+      ctx.fillRect(x - 4, y - 20, 8, 4);
       ctx.fillStyle = '#ff6caf';
-      ctx.fillRect(x - 2, y - 12, 4, 4);
-      ctx.fillStyle = '#ffb3d0';
-      ctx.fillRect(x - 1, y - 11, 2, 2);
+      ctx.fillRect(x - 3, y - 19, 6, 3);
+      ctx.fillStyle = '#ff9bc1';
+      ctx.fillRect(x - 2, y - 18, 4, 2);
+      ctx.fillStyle = '#ffd0e0';
+      ctx.fillRect(x - 1, y - 18, 2, 1);
+      // Vine leaves trailing
+      ctx.fillStyle = '#3a6e3a';
+      ctx.fillRect(x + 4, y - 12, 2, 1);
+      ctx.fillRect(x - 6, y - 8, 2, 1);
+      ctx.fillRect(x + 3, y - 4, 3, 1);
       break;
     }
     case 'fountain': {
-      // Small marble basin with a bubble pulsing.
-      ctx.fillStyle = '#3a3340';
-      ctx.fillRect(x - 6, y - 1, 12, 5);
-      ctx.fillStyle = '#6a606a';
-      ctx.fillRect(x - 6, y - 1, 12, 1);
-      const b = 0.6 + Math.sin(t * 2 + v) * 0.4;
-      ctx.fillStyle = `rgba(180, 205, 240, ${b})`;
-      ctx.fillRect(x - 2, y, 4, 2);
+      // Wider marble basin with a pulsing water column.
+      // Basin shadow
+      ctx.fillStyle = '#1a121a';
+      ctx.fillRect(x - 11, y - 2, 22, 8);
+      // Basin body
+      ctx.fillStyle = '#5a4a5a';
+      ctx.fillRect(x - 10, y - 1, 20, 6);
+      // Rim highlight
+      ctx.fillStyle = '#9a7a9a';
+      ctx.fillRect(x - 10, y - 1, 20, 1);
+      // Inner water pool
+      ctx.fillStyle = '#1c3a5e';
+      ctx.fillRect(x - 8, y, 16, 4);
+      ctx.fillStyle = '#2c5a8e';
+      ctx.fillRect(x - 7, y + 1, 14, 2);
+      // Water column with bubbles
+      const b = 0.7 + Math.sin(t * 2 + v) * 0.3;
+      ctx.fillStyle = `rgba(180, 220, 250, ${b})`;
+      ctx.fillRect(x - 1, y - 5, 2, 5);
+      ctx.fillRect(x - 2, y - 7, 4, 2);
+      // Bubble droplet
+      const drop = (Math.sin(t * 3 + v + 1) + 1) * 0.5;
+      if (drop > 0.7) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x - 1, y - 9, 1, 1);
+      }
+      // Base shadow
+      ctx.fillStyle = '#0a040a';
+      ctx.fillRect(x - 11, y + 5, 22, 1);
       break;
     }
     case 'vineCluster': {
-      // Climbing vine on the floor — curls outward.
+      // Climbing vine on the floor with leaves and a small bloom.
+      ctx.strokeStyle = '#1a2a18';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 11, y + 5);
+      ctx.quadraticCurveTo(x - 5, y - 8, x + 1, y - 4);
+      ctx.quadraticCurveTo(x + 7, y - 1, x + 11, y + 5);
+      ctx.stroke();
       ctx.strokeStyle = '#3a5a30';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(x - 5, y + 3);
-      ctx.quadraticCurveTo(x, y - 5, x + 5, y + 3);
+      ctx.moveTo(x - 11, y + 5);
+      ctx.quadraticCurveTo(x - 5, y - 8, x + 1, y - 4);
+      ctx.quadraticCurveTo(x + 7, y - 1, x + 11, y + 5);
       ctx.stroke();
+      // Leaves — small diagonal rectangles along the curve
+      ctx.fillStyle = '#5a8a48';
+      ctx.fillRect(x - 9, y + 2, 2, 2);
+      ctx.fillRect(x - 5, y - 5, 2, 2);
+      ctx.fillRect(x - 1, y - 5, 2, 2);
+      ctx.fillRect(x + 4, y - 1, 2, 2);
+      ctx.fillRect(x + 9, y + 2, 2, 2);
       ctx.fillStyle = '#7fd070';
-      ctx.fillRect(x - 5, y + 2, 1, 1);
-      ctx.fillRect(x,     y - 4, 1, 1);
-      ctx.fillRect(x + 5, y + 2, 1, 1);
+      ctx.fillRect(x - 9, y + 2, 1, 1);
+      ctx.fillRect(x - 1, y - 5, 1, 1);
+      ctx.fillRect(x + 9, y + 2, 1, 1);
+      // Pink bloom near the top
       ctx.fillStyle = '#ff6caf';
-      ctx.fillRect(x - 1, y - 3, 2, 1);
+      ctx.fillRect(x - 1, y - 6, 3, 2);
+      ctx.fillStyle = '#ffd0e0';
+      ctx.fillRect(x, y - 6, 1, 1);
       break;
     }
 
     // ─── SUN ────────────────────────────────────────────────────────
     case 'sunDial': {
-      // Inlaid circle with a vertical gnomon.
-      ctx.fillStyle = '#c8983f';
-      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+      // Wider gold disc with concentric markings + tall gnomon.
       ctx.fillStyle = '#3a2410';
-      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = '#f4d27a';
-      ctx.fillRect(x, y - 7, 1, 7);
-      // Hour marks
+      ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#7a5a1a';
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        ctx.fillRect(x + Math.cos(a) * 6 - 0.5, y + Math.sin(a) * 6 - 0.5, 1, 1);
+      ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c8983f';
+      ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f4d27a';
+      ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+      // Concentric ring lines
+      ctx.strokeStyle = '#7a5a1a';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.stroke();
+      // Twelve hour marks
+      ctx.fillStyle = '#3a2410';
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const isMajor = i % 3 === 0;
+        ctx.fillRect(
+          x + Math.cos(a) * 8 - 0.5,
+          y + Math.sin(a) * 8 - 0.5,
+          isMajor ? 2 : 1, isMajor ? 2 : 1,
+        );
       }
+      // Gnomon — tall triangle casting toward the centre
+      ctx.fillStyle = '#1a0f04';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 2, y - 12);
+      ctx.lineTo(x + 1, y - 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x, y - 11, 1, 11);
       break;
     }
     case 'mirrorDisk': {
-      // Polished bronze disk reflecting nothing in particular.
+      // Larger polished bronze disc with a reflected glint.
       ctx.fillStyle = '#3a2410';
-      ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#7a5a1a';
+      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c8983f';
+      ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f4d27a';
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#ffe6a3';
       ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+      // Glint — moving highlight that drifts subtly
+      const gx = Math.cos(t * 0.4 + v) * 2;
+      const gy = Math.sin(t * 0.4 + v) * 2;
       ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.arc(x - 1, y - 1, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + gx - 1, y + gy - 1, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.fillRect(x + gx, y + gy + 1, 2, 1);
       break;
     }
     case 'brazier': {
-      // Tripod brazier with a small flame.
+      // Tripod brazier with a tall flickering flame.
+      // Tripod legs
+      ctx.fillStyle = '#1a0f08';
+      ctx.fillRect(x - 6, y + 1, 2, 9);
+      ctx.fillRect(x + 4, y + 1, 2, 9);
+      ctx.fillRect(x - 1, y + 1, 2, 9);
+      // Bowl
+      ctx.fillStyle = '#1a0f08';
+      ctx.fillRect(x - 8, y - 3, 16, 5);
       ctx.fillStyle = '#3a2410';
-      ctx.fillRect(x - 4, y, 8, 2);
-      ctx.fillRect(x - 3, y + 2, 2, 4);
-      ctx.fillRect(x + 1, y + 2, 2, 4);
-      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x - 7, y - 2, 14, 4);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x - 7, y - 2, 14, 1);
+      // Coals
+      ctx.fillStyle = '#5a1a08';
+      ctx.fillRect(x - 5, y, 10, 2);
+      ctx.fillStyle = '#c84a18';
       ctx.fillRect(x - 4, y, 8, 1);
-      const f = 0.6 + Math.sin(t * 5 + v) * 0.3;
-      ctx.fillStyle = `rgba(255, 122, 58, ${f})`;
-      ctx.fillRect(x - 1, y - 5, 3, 5);
-      ctx.fillStyle = `rgba(255, 230, 163, ${f})`;
-      ctx.fillRect(x, y - 4, 1, 3);
+      ctx.fillRect(x - 2, y + 1, 4, 1);
+      // Flame — three flickering layers
+      const f = 0.7 + Math.sin(t * 5 + v) * 0.25;
+      const f2 = 0.7 + Math.sin(t * 7 + v * 1.4) * 0.25;
+      // Outer red flame
+      ctx.fillStyle = `rgba(226, 58, 30, ${0.55 * f})`;
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y - 1);
+      ctx.lineTo(x - 2, y - 9 - f * 2);
+      ctx.lineTo(x, y - 12 - f * 3);
+      ctx.lineTo(x + 2, y - 9 - f2 * 2);
+      ctx.lineTo(x + 4, y - 1);
+      ctx.closePath();
+      ctx.fill();
+      // Inner gold flame
+      ctx.fillStyle = `rgba(255, 168, 60, ${0.75 * f2})`;
+      ctx.beginPath();
+      ctx.moveTo(x - 2, y - 2);
+      ctx.lineTo(x, y - 9 - f * 2);
+      ctx.lineTo(x + 2, y - 2);
+      ctx.closePath();
+      ctx.fill();
+      // White-hot core
+      ctx.fillStyle = `rgba(255, 247, 214, ${0.9 * f})`;
+      ctx.fillRect(x, y - 5, 1, 3);
       break;
     }
 
     // ─── MARS ───────────────────────────────────────────────────────
     case 'brokenColumn': {
-      // Stub of a column, jagged top.
-      ctx.fillStyle = '#4a3a3a';
-      ctx.fillRect(x - 4, y - 8, 8, 12);
-      ctx.fillStyle = '#6a4a4a';
-      ctx.fillRect(x - 4, y - 8, 8, 2);
-      // jagged break edge
+      // Tall stub of a fluted column with a jagged broken top.
+      const baseY = y + 6;
+      // Base
+      ctx.fillStyle = '#0a0608';
+      ctx.fillRect(x - 8, baseY, 16, 3);
       ctx.fillStyle = '#3a2a2a';
-      ctx.fillRect(x - 4, y - 8, 2, 1);
-      ctx.fillRect(x + 2, y - 8, 2, 1);
-      ctx.fillRect(x - 1, y - 9, 2, 1);
-      // base shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(x - 5, y + 4, 10, 1);
+      ctx.fillRect(x - 7, baseY + 1, 14, 2);
+      // Shaft
+      ctx.fillStyle = '#0a0608';
+      ctx.fillRect(x - 6, y - 14, 12, 20);
+      ctx.fillStyle = '#3a2a2a';
+      ctx.fillRect(x - 5, y - 14, 10, 20);
+      ctx.fillStyle = '#5a4040';
+      ctx.fillRect(x - 5, y - 14, 1, 20);
+      // Fluted grooves
+      ctx.fillStyle = '#2a1a1a';
+      ctx.fillRect(x - 3, y - 14, 1, 20);
+      ctx.fillRect(x,     y - 14, 1, 20);
+      ctx.fillRect(x + 3, y - 14, 1, 20);
+      // Cracked jagged top
+      ctx.fillStyle = '#0a0608';
+      ctx.fillRect(x - 6, y - 14, 12, 2);
+      ctx.fillStyle = '#1a1010';
+      ctx.fillRect(x - 5, y - 14, 3, 1);
+      ctx.fillRect(x - 1, y - 14, 2, 1);
+      ctx.fillRect(x + 3, y - 14, 2, 1);
+      ctx.fillRect(x - 3, y - 15, 2, 1);
+      ctx.fillRect(x + 1, y - 15, 2, 1);
+      // Crack down the shaft
+      ctx.fillStyle = '#0a0608';
+      ctx.fillRect(x + 1, y - 10, 1, 8);
+      ctx.fillRect(x + 2, y - 6, 1, 4);
       break;
     }
     case 'weaponRack': {
-      // Two crossed weapons leaning on a stand.
+      // Stand with two crossed swords plus an axe leaning.
+      // Stand
+      ctx.fillStyle = '#1a0f08';
+      ctx.fillRect(x - 9, y + 5, 18, 3);
       ctx.fillStyle = '#3a2410';
-      ctx.fillRect(x - 5, y + 3, 10, 1);
+      ctx.fillRect(x - 8, y + 5, 16, 1);
+      // Left sword (slight tilt)
+      ctx.fillStyle = '#1a0f08';
+      ctx.fillRect(x - 7, y - 10, 2, 16);
       ctx.fillStyle = '#9fa6ad';
-      ctx.fillRect(x - 4, y - 6, 1, 10);
-      ctx.fillRect(x + 3, y - 6, 1, 10);
+      ctx.fillRect(x - 7, y - 10, 1, 14);
       ctx.fillStyle = '#cdd6dc';
-      ctx.fillRect(x - 4, y - 6, 1, 3);
-      ctx.fillRect(x + 3, y - 6, 1, 3);
+      ctx.fillRect(x - 7, y - 10, 1, 5);
+      // Left hilt
       ctx.fillStyle = '#7a5a1a';
-      ctx.fillRect(x - 4, y + 2, 1, 2);
-      ctx.fillRect(x + 3, y + 2, 1, 2);
+      ctx.fillRect(x - 8, y + 3, 4, 2);
+      // Right sword
+      ctx.fillStyle = '#1a0f08';
+      ctx.fillRect(x + 5, y - 10, 2, 16);
+      ctx.fillStyle = '#9fa6ad';
+      ctx.fillRect(x + 6, y - 10, 1, 14);
+      ctx.fillStyle = '#cdd6dc';
+      ctx.fillRect(x + 6, y - 10, 1, 5);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x + 4, y + 3, 4, 2);
+      // Axe head in the middle
+      ctx.fillStyle = '#1a0f08';
+      ctx.fillRect(x - 1, y - 8, 2, 14);
+      ctx.fillStyle = '#3a2410';
+      ctx.fillRect(x - 1, y - 8, 1, 14);
+      ctx.fillStyle = '#cdd6dc';
+      ctx.fillRect(x - 4, y - 9, 4, 4);
+      ctx.fillStyle = '#9fa6ad';
+      ctx.fillRect(x - 4, y - 6, 4, 1);
       break;
     }
     case 'bonePile': {
-      // Small pile of bones, skull on top.
+      // Wider pile of bones with a clearly readable skull on top.
+      // Backing shadow
+      ctx.fillStyle = '#0a0604';
+      ctx.fillRect(x - 9, y + 1, 18, 5);
+      // Lower bones — overlapping rectangles
+      ctx.fillStyle = '#3a3024';
+      ctx.fillRect(x - 8, y + 2, 16, 4);
+      ctx.fillStyle = '#7a6a48';
+      ctx.fillRect(x - 8, y + 2, 16, 2);
+      // Individual bone shapes
+      ctx.fillStyle = '#cdc6a8';
+      ctx.fillRect(x - 7, y + 2, 5, 2);
+      ctx.fillRect(x,     y + 3, 6, 2);
+      ctx.fillRect(x - 4, y + 4, 8, 1);
+      // Skull
       ctx.fillStyle = '#1a1410';
-      ctx.fillRect(x - 5, y + 1, 10, 3);
-      ctx.fillStyle = '#cdd6dc';
-      ctx.fillRect(x - 4, y + 2, 9, 2);
-      // skull
-      ctx.fillStyle = '#1a1410';
-      ctx.fillRect(x - 2, y - 4, 5, 4);
+      ctx.fillRect(x - 4, y - 6, 9, 7);
+      ctx.fillStyle = '#cdc6a8';
+      ctx.fillRect(x - 4, y - 5, 9, 6);
       ctx.fillStyle = '#f5efd8';
-      ctx.fillRect(x - 2, y - 3, 5, 3);
+      ctx.fillRect(x - 3, y - 5, 7, 1);
+      // Eye sockets
       ctx.fillStyle = '#1a1410';
-      ctx.fillRect(x - 1, y - 2, 1, 1);
-      ctx.fillRect(x + 1, y - 2, 1, 1);
+      ctx.fillRect(x - 3, y - 3, 2, 2);
+      ctx.fillRect(x + 2, y - 3, 2, 2);
+      // Nose triangle
+      ctx.fillStyle = '#1a1410';
+      ctx.fillRect(x, y - 1, 1, 1);
+      // Teeth
+      ctx.fillStyle = '#3a2a1a';
+      ctx.fillRect(x - 2, y + 1, 5, 1);
+      ctx.fillStyle = '#f5efd8';
+      ctx.fillRect(x - 2, y + 1, 1, 1);
+      ctx.fillRect(x,     y + 1, 1, 1);
+      ctx.fillRect(x + 2, y + 1, 1, 1);
       break;
     }
 
     // ─── JUPITER ────────────────────────────────────────────────────
     case 'brassPillar': {
-      // Tall narrow brass column.
+      // Tall brass column with capital + base + relief band.
+      const baseY = y + 8;
+      // Base
+      ctx.fillStyle = '#1a0f04';
+      ctx.fillRect(x - 7, baseY, 14, 3);
       ctx.fillStyle = '#7a5a1a';
-      ctx.fillRect(x - 3, y - 12, 6, 16);
+      ctx.fillRect(x - 6, baseY + 1, 12, 2);
+      // Shaft
+      ctx.fillStyle = '#1a0f04';
+      ctx.fillRect(x - 5, y - 18, 10, 26);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x - 4, y - 18, 8, 26);
       ctx.fillStyle = '#c8983f';
-      ctx.fillRect(x - 2, y - 11, 4, 14);
+      ctx.fillRect(x - 4, y - 18, 8, 26);
       ctx.fillStyle = '#f4d27a';
-      ctx.fillRect(x - 2, y - 11, 4, 1);
-      ctx.fillRect(x - 3, y + 4, 6, 1);
+      ctx.fillRect(x - 4, y - 18, 1, 26);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x + 3, y - 18, 1, 26);
+      // Relief band — middle ornament
+      ctx.fillStyle = '#3a2410';
+      ctx.fillRect(x - 4, y - 4, 8, 4);
+      ctx.fillStyle = '#f4d27a';
+      ctx.fillRect(x - 3, y - 3, 6, 1);
+      ctx.fillRect(x - 3, y - 1, 6, 1);
+      ctx.fillRect(x - 2, y - 2, 1, 1);
+      ctx.fillRect(x + 1, y - 2, 1, 1);
+      // Capital
+      ctx.fillStyle = '#1a0f04';
+      ctx.fillRect(x - 6, y - 20, 12, 3);
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x - 6, y - 20, 12, 1);
+      ctx.fillStyle = '#f4d27a';
+      ctx.fillRect(x - 5, y - 20, 10, 1);
       break;
     }
     case 'lightningRod': {
-      // Tall rod with a brass ball, faint spark.
-      ctx.fillStyle = '#9fa6ad';
-      ctx.fillRect(x - 0.5, y - 10, 1, 12);
+      // Tall iron rod topped with a brass orb, occasional spark.
+      // Base anchor
+      ctx.fillStyle = '#1a0f04';
+      ctx.fillRect(x - 4, y + 3, 8, 3);
+      ctx.fillStyle = '#3a2410';
+      ctx.fillRect(x - 3, y + 4, 6, 2);
+      // Rod
+      ctx.fillStyle = '#0a0608';
+      ctx.fillRect(x - 1, y - 14, 2, 18);
+      ctx.fillStyle = '#5a606a';
+      ctx.fillRect(x - 1, y - 14, 1, 18);
+      // Orb
+      ctx.fillStyle = '#3a2410';
+      ctx.beginPath(); ctx.arc(x, y - 16, 4, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#c8983f';
-      ctx.beginPath(); ctx.arc(x, y - 11, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y - 16, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f4d27a';
+      ctx.fillRect(x - 1, y - 17, 1, 1);
+      // Spark above the orb — pulses on
       const sp = (Math.sin(t * 3 + v) + 1) * 0.5;
       if (sp > 0.85) {
-        ctx.fillStyle = 'rgba(164, 250, 240, 0.7)';
-        ctx.fillRect(x - 1, y - 14, 2, 2);
+        ctx.fillStyle = 'rgba(164, 250, 240, 0.85)';
+        ctx.fillRect(x - 2, y - 22, 4, 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fillRect(x - 1, y - 22, 2, 1);
+        // Zigzag bolt
+        ctx.strokeStyle = 'rgba(164, 250, 240, 0.7)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y - 20);
+        ctx.lineTo(x - 1, y - 21);
+        ctx.lineTo(x + 1, y - 23);
+        ctx.lineTo(x, y - 24);
+        ctx.stroke();
       }
-      // base
-      ctx.fillStyle = '#3a2410';
-      ctx.fillRect(x - 3, y + 2, 6, 2);
       break;
     }
     case 'throneMark': {
-      // Ceremonial floor markings — a stylised V crown.
+      // Larger floor inlay — a stylised crown / V with a central glyph.
+      // Backing dark inlay
+      ctx.fillStyle = '#1a0f04';
+      ctx.beginPath();
+      ctx.moveTo(x - 11, y - 5);
+      ctx.lineTo(x - 6, y + 3);
+      ctx.lineTo(x,     y - 5);
+      ctx.lineTo(x + 6, y + 3);
+      ctx.lineTo(x + 11, y - 5);
+      ctx.lineTo(x + 11, y + 4);
+      ctx.lineTo(x - 11, y + 4);
+      ctx.closePath();
+      ctx.fill();
+      // Gold crown lines
       ctx.strokeStyle = '#c8983f';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 10, y - 4);
+      ctx.lineTo(x - 6, y + 2);
+      ctx.lineTo(x,     y - 4);
+      ctx.lineTo(x + 6, y + 2);
+      ctx.lineTo(x + 10, y - 4);
+      ctx.stroke();
+      ctx.strokeStyle = '#f4d27a';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(x - 6, y - 3);
-      ctx.lineTo(x - 3, y + 2);
-      ctx.lineTo(x,     y - 3);
-      ctx.lineTo(x + 3, y + 2);
-      ctx.lineTo(x + 6, y - 3);
+      ctx.moveTo(x - 10, y - 4);
+      ctx.lineTo(x - 6, y + 2);
+      ctx.lineTo(x,     y - 4);
+      ctx.lineTo(x + 6, y + 2);
+      ctx.lineTo(x + 10, y - 4);
       ctx.stroke();
+      // Crown points
       ctx.fillStyle = '#f4d27a';
-      ctx.fillRect(x - 1, y - 4, 2, 1);
+      ctx.fillRect(x - 11, y - 6, 2, 2);
+      ctx.fillRect(x - 1, y - 6, 2, 2);
+      ctx.fillRect(x + 9, y - 6, 2, 2);
+      // Central glyph
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x - 1, y, 2, 3);
       break;
     }
 
     // ─── SATURN ─────────────────────────────────────────────────────
     case 'hourglass': {
-      // Small hourglass with sand trickling.
-      ctx.fillStyle = '#3a2410';
-      ctx.fillRect(x - 3, y - 8, 6, 1);
-      ctx.fillRect(x - 3, y + 3, 6, 1);
+      // Hourglass with metal frame, two violet sand chambers,
+      // trickle, and a faint base shadow.
+      // Top + bottom caps
+      ctx.fillStyle = '#1a0f04';
+      ctx.fillRect(x - 6, y - 14, 12, 2);
+      ctx.fillRect(x - 6, y + 6, 12, 2);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x - 6, y - 14, 12, 1);
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x - 5, y - 13, 10, 1);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x - 6, y + 7, 12, 1);
+      // Vertical frame uprights
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x - 6, y - 12, 1, 18);
+      ctx.fillRect(x + 5, y - 12, 1, 18);
+      // Top sand chamber
+      ctx.fillStyle = '#1a0a30';
+      ctx.beginPath();
+      ctx.moveTo(x - 5, y - 12); ctx.lineTo(x + 5, y - 12); ctx.lineTo(x, y - 3);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#3b265c';
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y - 11); ctx.lineTo(x + 4, y - 11); ctx.lineTo(x, y - 4);
+      ctx.closePath(); ctx.fill();
+      // Top sand (varies with time)
+      const sandTop = 4 - (Math.sin(t * 0.3 + v) + 1) * 1.5;
       ctx.fillStyle = '#9b6cff';
-      // top funnel
       ctx.beginPath();
-      ctx.moveTo(x - 3, y - 7); ctx.lineTo(x + 3, y - 7); ctx.lineTo(x, y - 2);
+      ctx.moveTo(x - sandTop, y - 11); ctx.lineTo(x + sandTop, y - 11); ctx.lineTo(x, y - 11 + sandTop * 2.5);
       ctx.closePath(); ctx.fill();
-      // bottom funnel
+      // Bottom sand chamber
+      ctx.fillStyle = '#1a0a30';
       ctx.beginPath();
-      ctx.moveTo(x - 3, y + 3); ctx.lineTo(x + 3, y + 3); ctx.lineTo(x, y - 2);
+      ctx.moveTo(x - 5, y + 6); ctx.lineTo(x + 5, y + 6); ctx.lineTo(x, y - 3);
       ctx.closePath(); ctx.fill();
-      // trickle
+      ctx.fillStyle = '#3b265c';
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y + 5); ctx.lineTo(x + 4, y + 5); ctx.lineTo(x, y - 2);
+      ctx.closePath(); ctx.fill();
+      // Bottom sand pile
+      ctx.fillStyle = '#9b6cff';
+      const sandBot = (Math.sin(t * 0.3 + v) + 1) * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x - 3, y + 5); ctx.lineTo(x + 3, y + 5); ctx.lineTo(x, y + 5 - sandBot);
+      ctx.closePath(); ctx.fill();
+      // Trickle
       const trickle = (Math.sin(t * 2 + v) + 1) * 0.5;
-      if (trickle > 0.4) {
+      if (trickle > 0.3) {
         ctx.fillStyle = '#c8a4ff';
-        ctx.fillRect(x, y - 2, 1, 2);
+        ctx.fillRect(x, y - 3, 1, 3);
       }
       break;
     }
     case 'scytheRack': {
-      // Sickle-shaped weapon leaning on a wall mount.
+      // Wall-mount scythe with curved blade.
+      // Wall mount post
+      ctx.fillStyle = '#1a0f04';
+      ctx.fillRect(x - 1, y + 5, 2, 3);
       ctx.fillStyle = '#3a2410';
-      ctx.fillRect(x - 1, y - 8, 2, 13);
+      ctx.fillRect(x - 1, y + 5, 2, 1);
+      // Shaft
+      ctx.fillStyle = '#1a0f04';
+      ctx.fillRect(x - 1, y - 12, 2, 18);
+      ctx.fillStyle = '#4a3018';
+      ctx.fillRect(x - 1, y - 12, 1, 18);
+      // Blade head — curved sickle
+      ctx.fillStyle = '#0a0608';
+      ctx.beginPath();
+      ctx.moveTo(x + 1, y - 12);
+      ctx.quadraticCurveTo(x + 11, y - 11, x + 9, y - 4);
+      ctx.lineTo(x + 1, y - 5);
+      ctx.closePath();
+      ctx.fill();
       ctx.fillStyle = '#9fa6ad';
       ctx.beginPath();
-      ctx.moveTo(x + 1, y - 8);
-      ctx.quadraticCurveTo(x + 6, y - 7, x + 5, y - 3);
-      ctx.lineTo(x + 1, y - 4);
-      ctx.closePath(); ctx.fill();
+      ctx.moveTo(x + 1, y - 11);
+      ctx.quadraticCurveTo(x + 10, y - 10, x + 8, y - 5);
+      ctx.lineTo(x + 1, y - 5);
+      ctx.closePath();
+      ctx.fill();
+      // Edge highlight
+      ctx.fillStyle = '#cdd6dc';
+      ctx.beginPath();
+      ctx.moveTo(x + 1, y - 11);
+      ctx.quadraticCurveTo(x + 10, y - 10, x + 8, y - 5);
+      ctx.stroke();
+      // Cap on the top
+      ctx.fillStyle = '#9b6cff';
+      ctx.fillRect(x - 2, y - 13, 4, 2);
       break;
     }
     case 'decayingStatue': {
-      // Hooded figure, crumbling.
-      ctx.fillStyle = '#1f1430';
-      ctx.fillRect(x - 4, y - 10, 8, 14);
-      ctx.fillStyle = '#3b265c';
-      ctx.fillRect(x - 4, y - 10, 8, 3);
-      ctx.fillRect(x - 3, y - 9, 6, 12);
-      // crack
+      // Tall hooded figure with crumbling silhouette, glowing eyes.
+      const baseY = y + 6;
+      // Base / robe hem
       ctx.fillStyle = '#0a0420';
-      ctx.fillRect(x, y - 7, 1, 8);
-      ctx.fillRect(x + 1, y - 4, 1, 4);
-      // hood shadow eyes
+      ctx.fillRect(x - 7, baseY, 14, 3);
+      // Robe body
+      ctx.fillStyle = '#0a0420';
+      ctx.fillRect(x - 6, y - 14, 12, 20);
+      ctx.fillStyle = '#1f1430';
+      ctx.fillRect(x - 5, y - 13, 10, 19);
+      ctx.fillStyle = '#3b265c';
+      ctx.fillRect(x - 5, y - 13, 1, 19);
+      ctx.fillStyle = '#0a0420';
+      ctx.fillRect(x + 4, y - 13, 1, 19);
+      // Hood
+      ctx.fillStyle = '#0a0420';
+      ctx.fillRect(x - 5, y - 16, 10, 5);
+      ctx.fillStyle = '#1f1430';
+      ctx.fillRect(x - 4, y - 16, 8, 4);
+      // Face shadow
+      ctx.fillStyle = '#02010a';
+      ctx.fillRect(x - 3, y - 14, 6, 3);
+      // Glowing eyes
+      const glow = 0.7 + Math.sin(t * 1.8 + v) * 0.3;
+      ctx.fillStyle = `rgba(155, 108, 255, ${glow})`;
+      ctx.fillRect(x - 2, y - 13, 1, 1);
+      ctx.fillRect(x + 1, y - 13, 1, 1);
+      ctx.fillStyle = `rgba(255, 255, 255, ${glow * 0.6})`;
+      ctx.fillRect(x - 2, y - 13, 1, 1);
+      ctx.fillRect(x + 1, y - 13, 1, 1);
+      // Cracks
+      ctx.fillStyle = '#02010a';
+      ctx.fillRect(x, y - 9, 1, 8);
+      ctx.fillRect(x + 1, y - 5, 1, 6);
+      ctx.fillRect(x - 1, y - 3, 1, 4);
+      // Folded hands / clasp
+      ctx.fillStyle = '#3b265c';
+      ctx.fillRect(x - 3, y - 4, 6, 2);
       ctx.fillStyle = '#9b6cff';
-      ctx.fillRect(x - 2, y - 7, 1, 1);
-      ctx.fillRect(x + 1, y - 7, 1, 1);
+      ctx.fillRect(x - 1, y - 4, 2, 1);
+      // Crumbling debris at the base
+      ctx.fillStyle = '#1a0f30';
+      ctx.fillRect(x - 8, y + 5, 2, 2);
+      ctx.fillRect(x + 6, y + 4, 2, 2);
       break;
     }
 
     // ─── OGDOAD ─────────────────────────────────────────────────────
     case 'starGlyph': {
+      // Eight-pointed star with concentric glow and pulsing core.
       const s = 0.7 + Math.sin(t * 1.5 + v) * 0.3;
-      ctx.fillStyle = `rgba(255, 247, 214, ${s})`;
-      ctx.fillRect(x - 0.5, y - 4, 1, 8);
-      ctx.fillRect(x - 4, y - 0.5, 8, 1);
-      ctx.fillStyle = `rgba(255, 230, 163, ${s})`;
-      ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+      // Outer halo
+      ctx.fillStyle = `rgba(255, 230, 163, ${0.2 * s})`;
+      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+      // Star rays — 8 lines
+      ctx.strokeStyle = `rgba(255, 247, 214, ${s})`;
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(a) * 8, y + Math.sin(a) * 8);
+        ctx.lineTo(x - Math.cos(a) * 8, y - Math.sin(a) * 8);
+        ctx.stroke();
+      }
+      // Diagonal shorter rays
+      ctx.strokeStyle = `rgba(255, 230, 163, ${s * 0.75})`;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI + Math.PI / 8;
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(a) * 5, y + Math.sin(a) * 5);
+        ctx.lineTo(x - Math.cos(a) * 5, y - Math.sin(a) * 5);
+        ctx.stroke();
+      }
+      // Pulsing core
+      ctx.fillStyle = `rgba(255, 255, 255, ${s})`;
+      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffe6a3';
+      ctx.fillRect(x - 0.5, y - 0.5, 1, 1);
       break;
     }
     case 'crystalSpire': {
+      // Three-prong crystal cluster — tall central, two shorter sides.
+      // Central spire
+      ctx.fillStyle = '#1f1430';
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y + 6); ctx.lineTo(x, y - 14); ctx.lineTo(x + 4, y + 6);
+      ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#3b265c';
       ctx.beginPath();
-      ctx.moveTo(x - 3, y + 4); ctx.lineTo(x, y - 8); ctx.lineTo(x + 3, y + 4);
+      ctx.moveTo(x - 3, y + 5); ctx.lineTo(x, y - 13); ctx.lineTo(x + 3, y + 5);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#6cf6e5';
+      ctx.beginPath();
+      ctx.moveTo(x - 2, y + 4); ctx.lineTo(x, y - 11); ctx.lineTo(x + 2, y + 4);
       ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#a4faf0';
       ctx.beginPath();
-      ctx.moveTo(x - 2, y + 3); ctx.lineTo(x, y - 6); ctx.lineTo(x + 2, y + 3);
+      ctx.moveTo(x - 1, y + 4); ctx.lineTo(x, y - 9); ctx.lineTo(x + 1, y + 4);
       ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x - 1, y - 4, 1, 4);
+      ctx.fillRect(x, y - 8, 1, 7);
+      // Left shorter spire
+      ctx.fillStyle = '#1f1430';
+      ctx.beginPath();
+      ctx.moveTo(x - 8, y + 6); ctx.lineTo(x - 6, y - 4); ctx.lineTo(x - 4, y + 6);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#6cf6e5';
+      ctx.beginPath();
+      ctx.moveTo(x - 7, y + 5); ctx.lineTo(x - 6, y - 3); ctx.lineTo(x - 5, y + 5);
+      ctx.closePath(); ctx.fill();
+      // Right shorter spire
+      ctx.fillStyle = '#1f1430';
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 6); ctx.lineTo(x + 6, y - 6); ctx.lineTo(x + 8, y + 6);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#6cf6e5';
+      ctx.beginPath();
+      ctx.moveTo(x + 5, y + 5); ctx.lineTo(x + 6, y - 5); ctx.lineTo(x + 7, y + 5);
+      ctx.closePath(); ctx.fill();
+      // Sparkle near the tip
+      const sp = 0.5 + Math.sin(t * 3 + v) * 0.5;
+      ctx.fillStyle = `rgba(255, 255, 255, ${sp})`;
+      ctx.fillRect(x - 1, y - 10, 1, 1);
       break;
     }
     case 'voidRune': {
-      // Dark abyssal circle with a faint pulsing core.
+      // Dark sigil disc with concentric runes orbiting a violet core.
+      // Outer shadow rim
+      ctx.fillStyle = '#000000';
+      ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#02010a';
-      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#9b6cff';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+      // Outer ring of glyphs (8 dots, rotating slowly)
+      const rot = t * 0.3 + v * 0.2;
+      ctx.fillStyle = '#3b265c';
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + rot;
+        ctx.fillRect(x + Math.cos(a) * 8 - 1, y + Math.sin(a) * 8 - 1, 2, 2);
+      }
+      // Middle ring (counter-rotating)
+      ctx.fillStyle = '#5b3a86';
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 - rot * 1.4;
+        ctx.fillRect(x + Math.cos(a) * 5 - 0.5, y + Math.sin(a) * 5 - 0.5, 1, 1);
+      }
+      // Core
       const p = 0.5 + Math.sin(t * 2.5 + v) * 0.4;
       ctx.fillStyle = `rgba(155, 108, 255, ${p})`;
-      ctx.fillRect(x - 1, y - 1, 2, 2);
+      ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255, 255, 255, ${p * 0.7})`;
+      ctx.fillRect(x - 0.5, y - 0.5, 1, 1);
       break;
     }
   }

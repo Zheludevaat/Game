@@ -93,6 +93,13 @@ export class InputManager {
     window.addEventListener('blur', this.onBlur);
     // Probe any existing pads
     this.scanPads();
+    // Continuous gamepad polling outside the engine's update loop. iPad
+    // and other platforms only populate navigator.getGamepads() AFTER
+    // first user interaction; the engine's update tick is also paused
+    // by the auto-pause-on-tab-hide path. This rAF runs independent
+    // of both so the pad is always observable for the HUD pill, menu
+    // navigation, and method tracking.
+    this.startBackgroundPoll();
   }
 
   detach(): void {
@@ -101,6 +108,24 @@ export class InputManager {
     window.removeEventListener('gamepadconnected', this.onGamepadConnected);
     window.removeEventListener('gamepaddisconnected', this.onGamepadDisconnected);
     window.removeEventListener('blur', this.onBlur);
+    this.stopBackgroundPoll();
+  }
+
+  private bgRaf = 0;
+  private startBackgroundPoll(): void {
+    const tick = (): void => {
+      // Cheap — getGamepads is fast and scanPads early-outs when nothing
+      // is connected. Running this every frame guarantees the gamepad
+      // is detected the moment iPadOS Safari exposes it, regardless of
+      // whether the game's main update loop is currently active.
+      this.scanPads();
+      this.bgRaf = requestAnimationFrame(tick);
+    };
+    this.bgRaf = requestAnimationFrame(tick);
+  }
+  private stopBackgroundPoll(): void {
+    if (this.bgRaf) cancelAnimationFrame(this.bgRaf);
+    this.bgRaf = 0;
   }
 
   setMethodCallback(cb: (m: InputMethod) => void): void {
@@ -287,21 +312,28 @@ export class InputManager {
     s.uiConfirm||= this.keysPressedThisFrame.has('Enter') || this.keysPressedThisFrame.has('Space') || this.keysPressedThisFrame.has('KeyJ');
     s.uiCancel ||= this.keysPressedThisFrame.has('Escape');
 
-    // Touch
-    if (Math.hypot(this.touchAxes.x, this.touchAxes.y) > 0.05) {
-      s.moveX = this.touchAxes.x;
-      s.moveY = this.touchAxes.y;
+    // Touch — gated on "the controller is NOT actively in use." If a
+    // controller is currently producing input we ignore touch entirely
+    // for this frame so an accidental screen brush (or a stuck touch
+    // button from a TouchControls unmount mid-press) can't override
+    // the controller's stick / button reads below.
+    const padActive = this.controllerRecentlyActive();
+    if (!padActive) {
+      if (Math.hypot(this.touchAxes.x, this.touchAxes.y) > 0.05) {
+        s.moveX = this.touchAxes.x;
+        s.moveY = this.touchAxes.y;
+      }
+      if (this.touchButtons['attack']) s.attackHeld = true;
+      if (this.touchButtons['spell']) s.spellHeld = true;
+      s.attackPressed   ||= !!this.touchPressedThisFrame['attack'];
+      s.dashPressed     ||= !!this.touchPressedThisFrame['dash'];
+      s.spellPressed    ||= !!this.touchPressedThisFrame['spell'];
+      s.interactPressed ||= !!this.touchPressedThisFrame['interact'];
+      s.pausePressed    ||= !!this.touchPressedThisFrame['pause'];
+      s.mapPressed      ||= !!this.touchPressedThisFrame['map'];
+      s.cycleWeaponPressed ||= !!this.touchPressedThisFrame['cycleWeapon'];
+      s.cycleSpellPressed  ||= !!this.touchPressedThisFrame['cycleSpell'];
     }
-    if (this.touchButtons['attack']) s.attackHeld = true;
-    if (this.touchButtons['spell']) s.spellHeld = true;
-    s.attackPressed   ||= !!this.touchPressedThisFrame['attack'];
-    s.dashPressed     ||= !!this.touchPressedThisFrame['dash'];
-    s.spellPressed    ||= !!this.touchPressedThisFrame['spell'];
-    s.interactPressed ||= !!this.touchPressedThisFrame['interact'];
-    s.pausePressed    ||= !!this.touchPressedThisFrame['pause'];
-    s.mapPressed      ||= !!this.touchPressedThisFrame['map'];
-    s.cycleWeaponPressed ||= !!this.touchPressedThisFrame['cycleWeapon'];
-    s.cycleSpellPressed  ||= !!this.touchPressedThisFrame['cycleSpell'];
 
     // Gamepad
     if (this.gamepadInfo.connected) {
