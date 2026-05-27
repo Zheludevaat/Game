@@ -1,8 +1,61 @@
 import {
-  DEFAULT_GAMEPAD_MAP, GamepadMap, InputMethod,
+  DEFAULT_GAMEPAD_MAP, GAMEPAD_BUTTON_NAMES, GamepadMap, InputMethod,
   detectLayoutFromPadId, presetForLayout,
 } from './controlMappings';
 import { STORAGE_KEYS } from '../constants';
+
+/** Parse the vendor / product hints out of a pad.id string. Chromium
+ *  reports them as "Vendor: 057e Product: 2009"; older WebKit emits
+ *  "057e-2009" or "(STANDARD GAMEPAD Vendor: 057e Product: 2009)". */
+function extractIds(padId: string): { vendor?: string; product?: string } {
+  const m1 = /vendor:?\s*([0-9a-f]{4}).*product:?\s*([0-9a-f]{4})/i.exec(padId);
+  if (m1) return { vendor: m1[1].toLowerCase(), product: m1[2].toLowerCase() };
+  const m2 = /([0-9a-f]{4})[\s-]([0-9a-f]{4})/i.exec(padId);
+  if (m2) return { vendor: m2[1].toLowerCase(), product: m2[2].toLowerCase() };
+  return {};
+}
+
+/** Console diagnostic when a new pad connects. Surfaces everything a
+ *  developer needs to diagnose a misbehaving controller: raw id,
+ *  vendor/product, mapping mode, button/axis counts, and the layout
+ *  we picked for it. Tagged so it's easy to grep in devtools. */
+function logPadDiagnostics(pad: Gamepad): void {
+  const { vendor, product } = extractIds(pad.id);
+  const layout = detectLayoutFromPadId(pad.id);
+  // eslint-disable-next-line no-console
+  console.info(
+    '%c[gamepad] connected',
+    'color: #6cf6e5; font-weight: bold',
+    {
+      id: pad.id,
+      index: pad.index,
+      mapping: pad.mapping || '(empty — non-standard)',
+      vendor: vendor ?? '(not parsed)',
+      product: product ?? '(not parsed)',
+      buttons: pad.buttons.length,
+      axes: pad.axes.length,
+      detectedLayout: layout,
+      preset: layout === 'switch'
+        ? 'SWITCH (A=right idx 1, B=bottom idx 0, attack→1)'
+        : 'XBOX (A=bottom idx 0, B=right idx 1, attack→0)',
+    },
+  );
+}
+
+/** Log the first button press on the pad after connect — lets the
+ *  user verify "I pressed A and it fired index X". Resets on each
+ *  fresh connect via firstEdgeLogged. */
+function logFirstEdge(idx: number): void {
+  // eslint-disable-next-line no-console
+  console.info(
+    '%c[gamepad] first press',
+    'color: #ffe6a3; font-weight: bold',
+    {
+      index: idx,
+      label: GAMEPAD_BUTTON_NAMES[idx] ?? `Btn ${idx}`,
+    },
+  );
+}
 
 export interface InputState {
   moveX: number;
@@ -78,6 +131,9 @@ export class InputManager {
    *  until first user interaction with the pad; this flag lets the HUD
    *  show "CONTROLLER" the moment we know one is actually live. */
   private padHasBeenUsed = false;
+  /** Track whether we've already logged the FIRST button edge on the
+   *  active pad. Resets when the pad changes (different id). */
+  private firstEdgeLoggedForId = '';
 
   state: InputState = this.blankState();
 
@@ -445,10 +501,26 @@ export class InputManager {
     // matching preset — but only if the user hasn't customised the map.
     if (this.gamepadInfo.id !== active.id) {
       this.maybeApplyControllerPreset(active.id);
+      // Diagnostic — surfaces in browser devtools so the user can see
+      // exactly how their controller is being recognised. Includes
+      // mapping mode ("standard" or empty), vendor/product extracted
+      // from the id when present, button + axes count.
+      logPadDiagnostics(active);
     }
     let anyEdge = false;
+    let firstEdgeIdx = -1;
     for (let i = 0; i < pressed.length; i++) {
-      if (pressed[i] && !this.prevPadButtons[i]) anyEdge = true;
+      if (pressed[i] && !this.prevPadButtons[i]) {
+        anyEdge = true;
+        if (firstEdgeIdx < 0) firstEdgeIdx = i;
+      }
+    }
+    // Log the very first edge per pad so the user can confirm which
+    // raw index their physical button maps to. Tagged so devtools
+    // shows it clearly without spamming.
+    if (firstEdgeIdx >= 0 && this.firstEdgeLoggedForId !== active.id) {
+      this.firstEdgeLoggedForId = active.id;
+      logFirstEdge(firstEdgeIdx);
     }
     // Also catch buttons that are HELD past the first frame so iPad
     // players who pair + grip the controller see the "controller"

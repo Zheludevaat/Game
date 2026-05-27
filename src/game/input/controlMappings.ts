@@ -92,6 +92,15 @@ export function detectLayoutFromPadId(id: string | undefined | null): Controller
   if (lower.includes('joy-con') || lower.includes('joycon')) return 'switch';
   if (lower.includes('pro controller')) return 'switch';
   if (lower.includes('057e')) return 'switch';
+  // Third-party Switch-compatible controllers that don't carry a
+  // Nintendo vendor id. Verified examples:
+  //   - "Intertronic SD-16" (also reports as "ITR NSW Controller SD-16")
+  //     — sold by Interdiscount (Switzerland) as a Switch / PC pad.
+  //   - Bluetooth pads whose marketing string includes "NSW" (Nintendo
+  //     Switch) — a common Asian-OEM convention.
+  if (lower.includes('sd-16') || lower.includes('sd16')) return 'switch';
+  if (lower.includes('intertronic')) return 'switch';
+  if (lower.includes(' nsw ') || lower.includes('nsw controller')) return 'switch';
   return 'xbox';
 }
 
