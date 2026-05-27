@@ -194,8 +194,9 @@ function Minimap({ rooms }: { rooms: HudSnapshot['rooms'] }): JSX.Element {
               {r.chestIntact && (
                 <span style={{
                   position: 'absolute', left: 1, top: 1,
-                  width: 3, height: 3, background: '#f4d27a',
-                  boxShadow: '0 0 3px #f4d27a',
+                  width: 3, height: 3,
+                  background: r.chestLocked ? '#e23a4a' : '#f4d27a',
+                  boxShadow: r.chestLocked ? '0 0 3px #e23a4a' : '0 0 3px #f4d27a',
                 }} />
               )}
               {r.shrineIntact && (

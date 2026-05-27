@@ -168,7 +168,19 @@ export function MainMenu(p: Props): JSX.Element {
             onClick={p.onDailyRun}
             disabled={p.dailyAttemptedToday}
             focused={focus === 1}
-            badge={p.dailyAttemptedToday ? 'DONE' : p.dailyArchetypeName.split(' ').slice(-1)[0]}
+            badge={p.dailyAttemptedToday
+              ? (() => {
+                // Time until the next UTC midnight rollover —
+                // recomputed once per render, which is good enough
+                // since the menu is interactive but not real-time.
+                const now = Date.now();
+                const nextDay = (Math.floor(now / 86_400_000) + 1) * 86_400_000;
+                const ms = Math.max(0, nextDay - now);
+                const h = Math.floor(ms / 3_600_000);
+                const m = Math.floor((ms % 3_600_000) / 60_000);
+                return `${h}h ${m}m`;
+              })()
+              : p.dailyArchetypeName.split(' ').slice(-1)[0]}
           >
             Daily Run
           </PixelButton>

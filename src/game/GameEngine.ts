@@ -82,6 +82,8 @@ export interface HudSnapshot {
     current: boolean;
     /** Has an unopened chest in the room. Minimap renders a chest pip. */
     chestIntact: boolean;
+    /** Chest in the room is locked. Minimap tints the chest pip red. */
+    chestLocked: boolean;
     /** Has an untouched shrine. Minimap renders a shrine pip. */
     shrineIntact: boolean;
   }[];
@@ -2687,6 +2689,10 @@ export class GameEngine {
       e.flash = Math.max(0, e.flash - dt);
       e.cooldown = Math.max(0, e.cooldown - dt);
       e.attackTimer = Math.max(0, e.attackTimer - dt);
+      // Idle sway — a slow base tick so even stationary enemies (Salt
+      // Golem at melee range, stunned enemies) still breathe.
+      // moveTowards adds a larger movement-keyed increment on top.
+      e.walkPhase += dt * 1.4;
       // Tick statuses first — burn/poison damage applied here; stun
       // skips AI for the rest of this frame; slow scales movement below.
       let dotDmg = tickStatusEffects(e, dt, this.timeAlive);
@@ -6325,6 +6331,7 @@ export class GameEngine {
       // Surface chest / shrine state so the minimap can hint at
       // unfinished content in already-visited rooms.
       chestIntact: r.hasChest && !r.chestOpened && (revealAll || r.discovered),
+      chestLocked: r.hasChest && !r.chestOpened && r.chestLocked && (revealAll || r.discovered),
       shrineIntact: r.hasShrine && !r.shrineUsed && (revealAll || r.discovered),
     }));
 

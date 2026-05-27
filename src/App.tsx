@@ -88,6 +88,9 @@ export function App(): JSX.Element {
   /** True while a Time Attack run is in progress — game-over computes
    *  a composite score (floor + bosses + time bonus) and saves the best. */
   const timeAttackModeRef = useRef(false);
+  /** Mirror of pendingTimeAttack for the Boss Rush flow — when set,
+   *  archetype-select fires startRun with bossRush=true on confirmation. */
+  const [pendingBossRush, setPendingBossRush] = useState(false);
 
   // --- Loading screen timer ---
   // First-load goes through the Tabula opening film instead of straight to
@@ -509,10 +512,13 @@ export function App(): JSX.Element {
             startRun(arch, { runSeed: day, daily: true });
           }}
           onBossRush={() => {
-            // Boss Rush uses the most recent archetype the player ran,
-            // falling back to Magus on a brand-new save.
-            const arch = lastArchetype ?? 'magus';
-            startRun(arch, { bossRush: true });
+            // Boss Rush routes through archetype select so the player
+            // can pick the kit they want to speed-clear with. The
+            // archetype's signature ultimate is what makes a Boss Rush
+            // attempt feel different — surface that choice instead of
+            // forcing the last-played pick.
+            setPendingBossRush(true);
+            setScreen('archetype');
           }}
           onTimeAttack={() => {
             // Time Attack routes through archetype select so the player
@@ -536,14 +542,21 @@ export function App(): JSX.Element {
         <ArchetypeSelect
           lastArchetype={lastArchetype}
           onSelect={(id) => {
-            if (pendingTimeAttack) {
+            if (pendingBossRush) {
+              setPendingBossRush(false);
+              startRun(id, { bossRush: true });
+            } else if (pendingTimeAttack) {
               setPendingTimeAttack(false);
               startRun(id, { timeAttack: true });
             } else {
               startRun(id);
             }
           }}
-          onBack={() => { setPendingTimeAttack(false); setScreen('menu'); }}
+          onBack={() => {
+            setPendingBossRush(false);
+            setPendingTimeAttack(false);
+            setScreen('menu');
+          }}
         />
       )}
 

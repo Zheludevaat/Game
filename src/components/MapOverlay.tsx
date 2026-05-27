@@ -34,11 +34,15 @@ export function MapOverlay({ hud, onClose }: Props): JSX.Element {
                   animation: isBoss ? 'minimap-boss-pulse 1.4s ease-in-out infinite' : undefined,
                 }}>
                   {r.chestIntact && (
-                    <span style={{
-                      position: 'absolute', left: 2, top: 2,
-                      width: 6, height: 6,
-                      background: '#f4d27a', boxShadow: '0 0 4px #f4d27a',
-                    }} />
+                    <span
+                      title={r.chestLocked ? 'Locked chest — needs a key' : 'Unopened chest'}
+                      style={{
+                        position: 'absolute', left: 2, top: 2,
+                        width: 6, height: 6,
+                        background: r.chestLocked ? '#e23a4a' : '#f4d27a',
+                        boxShadow: r.chestLocked ? '0 0 4px #e23a4a' : '0 0 4px #f4d27a',
+                      }}
+                    />
                   )}
                   {r.shrineIntact && (
                     <span style={{
