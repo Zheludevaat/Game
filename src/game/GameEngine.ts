@@ -334,8 +334,6 @@ interface NpcEntity {
   pos: Vec;
   /** Idle bob / sway phase. */
   phase: number;
-  /** timeAlive of the next passive-gift tick. */
-  nextPassiveAt: number;
   /** Cumulative seconds the player has spent within passive radius —
    *  required minimum is one full `every` interval before the first
    *  gift, so brushing past doesn't pay out. */
@@ -345,6 +343,10 @@ interface NpcEntity {
   spokenAmbient: boolean;
   /** Index into ambientLines to pick a deterministic line for this NPC. */
   ambientIdx: number;
+  /** Optional per-entity override for the ambient line — used by the
+   *  Penitent to carry its sphere-keyed lament without mutating the
+   *  shared NpcDef. */
+  spokenLine?: string;
 }
 
 interface Familiar {
@@ -1356,7 +1358,6 @@ export class GameEngine {
           defId: def.id,
           pos: { x: ROOM_W / 2, y: ROOM_H / 2 + 4 },
           phase: seedRng.next() * Math.PI * 2,
-          nextPassiveAt: 0,
           proximityT: 0,
           spokenAmbient: false,
           ambientIdx,
@@ -3512,23 +3513,19 @@ export class GameEngine {
       this.npcs.push({
         id: nid(),
         defId: 'penitent',
-        pos: { x: e.pos.x, y: e.pos.y + 16 },
+        // Spawn at the boss's death position, but offset toward the
+        // centre + raised slightly so the Penitent isn't buried under
+        // the essence pickups that erupt from the death.
+        pos: {
+          x: clamp(e.pos.x, ROOM_W / 2 - 80, ROOM_W / 2 + 80),
+          y: clamp(e.pos.y, ROOM_H / 2 - 40, ROOM_H / 2 + 40),
+        },
         phase: 0,
-        nextPassiveAt: 0,
         proximityT: 0,
         spokenAmbient: false,
         ambientIdx: 0,
+        spokenLine: line,
       });
-      // Inject the single sphere-keyed line into the def's runtime
-      // ambient table — we don't mutate the shared NPCS def, instead
-      // the engine reads it from PenitentLine table during proximity.
-      // (The ambient-line system surfaces def.ambientLines[idx]; we
-      // override that by writing the line directly into the spawned
-      // entity's seen-line cache.)
-      const npc = this.npcs[this.npcs.length - 1];
-      // Stash the sphere line on the entity via a side channel for the
-      // updateNpcs branch to read.
-      (npc as NpcEntity & { spokenLine?: string }).spokenLine = line;
     } else {
       audio.sfx('enemyHit');
       this.dropLoot(e);
@@ -4368,13 +4365,12 @@ export class GameEngine {
       // the Penitent for its sphere-keyed lament) takes precedence
       // over def.ambientLines so the engine can override without
       // mutating shared NPC data.
-      const ent = npc as NpcEntity & { spokenLine?: string };
-      const hasLine = ent.spokenLine
+      const hasLine = npc.spokenLine
         || (def.ambientLines && def.ambientLines.length > 0);
       if (!npc.spokenAmbient && hasLine) {
         const d = Math.hypot(p.pos.x - npc.pos.x, p.pos.y - npc.pos.y);
         if (d < 72) {
-          const line = ent.spokenLine
+          const line = npc.spokenLine
             ?? def.ambientLines![npc.ambientIdx % def.ambientLines!.length];
           npc.spokenAmbient = true;
           this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, line, def.colour);
