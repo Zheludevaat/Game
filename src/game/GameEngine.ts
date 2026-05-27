@@ -129,6 +129,15 @@ export interface RunSummary {
   ogdoadReached: boolean;
   bestFloor: number;
   archetype: ArchetypeDef;
+  /** Last damage source that killed the player — visualKey of the
+   *  enemy / 'hazard' / 'dot' / undefined for a clean descend or
+   *  player-initiated quit. Game Over screen displays a "Slain by …"
+   *  line keyed off this. */
+  deathCause?: string;
+  /** Sphere id at the moment of death — pairs with deathCause so the
+   *  Game Over screen can say "Slain by Selene, Warden of the Moon"
+   *  instead of just the warden name. */
+  deathSphereId?: SphereId;
 }
 
 interface Vec { x: number; y: number; }
@@ -445,6 +454,9 @@ export class GameEngine {
   // sits on top of fading ghosts.
   private dashTrail: { x: number; y: number; facing: Vec; walkPhase: number; t: number }[] = [];
   private dashTrailAccum = 0;
+  /** visualKey of whatever last hurt the player — captured into
+   *  RunSummary.deathCause when the player dies. Cleared on mount. */
+  private lastDamageSource: string | null = null;
 
   // Cached per-room prop placements — recomputed on enterRoom so the
   // deterministic layout stays stable across redraws of the same room.
@@ -526,6 +538,7 @@ export class GameEngine {
     this.gameOverFired = false;
     this.dashTrail = [];
     this.dashTrailAccum = 0;
+    this.lastDamageSource = null;
     this.comboCount = 0;
     this.comboLastHitT = 0;
     this.comboPulse = 0;
@@ -1095,22 +1108,26 @@ export class GameEngine {
   }
 
   private pickEnemyType(rng: RNG): Enemy['type'] {
-    const floor = this.floor.number;
-    const sphere = sphereForFloor(floor).id;
-    const pool: Enemy['type'][] = ['lesserShade'];
-    if (floor >= 1) pool.push('mercuryImp');
-    if (floor >= 2) pool.push('lunarWisp');
-    if (floor >= 3) pool.push('saltGolem');
-    if (floor >= 4) pool.push('saturnKnight');
-    // Per-sphere accent enemies — make each sphere feel different
-    // even before the structural changes of Track 2 land.
-    if (sphere === 'venus') pool.push('mirrorTwin');
-    if (sphere === 'sun' || sphere === 'mars') pool.push('martyrBeacon');
-    if (sphere === 'saturn') {
-      pool.push('umbralStalker');
-      pool.push('kronosianHerald');
-    }
-    if (sphere === 'jupiter') pool.push('kronosianHerald');
+    // Per-sphere roster — each sphere owns a small distinct slate of
+    // enemies (max 3 kinds). Replaces the previous cumulative ladder
+    // where every floor past 4 pulled from the full 5-enemy pool, which
+    // dissolved sphere identity into "same shades with new floor tint."
+    // Adjacent spheres can share at most one type to ease the
+    // transition; non-adjacent spheres never overlap.
+    const sphere = sphereForFloor(this.floor.number).id;
+    const ROSTER: Record<SphereId, Enemy['type'][]> = {
+      moon:    ['lesserShade', 'lunarWisp'],
+      mercury: ['mercuryImp',  'lesserShade'],
+      venus:   ['mirrorTwin',  'mercuryImp'],
+      sun:     ['martyrBeacon','mercuryImp', 'saltGolem'],
+      mars:    ['saturnKnight','saltGolem',  'lesserShade'],
+      jupiter: ['kronosianHerald','saltGolem','saturnKnight'],
+      saturn:  ['umbralStalker','kronosianHerald','saturnKnight'],
+      // Ogdoad — the final crucible. Mixes the three most-dangerous
+      // late-game enemies so the closing cycle stays varied.
+      ogdoad:  ['umbralStalker','kronosianHerald','martyrBeacon'],
+    };
+    const pool = ROSTER[sphere];
     return pool[rng.int(0, pool.length)];
   }
 
@@ -1559,6 +1576,10 @@ export class GameEngine {
     if (this.dead) return;
     this.dead = true;
     this.dyingT = 0;
+    // Capture the killer at the moment of death — the Game Over screen
+    // reads summary.deathCause to render "Slain by …".
+    this.summary.deathCause = this.lastDamageSource ?? undefined;
+    this.summary.deathSphereId = sphereForFloor(this.floor.number).id;
     // The soul is dissolved and prepares for rebirth (palingenesia).
     this.unlockCodex('death.palingenesia');
     // Big death-blow shake — the lamp goes out with weight.
@@ -2246,7 +2267,7 @@ export class GameEngine {
       const collideR = e.radius + PLAYER_RADIUS;
       if (d < collideR) {
         if (!this.tryParry({ kind: 'enemy', enemy: e })) {
-          this.damagePlayer(e.contactDamage);
+          this.damagePlayer(e.contactDamage, e.visualKey);
           // Kronosian Herald applies slow on touch — feels temporal.
           if (e.type === 'kronosianHerald') {
             applyStatusEffect(this.player, 'slow', this.timeAlive, { duration: 1.2 });
@@ -3073,7 +3094,7 @@ export class GameEngine {
   }
 
   /** DoT damage on the player — bypasses iframes and reduced armor. */
-  private applyDotToPlayer(raw: number): void {
+  private applyDotToPlayer(raw: number, source = 'dot'): void {
     const p = this.player;
     if (this.dead || raw <= 0) return;
     const reduced = absorbWithShield(p, raw);
@@ -3081,6 +3102,7 @@ export class GameEngine {
     const dmg = Math.max(1, Math.round(reduced - p.armor * 0.5));
     p.hp -= dmg;
     p.flash = Math.max(p.flash, 0.08);
+    this.lastDamageSource = source;
     this.spawnDamageNumber(p.pos.x + (Math.random() - 0.5) * 6, p.pos.y - 8, `${dmg}`, '#ff7a3a');
   }
 
@@ -3146,9 +3168,13 @@ export class GameEngine {
     return true;
   }
 
-  private damagePlayer(raw: number): void {
+  private damagePlayer(raw: number, source?: string): void {
     const p = this.player;
     if (p.iframes > 0 || this.dead) return;
+    // Track who landed the hit so the Game Over screen can name them.
+    // Overwritten on every successful damage application — the last
+    // source before HP hits zero is the killer.
+    if (source) this.lastDamageSource = source;
     // Shield absorbs first; if anything punches through, armor reduces it.
     const through = absorbWithShield(p, raw);
     if (through <= 0) {
@@ -3311,7 +3337,7 @@ export class GameEngine {
             // Reflected — leave the projectile in the world, now owned by the player.
             continue;
           }
-          this.damagePlayer(pr.damage);
+          this.damagePlayer(pr.damage, 'projectile');
           this.projectiles.splice(i, 1);
         }
       }
@@ -3494,7 +3520,7 @@ export class GameEngine {
       } else {
         // Periodic — damage on the transition into the active window.
         if (inside && !wasActive && nowActive) {
-          this.damagePlayer(h.damage);
+          this.damagePlayer(h.damage, `hazard:${h.kind}`);
           if (cfg.status === 'stun') {
             applyStatusEffect(this.player, 'stun', this.timeAlive, { duration: 0.4 });
           } else if (cfg.status === 'slow') {
@@ -3551,7 +3577,7 @@ export class GameEngine {
           // the (single) radius".
           const safe = s.safeRadius ?? 0;
           const hit = safe > 0 ? (d >= safe && d <= radius) : (d < radius);
-          if (hit) this.damagePlayer(s.damage);
+          if (hit) this.damagePlayer(s.damage, 'sigil');
         }
         this.particles.burst(s.pos.x, s.pos.y, 32, { colour, life: 0.8, maxLife: 0.8 });
         this.camera.shakeT = 0.2; this.camera.shakeMag = 2.5;
@@ -4557,6 +4583,12 @@ export class GameEngine {
 
   private drawDashTrail(): void {
     if (this.dashTrail.length === 0) return;
+    // Tint the dash echo with the currently-equipped weapon's swing
+    // colour — a Hermit dashing past with an Ashen Greatsword leaves a
+    // red echo, an Initiate of the Crystallized Tear leaves cyan.
+    // Previously every trail was bone-white regardless of loadout, which
+    // erased the visual identity of the swap.
+    const weaponColour = WEAPONS[this.player.weapons[this.player.weaponIdx]]?.swingColour ?? '#ffffff';
     for (const g of this.dashTrail) {
       const tNorm = Math.min(1, g.t / 0.28);
       const alpha = (1 - tNorm) * 0.55;
@@ -4567,6 +4599,13 @@ export class GameEngine {
       // echo rather than a duplicate body. flash = 1 forces drawInitiate
       // to override every visible palette entry with white.
       drawInitiate(this.ctx, g.x - 7, g.y - 15, 1, g.facing, g.walkPhase, 1);
+      // Lay the weapon swing colour on top of the white silhouette with
+      // a low-opacity tint. source-atop keeps the alpha shape of the
+      // existing pixels so the tint follows the sprite outline.
+      this.ctx.globalCompositeOperation = 'source-atop';
+      this.ctx.globalAlpha = alpha * 0.7;
+      this.ctx.fillStyle = weaponColour;
+      this.ctx.fillRect(g.x - 8, g.y - 16, 16, 18);
       this.ctx.restore();
     }
   }

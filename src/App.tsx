@@ -264,7 +264,7 @@ export function App(): JSX.Element {
               bossesDefeated: s.bossesDefeated,
               essenceCollected: s.essenceCollected,
               ascensionLevel: m.ascensionLevel ?? 0,
-              deathCause: s.ogdoadReached ? 'descend' : undefined,
+              deathCause: s.ogdoadReached ? 'descend' : s.deathCause,
             };
             const history = [entry, ...(m.runHistory ?? [])].slice(0, 20);
             const pab = { ...(m.perArchetypeBest ?? {}) };
