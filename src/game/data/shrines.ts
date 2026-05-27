@@ -126,12 +126,12 @@ export const SHRINE_VARIANTS: Record<ShrineKind, ShrineVariant[]> = {
       apply: { attack: 8, speed: 12, maxHpScale: 0.85, armor: -1 } },
   ],
   library: [
-    { id: 'hermes', name: 'Codex of Hermes', effect: 'Unlock a fragment, +6 Spell Power',           downside: 'Costs 10 Essence',
-      apply: { spellPower: 6, essenceDelta: -10 }, special: { unlockRandomCodex: true } },
-    { id: 'selene', name: 'Codex of Selene', effect: 'Unlock a fragment, +4 Spell Power, +20 Max Mana', downside: 'Costs 8 Essence',
-      apply: { spellPower: 4, maxMpAdd: 20, essenceDelta: -8 }, special: { unlockRandomCodex: true } },
-    { id: 'helios', name: 'Codex of Helios', effect: 'Unlock a fragment, +8 Spell Power',           downside: 'Take 12 corruption damage',
-      apply: { spellPower: 8, hpDelta: -12 }, special: { unlockRandomCodex: true } },
+    { id: 'hermes', name: 'Codex of Hermes', effect: 'Unlock a fragment, +6 Spell Power',           downside: 'Costs 6 Essence',
+      apply: { spellPower: 6, essenceDelta: -6 }, special: { unlockRandomCodex: true } },
+    { id: 'selene', name: 'Codex of Selene', effect: 'Unlock a fragment, +4 Spell Power, +20 Max Mana', downside: 'Costs 4 Essence',
+      apply: { spellPower: 4, maxMpAdd: 20, essenceDelta: -4 }, special: { unlockRandomCodex: true } },
+    { id: 'helios', name: 'Codex of Helios', effect: 'Unlock a fragment, +8 Spell Power',           downside: 'Take 8 corruption damage',
+      apply: { spellPower: 8, hpDelta: -8 }, special: { unlockRandomCodex: true } },
   ],
   // Puzzle altars don't flow through the standard apply table — the
   // engine intercepts beginShrine for kind==='puzzle' and runs its own

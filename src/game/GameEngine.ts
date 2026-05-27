@@ -705,13 +705,16 @@ export class GameEngine {
     // stat boost so the player isn't fighting Selene with floor-1 gear.
     if (this.bossRushMode) {
       const p = this.player;
-      p.attack += 22;
-      p.spellPower += 22;
-      p.maxHp += 60;
+      // Tuned to roughly match a natural floor-10 player after relic /
+      // shrine pickups — the earlier +22/+22/+60/+40 stat boost was
+      // ~18% under-statted, making the first Warden fight RNG-dependent.
+      p.attack += 28;
+      p.spellPower += 28;
+      p.maxHp += 90;
       p.hp = p.maxHp;
-      p.maxMp += 40;
+      p.maxMp += 50;
       p.mp = p.maxMp;
-      p.armor += 2;
+      p.armor += 3;
       p.luck += 2;
       this.goToFloor(10);
     } else {
@@ -4089,9 +4092,11 @@ export class GameEngine {
       pk.life -= dt;
       if (pk.life <= 0) { this.pickups.splice(i, 1); continue; }
       const d = Math.hypot(p.pos.x - pk.pos.x, p.pos.y - pk.pos.y);
-      // Magnet — extended for coin/essence so they snake toward the
-      // player from further away. Relics still require deliberate pickup.
-      const magnet = pk.kind === 'coin' || pk.kind === 'essence' ? 56 : 36;
+      // Magnet — coin / essence pull from slightly further than
+      // smaller pickups, but tightened from 56 to 44 px so they don't
+      // hijack the player's walkup to an adjacent relic. Relics still
+      // require deliberate pickup.
+      const magnet = pk.kind === 'coin' || pk.kind === 'essence' ? 44 : 36;
       if (d < magnet && pk.kind !== 'relic') {
         const dx = p.pos.x - pk.pos.x, dy = p.pos.y - pk.pos.y;
         const len = Math.hypot(dx, dy) || 1;

@@ -190,7 +190,7 @@ export function generateFloor(opts: GenOptions): Floor {
   // exclusive with the sphere wanderer slot. Rarer than the Mendicant,
   // pricier per visit, but the only reliable source of consumables
   // outside chest drops.
-  if (others.length && !sanctuarySpawned && floor >= 5 && rng.chance(0.05)) {
+  if (others.length && !sanctuarySpawned && floor >= 5 && rng.chance(0.12)) {
     const r = others.pop()!;
     r.type = 'sanctuary';
     r.name = pickRoomName('sanctuary', rng);
@@ -233,7 +233,7 @@ export function generateFloor(opts: GenOptions): Floor {
   // Discovered in the engine skips secret rooms), so the player
   // discovers it by trying an unexpected door. Brass Ear still reveals
   // every cell since it's a meta-knowledge relic.
-  if (rng.chance(0.7)) {
+  if (rng.chance(0.4)) {
     const enemyRooms = [...grid.values()].filter((r) => r.type === 'enemy');
     shuffleInPlace(enemyRooms, rng);
     for (const candidate of enemyRooms) {
