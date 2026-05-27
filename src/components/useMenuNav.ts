@@ -52,7 +52,22 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
     const prevPressed: Record<number, boolean> = {};
     let firstTick = true;
     const tick = (): void => {
-      if (optsRef.current?.enabled === false) { raf = requestAnimationFrame(tick); return; }
+      if (optsRef.current?.enabled === false) {
+        // Same stale-prev guard as useGamepadButtons — advance the
+        // button snapshot during the disabled window so a press that
+        // happens while the hook is off doesn't manifest as a phantom
+        // rising-edge once it re-enables.
+        const pads = navigator.getGamepads?.() ?? [];
+        let pad: Gamepad | null = null;
+        for (const p of pads) if (p) { pad = p; break; }
+        if (pad) {
+          for (let i = 0; i < pad.buttons.length; i++) prevPressed[i] = !!pad.buttons[i]?.pressed;
+        } else {
+          firstTick = true;
+        }
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       const pads = navigator.getGamepads?.() ?? [];
       let pad: Gamepad | null = null;
       for (const p of pads) if (p) { pad = p; break; }
