@@ -1175,8 +1175,9 @@ export class GameEngine {
     const safeRooms = new Set<RoomType>(['start', 'boss', 'exit']);
     if (!safeRooms.has(room.type)) {
       const isCombat = room.type === 'enemy' || room.type === 'miniBoss' || room.type === 'locked';
+      const isTrap = room.type === 'trap';
       const sphere = sphereForFloor(this.floor.number).id;
-      this.hazards = spawnRoomHazards(sphere, room.seed, this.reducedParticles, isCombat);
+      this.hazards = spawnRoomHazards(sphere, room.seed, this.reducedParticles, isCombat, isTrap);
     }
     // Spawn content
     if (!room.cleared) {

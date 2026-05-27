@@ -20,6 +20,7 @@ const NAMES: Record<RoomType, string[]> = {
   exit: ['Descending Stair', 'The Sinking Step', 'Gate of Below'],
   miniBoss: ['Serpentine Chamber', 'Brass Crucible', 'The Caduceus Ring'],
   boss: ['Sanctum of the First Lamp', 'Sphere of the Warden', 'The Crowned Abyss'],
+  trap: ['Hall of Snares', 'Engine of Salt', 'Spiked Concourse', 'The Mason\'s Folly'],
 };
 
 export function pickRoomName(type: RoomType, rng: RNG): string {

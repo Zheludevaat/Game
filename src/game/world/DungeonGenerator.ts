@@ -159,6 +159,19 @@ export function generateFloor(opts: GenOptions): Floor {
     r.hasChest = true;
     r.chestLocked = true;
   }
+  // Trap room — ~12 % per floor in spheres that own hazards (i.e.
+  // every sphere except Moon / Ogdoad). Pre-cleared so the player can
+  // see the hazards turn on the moment they step in. One per floor max.
+  const sphereForTrap = sphereForFloor(floor).id;
+  const sphereHasHazards =
+    sphereForTrap !== 'moon' && sphereForTrap !== 'ogdoad';
+  if (others.length && sphereHasHazards && rng.chance(0.12)) {
+    const r = others.pop()!;
+    r.type = 'trap';
+    r.name = pickRoomName('trap', rng);
+    r.cleared = true;       // no enemy combat — only the hazard grid
+    r.enemiesSpawned = true;
+  }
   // MiniBoss on floor%5==0
   if (isMiniBoss && others.length) {
     const r = others.pop()!;

@@ -56,19 +56,52 @@ export function hazardsForSphere(sphere: SphereId): HazardKind[] {
   }
 }
 
-/** Spawn 0-3 hazards inside the standard room rectangle. Deterministic
- *  on the room seed so re-entering a room produces the same layout. */
+/** Spawn 0-3 hazards inside the standard room rectangle (or a dense
+ *  6-9 grid in a trap room). Deterministic on the room seed so
+ *  re-entering a room produces the same layout. */
 export function spawnRoomHazards(
   sphere: SphereId,
   seed: number,
   reducedParticles: boolean,
   isCombatRoom: boolean,
+  isTrapRoom = false,
 ): Hazard[] {
   const kinds = hazardsForSphere(sphere);
   if (kinds.length === 0) return [];
+  const rng = new RNG(seed ^ 0xa57c4b1);
+  // Trap rooms ignore the standard 0-3 budget — they spawn a dense
+  // grid that fills the room with offset hazards on a shared cycle.
+  // The player must thread through the gaps.
+  if (isTrapRoom) {
+    const kind = kinds[rng.int(0, kinds.length)];
+    const cfg = HAZARD_CONFIG[kind];
+    const out: Hazard[] = [];
+    const cols = reducedParticles ? 2 : 3;
+    const rows = reducedParticles ? 2 : 3;
+    const xStep = (ROOM_W - 80) / (cols - 1);
+    const yStep = (ROOM_H - 80) / (rows - 1);
+    for (let cy = 0; cy < rows; cy++) {
+      for (let cx = 0; cx < cols; cx++) {
+        const x = 40 + cx * xStep;
+        const y = 40 + cy * yStep;
+        // Stagger the phase per cell so the grid pulses in a wave
+        // instead of all-on / all-off, giving the player gaps to thread.
+        const phase = ((cx + cy) % 2) * (cfg.period * 0.5);
+        out.push({
+          kind, x, y,
+          period: cfg.period,
+          activeFrac: cfg.activeFrac,
+          damage: cfg.damage,
+          radius: cfg.radius,
+          t: phase + rng.next() * 0.2,
+          lastTick: 0,
+        });
+      }
+    }
+    return out;
+  }
   // Quieter rooms (start / shrine / treasure) get fewer hazards.
   const maxCount = isCombatRoom ? 3 : 1;
-  const rng = new RNG(seed ^ 0xa57c4b1);
   const count = rng.int(isCombatRoom ? 1 : 0, maxCount + 1);
   const out: Hazard[] = [];
   for (let i = 0; i < count; i++) {
