@@ -3,6 +3,7 @@ import { RELICS } from '../game/data/relics';
 import { WEAPONS } from '../game/data/weapons';
 import { SPELLS } from '../game/data/spells';
 import { CONSUMABLES } from '../game/data/consumables';
+import { RELIC_SYNERGIES } from '../game/data/relicSynergies';
 import { STATUS_CONFIG } from '../game/data/statusEffects';
 import { InputManager } from '../game/input/InputManager';
 
@@ -63,6 +64,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
         <div className="glow-text" style={{ fontSize: 10, marginTop: 2 }}>{hud.roomName}</div>
         <div className="pixel-tag" style={{ marginTop: 6 }}>{hud.roomType?.toUpperCase()}</div>
         <Minimap rooms={hud.rooms} />
+        <SynergyStrip synergies={hud.synergies} />
         <div className="relic-strip" style={{ marginTop: 8 }}>
           {hud.relics.map((id) => (
             <div key={id} className="relic-icon" title={RELICS[id].name} data-name={RELICS[id].name}>
@@ -244,6 +246,37 @@ function ComboTag({ count, pulse }: { count: number; pulse: number }): JSX.Eleme
       }}
     >
       ×{count}
+    </div>
+  );
+}
+
+function SynergyStrip({ synergies }: { synergies: HudSnapshot['synergies'] }): JSX.Element | null {
+  if (!synergies || synergies.length === 0) return null;
+  return (
+    <div style={{
+      marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4,
+      maxWidth: 240, justifyContent: 'flex-end',
+    }}>
+      {synergies.map((id) => {
+        const def = RELIC_SYNERGIES[id];
+        return (
+          <div
+            key={id}
+            title={`${def.name} — ${def.description}`}
+            style={{
+              padding: '1px 5px',
+              fontSize: 9,
+              letterSpacing: '0.12em',
+              color: def.colour,
+              background: 'rgba(244, 210, 122, 0.10)',
+              border: `1px solid ${def.colour}`,
+              boxShadow: `0 0 6px ${def.colour}55`,
+            }}
+          >
+            ✦ {def.name.toUpperCase()}
+          </div>
+        );
+      })}
     </div>
   );
 }

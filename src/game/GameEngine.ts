@@ -14,6 +14,9 @@ import {
   CONSUMABLE_SLOT_CAP, CONSUMABLE_STACK_CAP,
 } from './data/consumables';
 import {
+  RELIC_SYNERGIES, SYNERGY_IDS, SynergyId, synergiesFromRelics,
+} from './data/relicSynergies';
+import {
   STATUS_CONFIG, StatusEffect, StatusEffectKind,
   applyStatusEffect, tickStatusEffects, hasStatus, absorbWithShield,
   speedMultiplierFromStatus,
@@ -88,6 +91,8 @@ export interface HudSnapshot {
   consumableIdx: number;
   /** True while the player's next spell is free (Echo Charm active). */
   freeNextSpell: boolean;
+  /** Earned relic synergies — HUD renders one badge per id. */
+  synergies: SynergyId[];
   // For game over
   alive: boolean;
 }
@@ -175,6 +180,12 @@ interface PlayerState {
   /** When true, the player's next spell cast costs no mana — set by
    *  Echo Charm consumable, cleared on the next successful cast. */
   freeNextSpell: boolean;
+  /** Earned relic synergies. Populated by `checkAndGrantSynergies`
+   *  whenever a new pair completes; never removed within a run. */
+  synergies: SynergyId[];
+  /** Counter of coin / essence pickups consumed in this run — drives the
+   *  Alchemical Mint synergy's every-12th relic drop. */
+  pickupTally: number;
 }
 
 interface Enemy {
@@ -613,6 +624,8 @@ export class GameEngine {
       consumables: [],
       consumableIdx: 0,
       freeNextSpell: false,
+      synergies: [],
+      pickupTally: 0,
     };
     this.tutorialStartPos = { x: this.player.pos.x, y: this.player.pos.y };
     this.grantRelic(a.startingRelic, true);
@@ -631,6 +644,51 @@ export class GameEngine {
         if (!this.player.spells.includes(id)) {
           this.player.spells.push(id);
           this.summary.spellsFound.push(id);
+        }
+      }
+    }
+  }
+
+  /** True if the player has earned this synergy this run. */
+  private hasSynergy(id: SynergyId): boolean {
+    return this.player.synergies.includes(id);
+  }
+
+  /** Look at the player's relic list, grant any synergies that have
+   *  freshly completed, fire a screen overlay + sfx, and apply any
+   *  one-shot stat mods. Called once after every grantRelic. */
+  private checkAndGrantSynergies(): void {
+    const earned = synergiesFromRelics(this.player.relics);
+    for (const id of earned) {
+      if (this.player.synergies.includes(id)) continue;
+      this.player.synergies.push(id);
+      const def = RELIC_SYNERGIES[id];
+      // One-shot stat modifier — Tempered Tread restores Black Salt's
+      // -8 speed penalty and stacks +2 armor on top.
+      if (id === 'temperedTread') {
+        this.player.speed += 8;
+        this.player.armor += 2;
+      }
+      // Crowned Vessel — the chalice fills the soul; restore the
+      // revive flag immediately to maxMp on the spot.
+      if (id === 'crownedVessel') {
+        this.player.mp = this.player.maxMp;
+      }
+      audio.sfx('shrine');
+      this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 22, '✦ COMBINATION ✦', '#ffe6a3');
+      this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 12, def.name, def.colour);
+      if (!this.reducedParticles) {
+        this.particles.burst(this.player.pos.x, this.player.pos.y - 8, 28, {
+          colour: def.colour, life: 0.9, maxLife: 0.9, drag: 0.86,
+        });
+        // Bright ring marking the moment, gold like the synergy text.
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2;
+          this.particles.emit({
+            x: this.player.pos.x, y: this.player.pos.y - 6,
+            vx: Math.cos(a) * 150, vy: Math.sin(a) * 150,
+            life: 0.4, maxLife: 0.4, size: 1.6, colour: '#ffe6a3', drag: 0.8,
+          });
         }
       }
     }
@@ -673,6 +731,11 @@ export class GameEngine {
         colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.9,
       });
     }
+    // Synergy check runs after the new relic is in p.relics so a
+    // pickup that completes a pair fires the combo overlay on the same
+    // frame. The starting-archetype relic also rolls through this path
+    // (silent), so synergies that involve a starting relic stay live.
+    this.checkAndGrantSynergies();
   }
 
   private grantWeapon(id: WeaponId): boolean {
@@ -1479,7 +1542,10 @@ export class GameEngine {
     const p = this.player;
     if (p.reviveAvailable) {
       p.reviveAvailable = false;
-      p.hp = Math.floor(p.maxHp * 0.5);
+      // Crowned Vessel synergy upgrades revive to 80 % HP and refills MP.
+      const reviveFrac = this.hasSynergy('crownedVessel') ? 0.8 : 0.5;
+      p.hp = Math.floor(p.maxHp * reviveFrac);
+      if (this.hasSynergy('crownedVessel')) p.mp = p.maxMp;
       p.iframes = 1.4;
       this.particles.burst(p.pos.x, p.pos.y, 40, { colour: '#ffd97a', life: 1.2, maxLife: 1.2 });
       this.spawnDamageNumber(p.pos.x, p.pos.y, '+REVIVE', '#ffd97a');
@@ -1593,7 +1659,16 @@ export class GameEngine {
         appliesStatus: w.appliesStatus,
       });
       if (w.healOnKill && r.killed) this.healPlayer(w.healOnKill);
-      if (p.relics.includes('pulseHeart') && r.isCrit) this.healPlayer(2);
+      if (p.relics.includes('pulseHeart') && r.isCrit) {
+        this.healPlayer(this.hasSynergy('pulseCrown') ? 4 : 2);
+        if (this.hasSynergy('pulseCrown') && Math.random() < 0.15) {
+          this.pickups.push({
+            id: nid(),
+            pos: { x: e.pos.x, y: e.pos.y },
+            kind: 'hp', value: 12, life: 18,
+          });
+        }
+      }
     }
     audio.sfx('attack');
 
@@ -1738,7 +1813,8 @@ export class GameEngine {
       const cx = ROOM_W / 2, cy = ROOM_H / 2 + 4;
       if (dist(p.pos, { x: cx, y: cy }) < 36) {
         if (room.chestLocked) {
-          const consume = !(p.relics.includes('keyOfTheGate') && Math.random() < 0.35);
+          const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : 0.35;
+          const consume = !(p.relics.includes('keyOfTheGate') && Math.random() < keyChance);
           if (p.keys <= 0) {
             this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'LOCKED', '#e23a4a');
             return;
@@ -1947,7 +2023,11 @@ export class GameEngine {
       e.attackTimer = Math.max(0, e.attackTimer - dt);
       // Tick statuses first — burn/poison damage applied here; stun
       // skips AI for the rest of this frame; slow scales movement below.
-      const dotDmg = tickStatusEffects(e, dt, this.timeAlive);
+      let dotDmg = tickStatusEffects(e, dt, this.timeAlive);
+      // Tar Bloom synergy — burning enemies take +50 % per-tick DoT.
+      if (dotDmg > 0 && hasStatus(e, 'burn') && this.hasSynergy('tarBloom')) {
+        dotDmg *= 1.5;
+      }
       if (dotDmg > 0) {
         e.hp -= dotDmg;
         if (Math.round(dotDmg) > 0) {
@@ -2664,8 +2744,19 @@ export class GameEngine {
   }
 
   private killEnemy(e: Enemy, idx: number): void {
+    // Tar Bloom synergy — every burning kill leaves a small essence
+    // tribute. Captured before splice so the enemy's status flags are
+    // still readable; the pickup spawns at the corpse position.
+    const tarBloomDrop = this.hasSynergy('tarBloom') && hasStatus(e, 'burn');
     this.enemies.splice(idx, 1);
     this.summary.enemiesDefeated += 1;
+    if (tarBloomDrop) {
+      this.pickups.push({
+        id: nid(),
+        pos: { x: e.pos.x, y: e.pos.y },
+        kind: 'essence', value: 2, life: 20,
+      });
+    }
     // Death fade animation — sprite expands + alpha drops over 0.35 s,
     // replacing the "instant pop-out" with a visible dissolve.
     this.deathFx.push({
@@ -3044,6 +3135,9 @@ export class GameEngine {
       pr.colour = '#ffe6a3';
       pr.trailColour = '#f4d27a';
       pr.damage *= 1.5 * ringMul;
+      // Sigil Mirror synergy — reflected projectiles plough through two
+      // extra enemies, turning a defensive parry into a clear-the-room.
+      if (this.hasSynergy('sigilMirror')) pr.pierce += 2;
     }
 
     // Combo gets a chunky bump on parry — the skill-expression reward.
@@ -3163,7 +3257,16 @@ export class GameEngine {
               fromPlayer: true, appliesStatus: prStatus,
             });
             if (prMeta.healOnKill && r.killed) this.healPlayer(prMeta.healOnKill);
-            if (this.player.relics.includes('pulseHeart') && r.isCrit) this.healPlayer(2);
+            if (this.player.relics.includes('pulseHeart') && r.isCrit) {
+              this.healPlayer(this.hasSynergy('pulseCrown') ? 4 : 2);
+              if (this.hasSynergy('pulseCrown') && Math.random() < 0.15) {
+                this.pickups.push({
+                  id: nid(),
+                  pos: { x: e.pos.x, y: e.pos.y },
+                  kind: 'hp', value: 12, life: 18,
+                });
+              }
+            }
             const explodeR = (pr as Projectile & { explodeRadius?: number }).explodeRadius ?? 0;
             // Every spell impact gets a small burst + shake so the hit reads
             // as an event, not just a number popping up.
@@ -3198,6 +3301,8 @@ export class GameEngine {
           pr.fromPlayer = true;
           pr.vel.x *= -1; pr.vel.y *= -1;
           pr.colour = '#6cf6e5';
+          // Quicksilver Tongue — reflected bolts seek their target.
+          if (this.hasSynergy('quicksilverTongue')) pr.homing = true;
           continue;
         }
         const d = Math.hypot(this.player.pos.x - pr.pos.x, this.player.pos.y - pr.pos.y);
@@ -3274,6 +3379,25 @@ export class GameEngine {
   private applyPickup(pk: Pickup): void {
     const p = this.player;
     const essBonus = 1 + this.meta.bonusEssenceGain;
+    // Alchemical Mint — coins and essence both count toward a 12-pickup
+    // tally; every twelfth spawns a random unowned relic next to the
+    // player. Counter persists for the full run.
+    if (this.hasSynergy('alchemicalMint') && (pk.kind === 'coin' || pk.kind === 'essence')) {
+      p.pickupTally += 1;
+      if (p.pickupTally >= 12) {
+        p.pickupTally = 0;
+        const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
+        if (pool.length > 0) {
+          const id = pool[Math.floor(Math.random() * pool.length)];
+          this.pickups.push({
+            id: nid(),
+            pos: { x: p.pos.x + 14, y: p.pos.y - 6 },
+            kind: 'relic', value: 0, relic: id, life: 24,
+          });
+          this.spawnDamageNumber(p.pos.x, p.pos.y - 18, 'MINT', '#ffe6a3');
+        }
+      }
+    }
     switch (pk.kind) {
       case 'coin':
         // Inverse Midas — coins transmute to essence on the wind (3:1).
@@ -3459,7 +3583,8 @@ export class GameEngine {
     if (!next) return;
     // Locked rooms cost a key
     if (next.type === 'locked' && !next.visited) {
-      const useKey = !(this.player.relics.includes('keyOfTheGate') && Math.random() < 0.35);
+      const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : 0.35;
+      const useKey = !(this.player.relics.includes('keyOfTheGate') && Math.random() < keyChance);
       if (this.player.keys <= 0) {
         // Push back
         this.player.pos.x = clamp(p.x, ROOM_MARGIN + 4, ROOM_W - ROOM_MARGIN - 4);
@@ -4993,6 +5118,7 @@ export class GameEngine {
       consumables: p.consumables.map((c) => ({ id: c.id, count: c.count })),
       consumableIdx: p.consumableIdx,
       freeNextSpell: p.freeNextSpell,
+      synergies: p.synergies.slice(),
       alive: !this.dead,
     });
   }
