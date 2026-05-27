@@ -4,6 +4,7 @@ import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
 import { DEFAULT_GAMEPAD_MAP, GAMEPAD_BUTTON_NAMES } from '../game/input/controlMappings';
 import { useGamepadButtons } from './useGamepadButtons';
+import { audio } from '../game/systems/AudioSystem';
 
 interface Props {
   settings: SettingsState;
@@ -117,6 +118,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
           if (heldAtStart.has(i)) continue; // still held from before remap
           // Fresh rising edge — record this binding.
           onChange({ ...settings, gamepadMap: { ...settings.gamepadMap, [action]: i } });
+          audio.sfx('uiUnlock');
           setRemapping(null);
           return;
         }

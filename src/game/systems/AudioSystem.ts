@@ -3,7 +3,22 @@ export type SfxName =
   | 'chest' | 'shrine' | 'descend' | 'bossWarn' | 'bossDeath' | 'pickup'
   | 'doorLock' | 'doorOpen' | 'crit' | 'dotTick'
   | 'ultimateMagus' | 'ultimateHermit' | 'ultimateStar'
-  | 'synergy' | 'roomClear' | 'auraTick' | 'enemyWindup';
+  | 'synergy' | 'roomClear' | 'auraTick' | 'enemyWindup'
+  // Bundled UI samples (Kenney UI Audio, CC0) — see public/audio/ui/CREDITS.md.
+  // Distinct voicing per semantic action so menus stop reading as one
+  // identical "click everything" tone.
+  | 'uiClick' | 'uiConfirm' | 'uiCancel' | 'uiFocus' | 'uiUnlock';
+
+/** UI sample bank — name → public path. The AudioSystem lazy-loads
+ *  these HTMLAudioElements on first request and reuses them on every
+ *  subsequent play (reset currentTime so rapid clicks retrigger). */
+const UI_SAMPLE_URLS: Record<string, string> = {
+  uiClick:   '/audio/ui/click.ogg',
+  uiConfirm: '/audio/ui/confirm.ogg',
+  uiCancel:  '/audio/ui/cancel.ogg',
+  uiFocus:   '/audio/ui/focus.ogg',
+  uiUnlock:  '/audio/ui/unlock.ogg',
+};
 
 interface VoiceSpec {
   type: OscillatorType;
@@ -83,6 +98,12 @@ export class AudioSystem {
   private ambientNodes: Voice[] = [];
   private ambientStarted = false;
   private menuStarted = false;
+  /** Lazy-loaded HTMLAudioElement bank for UI samples — keyed by
+   *  SfxName, populated on first play. Volume tracks sfxVolume; gain
+   *  changes via per-element `volume` since these don't route through
+   *  the AudioContext graph (they're plain <audio> elements, cheaper
+   *  than decoding through AudioBuffer for one-shot UI clicks). */
+  private uiSampleBank: Map<string, HTMLAudioElement> = new Map();
 
   unlock(): void {
     if (this.unlocked) return;
@@ -125,6 +146,9 @@ export class AudioSystem {
   setSfxVolume(v: number): void {
     this.sfxVolume = Math.max(0, Math.min(1, v));
     if (this.sfxGain) this.sfxGain.gain.value = this.sfxVolume;
+    // Sample-bank elements use their own .volume since they don't
+    // route through the AudioContext graph — keep them in sync.
+    for (const el of this.uiSampleBank.values()) el.volume = this.sfxVolume;
   }
   getMusicVolume(): number { return this.musicVolume; }
   getSfxVolume(): number { return this.sfxVolume; }
@@ -325,6 +349,30 @@ export class AudioSystem {
     this.ambientNodes = [];
   }
 
+  /** Fire a cached HTMLAudioElement for a UI sample (Kenney CC0 set).
+   *  First call per name allocates + preloads the element; later calls
+   *  rewind to 0 and replay so rapid clicks register every press.
+   *  Volume tracks sfxVolume via setSfxVolume sync. */
+  private playUiSample(name: string): void {
+    const url = UI_SAMPLE_URLS[name];
+    if (!url) return;
+    let el = this.uiSampleBank.get(name);
+    if (!el) {
+      el = new Audio(url);
+      el.volume = this.sfxVolume;
+      el.preload = 'auto';
+      this.uiSampleBank.set(name, el);
+    }
+    try {
+      el.currentTime = 0;
+      void el.play();
+    } catch {
+      // First play on iOS may reject if the unlock gesture hasn't
+      // fired yet — silent fallback, the unlock() path will retry on
+      // the next pointerdown.
+    }
+  }
+
   /** Schedule a stack of oscillator voices, each with its own envelope,
    *  all summed into sfxGain. The single-osc shortcut becomes
    *  playLayered([oneVoice]) — and the four "big" SFX get genuine 2-3
@@ -381,6 +429,13 @@ export class AudioSystem {
 
   sfx(name: SfxName): void {
     if (!this.unlocked || !this.ctx) return;
+    // UI samples route through HTMLAudioElement, not the AudioContext.
+    // Branch out before the switch so we don't drag the layered
+    // procedural cases below into a "if (uiSample) return" check.
+    if (name in UI_SAMPLE_URLS) {
+      this.playUiSample(name);
+      return;
+    }
     switch (name) {
       // --- Four big SFX — layered voices for body + snap + ting ---
       case 'enemyHit':

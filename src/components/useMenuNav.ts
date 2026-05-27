@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getConfirmButton, getCancelButton } from '../game/input/activeLayout';
+import { audio } from '../game/systems/AudioSystem';
 
 export interface MenuItem {
   onActivate: () => void;
@@ -25,6 +26,7 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
           next = (next + dir + n) % n;
           if (!itemsRef.current[next]?.disabled) break;
         }
+        if (next !== f) audio.sfx('uiFocus');
         return next;
       });
     };
@@ -36,10 +38,17 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
       else if (horiz && (e.code === 'ArrowRight' || e.code === 'KeyD')) { move(1); e.preventDefault(); }
       else if (horiz && (e.code === 'ArrowLeft' || e.code === 'KeyA')) { move(-1); e.preventDefault(); }
       else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyJ') {
-        itemsRef.current[focusedRef.current]?.onActivate();
+        const item = itemsRef.current[focusedRef.current];
+        if (item && !item.disabled) {
+          audio.sfx('uiConfirm');
+          item.onActivate();
+        }
         e.preventDefault();
       } else if (e.code === 'Escape') {
-        optsRef.current?.onCancel?.();
+        if (optsRef.current?.onCancel) {
+          audio.sfx('uiCancel');
+          optsRef.current.onCancel();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -90,40 +99,21 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
           prevPressed[key] = val;
           return val && !was;
         };
+        const padMove = (dir: number): void => {
+          const n = itemsRef.current.length;
+          setFocused((f) => {
+            let next = f;
+            for (let i = 0; i < n; i++) { next = (next + dir + n) % n; if (!itemsRef.current[next]?.disabled) break; }
+            if (next !== f) audio.sfx('uiFocus');
+            return next;
+          });
+        };
         if (horiz) {
-          if (isPress(15, !!right)) {
-            const n = itemsRef.current.length;
-            setFocused((f) => {
-              let next = f;
-              for (let i = 0; i < n; i++) { next = (next + 1 + n) % n; if (!itemsRef.current[next]?.disabled) break; }
-              return next;
-            });
-          }
-          if (isPress(14, !!left)) {
-            const n = itemsRef.current.length;
-            setFocused((f) => {
-              let next = f;
-              for (let i = 0; i < n; i++) { next = (next - 1 + n) % n; if (!itemsRef.current[next]?.disabled) break; }
-              return next;
-            });
-          }
+          if (isPress(15, !!right)) padMove(1);
+          if (isPress(14, !!left))  padMove(-1);
         } else {
-          if (isPress(13, !!down)) {
-            const n = itemsRef.current.length;
-            setFocused((f) => {
-              let next = f;
-              for (let i = 0; i < n; i++) { next = (next + 1 + n) % n; if (!itemsRef.current[next]?.disabled) break; }
-              return next;
-            });
-          }
-          if (isPress(12, !!up)) {
-            const n = itemsRef.current.length;
-            setFocused((f) => {
-              let next = f;
-              for (let i = 0; i < n; i++) { next = (next - 1 + n) % n; if (!itemsRef.current[next]?.disabled) break; }
-              return next;
-            });
-          }
+          if (isPress(13, !!down))  padMove(1);
+          if (isPress(12, !!up))    padMove(-1);
         }
         // confirm / cancel — index depends on controller layout
         const confirmIdx = getConfirmButton();
@@ -132,13 +122,20 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
         const confirmWas = prevPressed[confirmIdx] ?? false;
         prevPressed[confirmIdx] = confirmBtn;
         if (confirmBtn && !confirmWas) {
-          itemsRef.current[focusedRef.current]?.onActivate();
+          const item = itemsRef.current[focusedRef.current];
+          if (item && !item.disabled) {
+            audio.sfx('uiConfirm');
+            item.onActivate();
+          }
         }
         const cancelBtn = pad.buttons[cancelIdx]?.pressed ?? false;
         const cancelWas = prevPressed[cancelIdx] ?? false;
         prevPressed[cancelIdx] = cancelBtn;
         if (cancelBtn && !cancelWas) {
-          optsRef.current?.onCancel?.();
+          if (optsRef.current?.onCancel) {
+            audio.sfx('uiCancel');
+            optsRef.current.onCancel();
+          }
         }
       }
       raf = requestAnimationFrame(tick);
