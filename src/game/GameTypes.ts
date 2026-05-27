@@ -122,9 +122,11 @@ export type SpellId =
   | 'sacredFlame'
   | 'eclipseOrb'
   | 'wrathSplinter'
-  | 'mirrorSigil';
+  | 'mirrorSigil'
+  | 'hermesWake'
+  | 'boneFamiliar';
 
-export type SpellKind = 'singleProjectile' | 'spread' | 'sigil' | 'reflectBuff';
+export type SpellKind = 'singleProjectile' | 'spread' | 'sigil' | 'reflectBuff' | 'aura' | 'summon';
 export type SpellVisual = 'orb' | 'shard' | 'flame' | 'sigil';
 
 export interface SpellDef {
@@ -156,6 +158,13 @@ export interface SpellDef {
   reflectCharges?: number;
   /** Duration of a self / buff-style cast (e.g. Mirror Sigil's window). */
   buffDuration?: number;
+  /** Aura tick interval — how often a 'aura' spell applies damage to
+   *  enemies in radius. Smaller = faster ticks. */
+  auraTickEvery?: number;
+  /** Summoned familiar: orbit distance from the player. */
+  familiarOrbitRadius?: number;
+  /** Summoned familiar: seconds between its homing bolt attacks. */
+  familiarAttackEvery?: number;
   projColour: string;
   trailColour: string;
   projVisual: SpellVisual;

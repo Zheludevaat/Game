@@ -234,6 +234,12 @@ interface PlayerState {
   reflectCharges: number;
   /** timeAlive after which the reflect buff lapses regardless of remaining charges. */
   reflectExpiresAt: number;
+  /** timeAlive after which the aura (Hermes' Wake) lapses. */
+  auraExpiresAt: number;
+  /** Source spell id for the active aura, used for damage / status lookups. */
+  auraSpellId: SpellId | null;
+  /** Next timeAlive tick at which the aura damages enemies in radius. */
+  auraNextTick: number;
 }
 
 interface Enemy {
@@ -302,6 +308,22 @@ interface Pickup {
   spell?: SpellId;
   consumable?: ConsumableId;
   life: number;
+}
+
+interface Familiar {
+  id: number;
+  /** Live world position — orbits the player via orbitPhase. */
+  pos: Vec;
+  /** Seconds remaining before despawn. */
+  life: number;
+  orbitPhase: number;
+  orbitRadius: number;
+  /** Seconds until next homing-bolt attack. */
+  attackTimer: number;
+  /** Cached spell id so each familiar tracks its origin parameters
+   *  (attack rate, damage, projectile look) even if the player later
+   *  cycles to a different active spell. */
+  spellId: SpellId;
 }
 
 interface SigilHazard {
@@ -458,6 +480,7 @@ export class GameEngine {
   private projectiles: Projectile[] = [];
   private pickups: Pickup[] = [];
   private sigils: SigilHazard[] = [];
+  private familiars: Familiar[] = [];
   private hazards: Hazard[] = [];
   private particles = new ParticleSystem();
 
@@ -717,6 +740,9 @@ export class GameEngine {
       ultimateCdMax: a.ultimate.cooldown,
       reflectCharges: 0,
       reflectExpiresAt: 0,
+      auraExpiresAt: 0,
+      auraSpellId: null,
+      auraNextTick: 0,
     };
     this.tutorialStartPos = { x: this.player.pos.x, y: this.player.pos.y };
     this.grantRelic(a.startingRelic, true);
@@ -1166,6 +1192,7 @@ export class GameEngine {
     this.projectiles = [];
     this.pickups = [];
     this.sigils = [];
+    this.familiars = [];
     this.bossSnapshot = null;
     this.bossBannerTimer = 0;
     this.roomClearEffects = [];
@@ -1225,6 +1252,7 @@ export class GameEngine {
     // Reset transient
     this.projectiles = [];
     this.sigils = [];
+    this.familiars = [];
     this.enemies = [];
     this.pickups = [];
     this.hazards = [];
@@ -1550,6 +1578,7 @@ export class GameEngine {
       this.updateProjectiles(dt);
       this.updatePickups(dt);
       this.updateSigils(dt);
+      this.updateFamiliars(dt);
       this.updateDelayedActions(dt);
       this.updateHazards(dt);
     }
@@ -1592,6 +1621,41 @@ export class GameEngine {
     p.spellCooldown = Math.max(0, p.spellCooldown - dt);
     p.ultimateCd = Math.max(0, p.ultimateCd - dt);
     p.mp = Math.min(p.maxMp, p.mp + p.manaRegen * dt);
+    // Hermes' Wake — periodic AOE around the player while the aura
+    // window is active. The spell def carries the radius / damage /
+    // status; we read it back via p.auraSpellId rather than capturing
+    // it in PlayerState so a balance tweak to spells.ts takes effect
+    // on the next tick.
+    if (p.auraSpellId && this.timeAlive < p.auraExpiresAt) {
+      const sp = SPELLS[p.auraSpellId];
+      if (sp && this.timeAlive >= p.auraNextTick) {
+        p.auraNextTick = this.timeAlive + (sp.auraTickEvery ?? 0.32);
+        const dmg = Math.max(1, Math.round(p.spellPower * p.damageMul * sp.damageMul));
+        for (const e of this.enemies) {
+          if (e.hp <= 0) continue;
+          const d = Math.hypot(e.pos.x - p.pos.x, e.pos.y - p.pos.y);
+          if (d > sp.radius + e.radius) continue;
+          this.damageEnemy(e, dmg, {
+            x: e.pos.x - p.pos.x, y: e.pos.y - p.pos.y,
+          }, 20, { fromPlayer: true, appliesStatus: sp.appliesStatus, canCrit: false });
+        }
+        if (!this.reducedParticles) {
+          // Tick visual — soft pulse ring that fades within the tick window.
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * Math.PI * 2;
+            const r = sp.radius * 0.7;
+            this.particles.emit({
+              x: p.pos.x + Math.cos(a) * r, y: p.pos.y - 4 + Math.sin(a) * r,
+              vx: Math.cos(a) * 18, vy: Math.sin(a) * 18,
+              life: 0.28, maxLife: 0.28, size: 1.2, colour: sp.projColour, drag: 0.86,
+            });
+          }
+        }
+      }
+    } else if (p.auraSpellId && this.timeAlive >= p.auraExpiresAt) {
+      // Window closed — clear the source so the HUD pill goes away.
+      p.auraSpellId = null;
+    }
     if (this.comboPulse > 0) this.comboPulse = Math.max(0, this.comboPulse - dt);
     if (this.critFlashT > 0) this.critFlashT = Math.max(0, this.critFlashT - dt);
 
@@ -2007,6 +2071,65 @@ export class GameEngine {
           this.particles.emit({
             x: p.pos.x, y: p.pos.y - 4,
             vx: Math.cos(a) * 90, vy: Math.sin(a) * 90,
+            life: 0.6, maxLife: 0.6, size: 1.4, colour: sp.projColour, drag: 0.85,
+          });
+        }
+      }
+      return;
+    }
+
+    if (sp.kind === 'aura') {
+      // Hermes' Wake — sets an aura window on the player. updatePlayer
+      // ticks damage to nearby enemies on the auraNextTick cadence.
+      // Re-casting refreshes both the expiry and the next tick so the
+      // effective uptime never drops below one full duration.
+      p.auraExpiresAt = this.timeAlive + sp.life;
+      p.auraSpellId = sp.id;
+      p.auraNextTick = this.timeAlive + (sp.auraTickEvery ?? 0.32);
+      audio.sfx('spell');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, 'WAKE', sp.projColour);
+      if (!this.reducedParticles) {
+        // Initial outward ring telegraphs the aura's reach.
+        for (let i = 0; i < 18; i++) {
+          const a = (i / 18) * Math.PI * 2;
+          const r = sp.radius;
+          this.particles.emit({
+            x: p.pos.x, y: p.pos.y - 4,
+            vx: Math.cos(a) * r * 1.4, vy: Math.sin(a) * r * 1.4,
+            life: 0.45, maxLife: 0.45, size: 1.6, colour: sp.projColour, drag: 0.82,
+          });
+        }
+      }
+      return;
+    }
+
+    if (sp.kind === 'summon') {
+      // Bone Familiar — spawn an orbiting servant. Multiple casts stack
+      // up to a soft cap of 3 so a 90 MP burst doesn't paper the room
+      // in familiars but a Magus-style caster can build a small swarm.
+      const cap = 3;
+      if (this.familiars.length >= cap) {
+        // Refresh the oldest familiar's life instead of growing past the cap.
+        this.familiars[0].life = sp.life;
+      } else {
+        this.familiars.push({
+          id: nid(),
+          pos: { x: p.pos.x, y: p.pos.y - 12 },
+          life: sp.life,
+          orbitPhase: this.familiars.length * (Math.PI * 2 / cap),
+          orbitRadius: sp.familiarOrbitRadius ?? 28,
+          attackTimer: 0.2,
+          spellId: sp.id,
+        });
+      }
+      audio.sfx('shrine');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, 'SUMMON', sp.projColour);
+      if (!this.reducedParticles) {
+        for (let i = 0; i < 14; i++) {
+          const a = (i / 14) * Math.PI * 2;
+          this.particles.emit({
+            x: p.pos.x, y: p.pos.y - 4,
+            vx: Math.cos(a) * 60, vy: Math.sin(a) * 60,
             life: 0.6, maxLife: 0.6, size: 1.4, colour: sp.projColour, drag: 0.85,
           });
         }
@@ -3884,6 +4007,65 @@ export class GameEngine {
     }
   }
 
+  /** Tick orbiting familiars — move them around the player, fire
+   *  homing bolts on their attack cadence, and despawn when life runs
+   *  out. */
+  private updateFamiliars(dt: number): void {
+    if (this.familiars.length === 0) return;
+    const p = this.player;
+    for (let i = this.familiars.length - 1; i >= 0; i--) {
+      const f = this.familiars[i];
+      f.life -= dt;
+      if (f.life <= 0) {
+        if (!this.reducedParticles) {
+          this.particles.burst(f.pos.x, f.pos.y, 12, {
+            colour: SPELLS[f.spellId].projColour, life: 0.5, maxLife: 0.5, drag: 0.86,
+          });
+        }
+        this.familiars.splice(i, 1);
+        continue;
+      }
+      const sp = SPELLS[f.spellId];
+      // Orbit motion — phase ticks at a steady rate independent of
+      // movement speed; familiar position recomputed each frame.
+      f.orbitPhase += dt * 2.4;
+      f.pos.x = p.pos.x + Math.cos(f.orbitPhase) * f.orbitRadius;
+      f.pos.y = p.pos.y - 4 + Math.sin(f.orbitPhase) * f.orbitRadius * 0.7;
+      // Attack — target the nearest live enemy and loose a homing bolt
+      // using the spell's damage profile.
+      f.attackTimer -= dt;
+      if (f.attackTimer <= 0) {
+        f.attackTimer = sp.familiarAttackEvery ?? 0.7;
+        let nearest: Enemy | null = null;
+        let nearestD = Infinity;
+        for (const e of this.enemies) {
+          if (e.hp <= 0) continue;
+          const d = Math.hypot(e.pos.x - f.pos.x, e.pos.y - f.pos.y);
+          if (d < nearestD) { nearestD = d; nearest = e; }
+        }
+        if (nearest && nearestD < 280) {
+          const dx = nearest.pos.x - f.pos.x;
+          const dy = nearest.pos.y - f.pos.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const dmg = Math.max(1, Math.round(p.spellPower * p.damageMul * sp.damageMul));
+          this.projectiles.push({
+            id: nid(),
+            pos: { x: f.pos.x, y: f.pos.y },
+            vel: { x: (dx / len) * sp.speed, y: (dy / len) * sp.speed },
+            life: sp.life,
+            radius: sp.radius,
+            damage: dmg,
+            fromPlayer: true,
+            pierce: sp.pierce,
+            homing: true,
+            colour: sp.projColour,
+            trailColour: sp.trailColour,
+          });
+        }
+      }
+    }
+  }
+
   private handleRoomTransition(): void {
     const p = this.player.pos;
     const cur = this.currentRoom;
@@ -4097,7 +4279,9 @@ export class GameEngine {
     // lighting. The lamp light still emanates from the player (it was
     // painted by drawLighting), but the player sprite is no longer
     // OVERPAINTED by it.
+    this.drawAura();
     this.drawPlayer();
+    this.drawFamiliars();
     this.drawProjectiles();
     this.particles.draw(ctx);
     this.drawDamageNumbers();
@@ -5239,6 +5423,70 @@ export class GameEngine {
     ctx.globalAlpha = 1;
     ctx.fillStyle = `rgba(255, 255, 255, ${tNorm})`;
     ctx.fillRect(reach - 4, -1, 4, 2);
+  }
+
+  /** Pulse a soft ring around the player while an aura spell is up.
+   *  Width breathes with timeAlive so the player can tell the effect
+   *  is live (vs. just lingering particles). */
+  private drawAura(): void {
+    const p = this.player;
+    if (!p.auraSpellId) return;
+    if (this.timeAlive >= p.auraExpiresAt) return;
+    const sp = SPELLS[p.auraSpellId];
+    if (!sp) return;
+    const ctx = this.ctx;
+    const rgb = hexToRgbString(sp.projColour);
+    const t = this.timeAlive;
+    const breathe = 0.85 + Math.sin(t * 6) * 0.15;
+    const r = sp.radius * breathe;
+    // Outer stroke
+    ctx.save();
+    ctx.strokeStyle = `rgba(${rgb}, 0.55)`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(p.pos.x, p.pos.y - 4, r, 0, Math.PI * 2);
+    ctx.stroke();
+    // Soft inner fill
+    const g = ctx.createRadialGradient(p.pos.x, p.pos.y - 4, r * 0.5, p.pos.x, p.pos.y - 4, r);
+    g.addColorStop(0, `rgba(${rgb}, 0)`);
+    g.addColorStop(1, `rgba(${rgb}, 0.22)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.pos.x, p.pos.y - 4, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Render the orbiting familiars — a small skull-like silhouette
+   *  with a violet halo. Trails a faint sparkle as it orbits. */
+  private drawFamiliars(): void {
+    if (this.familiars.length === 0) return;
+    const ctx = this.ctx;
+    for (const f of this.familiars) {
+      const sp = SPELLS[f.spellId];
+      const rgb = hexToRgbString(sp.projColour);
+      // Halo
+      const halo = ctx.createRadialGradient(f.pos.x, f.pos.y, 1, f.pos.x, f.pos.y, 10);
+      halo.addColorStop(0, `rgba(${rgb}, 0.55)`);
+      halo.addColorStop(1, `rgba(${rgb}, 0)`);
+      ctx.fillStyle = halo;
+      ctx.fillRect(f.pos.x - 10, f.pos.y - 10, 20, 20);
+      // Skull body
+      ctx.fillStyle = '#dac8ff';
+      ctx.fillRect(f.pos.x - 3, f.pos.y - 3, 6, 5);
+      ctx.fillStyle = '#1a0f2c';
+      ctx.fillRect(f.pos.x - 2, f.pos.y - 2, 1, 2);
+      ctx.fillRect(f.pos.x + 1, f.pos.y - 2, 1, 2);
+      ctx.fillRect(f.pos.x - 1, f.pos.y + 1, 2, 1);
+      // Faint sparkle trail
+      if (!this.reducedParticles && Math.random() < 0.4) {
+        this.particles.emit({
+          x: f.pos.x, y: f.pos.y,
+          vx: (Math.random() - 0.5) * 12, vy: 10 + Math.random() * 6,
+          life: 0.4, maxLife: 0.4, size: 1.0, colour: sp.projColour, drag: 0.92,
+        });
+      }
+    }
   }
 
   private drawProjectiles(): void {
