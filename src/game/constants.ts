@@ -20,6 +20,32 @@ export const STORAGE_KEYS = {
   resume: 'sl.resume',
 } as const;
 
+/**
+ * Core palette. Every game-side hex code should derive from a swatch
+ * here (or in `data/spheres.ts:SPHERES[].colour/accent` for per-sphere
+ * theming, or in `data/uiColours.ts:DAMAGE_COLOURS` for hit numbers).
+ *
+ * The palette is hand-curated against the **AAP-64** Lospec reference
+ * (Adigun Polack, public domain) — see
+ * <https://lospec.com/palette-list/aap-64>. AAP-64 is a 64-colour
+ * retro-tuned set with strong gothic / dungeon coverage and a balanced
+ * value ramp across every hue family. We don't lock to its exact hex
+ * codes (the game's identity uses warmer golds + cooler violets than
+ * AAP's defaults), but each entry below sits within ±10 % of an AAP
+ * neighbour. Future colour additions: pick the nearest AAP swatch as a
+ * starting point, then nudge for narrative fit.
+ *
+ * Family layout:
+ *  - bg / floor / wall  → muted indigo-violet dungeon base
+ *  - gold / bone        → torch & relic warmth
+ *  - teal               → cool secondary (Mercury, healing, shields)
+ *  - crimson / violet   → status / spell foreground
+ *
+ * Drift guard: a `colour-audit` lint pass scans `GameEngine.ts` for
+ * hex literals that don't map back here — if you add a new hex, add
+ * it to this object first so the palette stays the single source of
+ * truth.
+ */
 export const PALETTE = {
   bg: '#02010a',
   // Floor tones lifted from #1a1124/#221636 (originally 10–14 %

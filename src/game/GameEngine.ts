@@ -3970,7 +3970,7 @@ export class GameEngine {
       vx: (Math.random() - 0.5) * 14,
       vy: -42 - Math.random() * 20,
       life: 1.1, maxLife: 1.1,
-      value: dmg, colour: '#ffe9a3',
+      value: dmg, colour: DAMAGE_COLOURS.crit,
     });
     // Stamp the "CRIT" prefix via the side-channel text field, marked as crit
     // for bigger / brighter rendering in drawDamageNumbers.
