@@ -50,9 +50,13 @@ const ACTION_LABELS: Array<{ key: keyof GamepadMap; pretty: string }> = [
 ];
 
 export function ControllerTest({ input, onBack }: Props): JSX.Element {
-  // ControllerTest WANTS the user to press every button — so don't bind A.
-  // B (cancel) + Start exit the screen.
-  useGamepadButtons({ onB: onBack, onStart: onBack });
+  // ControllerTest wants the player to press every button on their
+  // controller and see which index lights up — so we don't bind ANY
+  // gamepad button to "exit." Start used to do that too but it
+  // collided with mapping verification (the player couldn't test
+  // their Start binding). Use the on-screen Back button or Escape
+  // on a keyboard.
+  useGamepadButtons({});
   const [snap, setSnap] = useState<PadSnap>({
     connected: false, id: '', mapping: '', layout: 'xbox',
     axes: [], buttons: [], lastPressedIdx: null,

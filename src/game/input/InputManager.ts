@@ -417,14 +417,28 @@ export class InputManager {
 
       if (this.padDown(m.attack)) s.attackHeld = true;
       if (this.padDown(m.spell)) s.spellHeld = true;
-      s.attackPressed   ||= this.padPressed(m.attack);
-      s.dashPressed     ||= this.padPressed(m.dash);
-      s.spellPressed    ||= this.padPressed(m.spell);
-      s.interactPressed ||= this.padPressed(m.interact);
-      s.pausePressed    ||= this.padPressed(m.pause);
-      s.mapPressed      ||= this.padPressed(m.map);
-      s.cycleWeaponPressed ||= this.padPressed(m.cycleWeapon);
-      s.cycleSpellPressed  ||= this.padPressed(m.cycleSpell);
+      // Diagnostic: log every action edge so the user can verify in
+      // devtools that the engine actually receives their pad input.
+      // If the test screen shows "btn 5 = attack" but the player
+      // presses btn 5 in-game and no [gamepad action] line appears,
+      // the engine isn't seeing the press at all (network / focus
+      // issue). If the line appears but the action doesn't visibly
+      // fire, the bug is in the gameplay layer.
+      const padFired = (label: string, idx: number, was: boolean): boolean => {
+        if (was) {
+          // eslint-disable-next-line no-console
+          console.info('%c[gamepad action] ' + label, 'color: #a4faf0', `via btn ${idx}`);
+        }
+        return was;
+      };
+      s.attackPressed       ||= padFired('attack',      m.attack,      this.padPressed(m.attack));
+      s.dashPressed         ||= padFired('dash',        m.dash,        this.padPressed(m.dash));
+      s.spellPressed        ||= padFired('spell',       m.spell,       this.padPressed(m.spell));
+      s.interactPressed     ||= padFired('interact',    m.interact,    this.padPressed(m.interact));
+      s.pausePressed        ||= padFired('pause',       m.pause,       this.padPressed(m.pause));
+      s.mapPressed          ||= padFired('map',         m.map,         this.padPressed(m.map));
+      s.cycleWeaponPressed  ||= padFired('cycleWeapon', m.cycleWeapon, this.padPressed(m.cycleWeapon));
+      s.cycleSpellPressed   ||= padFired('cycleSpell',  m.cycleSpell,  this.padPressed(m.cycleSpell));
 
       s.uiUp     ||= this.padPressed(m.dpadUp);
       s.uiDown   ||= this.padPressed(m.dpadDown);

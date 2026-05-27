@@ -84,17 +84,37 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
   const remapAction = (action: GamepadAction): void => {
     setRemapping(action);
     const start = performance.now();
+    // Snapshot any buttons that are ALREADY held when remap begins —
+    // these don't count as "the player's chosen button." Only a NEW
+    // press (rising edge) is recorded. This stops the click that
+    // entered remap from immediately being assigned (e.g. mouse-click
+    // bleeding into the next-frame poll, or a held controller button
+    // from the navigation that opened this menu).
+    const heldAtStart = new Set<number>();
+    const pads0 = navigator.getGamepads?.() ?? [];
+    for (const pad of pads0) {
+      if (!pad) continue;
+      for (let i = 0; i < pad.buttons.length; i++) {
+        if (pad.buttons[i]?.pressed) heldAtStart.add(i);
+      }
+      break;
+    }
     const tick = (): void => {
       if (performance.now() - start > 6000) { setRemapping(null); return; }
       const pads = navigator.getGamepads?.() ?? [];
       for (const pad of pads) {
         if (!pad) continue;
         for (let i = 0; i < pad.buttons.length; i++) {
-          if (pad.buttons[i]?.pressed) {
-            onChange({ ...settings, gamepadMap: { ...settings.gamepadMap, [action]: i } });
-            setRemapping(null);
-            return;
+          if (!pad.buttons[i]?.pressed) {
+            // Button released — it's now eligible for a fresh press.
+            heldAtStart.delete(i);
+            continue;
           }
+          if (heldAtStart.has(i)) continue; // still held from before remap
+          // Fresh rising edge — record this binding.
+          onChange({ ...settings, gamepadMap: { ...settings.gamepadMap, [action]: i } });
+          setRemapping(null);
+          return;
         }
       }
       requestAnimationFrame(tick);
@@ -158,6 +178,11 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     onDown: () => { if (!remapping) setFocus((f) => (f + 1) % rows.length); },
     onLeft:  () => adjust(-1),
     onRight: () => adjust(1),
+    // Disable the whole hook while a remap is active. The remapAction
+    // loop is the only thing that should observe pad input until the
+    // player has assigned a button — otherwise pressing B to bind
+    // would ALSO trigger the menu's cancel handler.
+    enabled: !remapping,
   });
 
   const Row = ({ row, i }: { row: RowDef; i: number }): JSX.Element => {
