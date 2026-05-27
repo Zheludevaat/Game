@@ -262,6 +262,9 @@ export interface MetaState {
   lastDailyDate?: number;
   /** Most-recent daily attempt records (cap 30, newest first). */
   dailyHistory?: DailyHistoryEntry[];
+  /** Best Boss Rush clear time in seconds. Set on a full eight-boss
+   *  clear; undefined if never cleared. Lower is better. */
+  bossRushBestSeconds?: number;
 }
 
 export interface DailyHistoryEntry {

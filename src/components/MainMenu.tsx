@@ -20,8 +20,13 @@ interface Props {
   /** Last archetype chosen, for archetype-flavoured idle lines. Null on a
    *  brand-new save. */
   lastArchetype: ArchetypeId | null;
+  /** True once the player has cleared the Ogdoad at least once. */
+  bossRushUnlocked: boolean;
+  /** Persistent best Boss Rush clear time in seconds. */
+  bossRushBestSeconds?: number;
   onNewRun: () => void;
   onDailyRun: () => void;
+  onBossRush: () => void;
   onContinue: () => void;
   onMeta: () => void;
   onSettings: () => void;
@@ -131,6 +136,7 @@ export function MainMenu(p: Props): JSX.Element {
   const items = [
     { onActivate: p.onNewRun },
     { onActivate: p.dailyAttemptedToday ? () => undefined : p.onDailyRun, disabled: p.dailyAttemptedToday },
+    { onActivate: p.bossRushUnlocked ? p.onBossRush : () => undefined, disabled: !p.bossRushUnlocked },
     { onActivate: p.resumeAvailable ? p.onContinue : () => undefined, disabled: !p.resumeAvailable },
     { onActivate: p.onCodex },
     { onActivate: p.onCinematics },
@@ -160,23 +166,37 @@ export function MainMenu(p: Props): JSX.Element {
             focused={focus === 1}
             badge={p.dailyAttemptedToday ? 'DONE' : p.dailyArchetypeName.split(' ').slice(-1)[0]}
           >
-            Daily Run {p.dailyAttemptedToday ? '' : ''}
+            Daily Run
           </PixelButton>
-          <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 2}>
+          <PixelButton
+            onClick={p.onBossRush}
+            disabled={!p.bossRushUnlocked}
+            focused={focus === 2}
+            badge={(() => {
+              if (!p.bossRushUnlocked) return 'LOCKED';
+              if (p.bossRushBestSeconds == null) return 'NEW';
+              const m = Math.floor(p.bossRushBestSeconds / 60);
+              const s = p.bossRushBestSeconds % 60;
+              return `${m}:${String(s).padStart(2, '0')}`;
+            })()}
+          >
+            Boss Rush {p.bossRushUnlocked ? '' : '(clear Ogdoad to unlock)'}
+          </PixelButton>
+          <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 3}>
             Continue {p.resumeAvailable ? '' : '(none)'}
           </PixelButton>
-          <PixelButton onClick={p.onCodex} focused={focus === 3} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
+          <PixelButton onClick={p.onCodex} focused={focus === 4} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
             Codex Hermeticum
           </PixelButton>
-          <PixelButton onClick={p.onCinematics} focused={focus === 4} badge="▶">
+          <PixelButton onClick={p.onCinematics} focused={focus === 5} badge="▶">
             Cinematics
           </PixelButton>
-          <PixelButton onClick={p.onMeta} focused={focus === 5} badge={`✦ ${p.essence}`}>
+          <PixelButton onClick={p.onMeta} focused={focus === 6} badge={`✦ ${p.essence}`}>
             Meta Progression
           </PixelButton>
-          <PixelButton onClick={p.onSettings} focused={focus === 6}>Settings</PixelButton>
-          <PixelButton onClick={p.onController} focused={focus === 7}>Controller Test</PixelButton>
-          <PixelButton onClick={p.onHowTo} focused={focus === 8}>How to Play</PixelButton>
+          <PixelButton onClick={p.onSettings} focused={focus === 7}>Settings</PixelButton>
+          <PixelButton onClick={p.onController} focused={focus === 8}>Controller Test</PixelButton>
+          <PixelButton onClick={p.onHowTo} focused={focus === 9}>How to Play</PixelButton>
         </div>
         <div className="main-menu-stats" style={{ marginTop: 18, fontSize: 11, letterSpacing: '0.3em', color: 'var(--teal)' }}>
           Best Floor: <span className="gold-text">{p.bestFloor}</span> &nbsp;·&nbsp; Essence: <span className="gold-text">{p.essence}</span>

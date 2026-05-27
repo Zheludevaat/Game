@@ -79,6 +79,9 @@ export function App(): JSX.Element {
    *  to meta.dailyHistory instead of meta.runHistory, and the Continue
    *  button stays disabled. */
   const dailyModeRef = useRef(false);
+  /** True while a Boss Rush run is in progress — game-over compares the
+   *  runTimer against meta.bossRushBestSeconds and saves the lower. */
+  const bossRushModeRef = useRef(false);
 
   // --- Loading screen timer ---
   // First-load goes through the Tabula opening film instead of straight to
@@ -212,16 +215,18 @@ export function App(): JSX.Element {
     };
   }, [screen]);
 
-  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; daily?: boolean }) => {
+  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; daily?: boolean; bossRush?: boolean }) => {
     saveLastArchetype(archetypeId);
     setLastArchetype(archetypeId);
     setSummary(null);
     dailyModeRef.current = !!opts?.daily;
+    bossRushModeRef.current = !!opts?.bossRush;
     // First time ever: gate through "The Gate Opens" cinematic, then
     // resume into the actual run on its onDone. Resume flow (opts.floor
     // > 1) skips the cinematic — that's a continuation, not a new run.
-    // Daily Runs also skip the cinematic to keep the timed attempt clean.
-    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1 && !opts?.daily;
+    // Daily Runs + Boss Rush also skip the cinematic to keep the timed
+    // attempt clean.
+    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1 && !opts?.daily && !opts?.bossRush;
     if (isFirstRun) {
       setPendingRunStart({ id: archetypeId, floor: opts?.floor, runSeed: opts?.runSeed });
       setScreen('newRunIntro');
@@ -233,7 +238,7 @@ export function App(): JSX.Element {
     // attempted fresh and can't be picked up mid-run from Continue.
     const runSeed = opts?.runSeed ?? Math.floor(Math.random() * 0xffffffff);
     const startingFloor = opts?.floor ?? 1;
-    if (!opts?.daily) {
+    if (!opts?.daily && !opts?.bossRush) {
       saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
       setResumeAvailable(true);
     } else {
@@ -309,6 +314,16 @@ export function App(): JSX.Element {
             pab[archetypeId] = Math.max(pab[archetypeId] ?? 0, s.floorReached);
             const newAchievements = evaluateAchievements(s, { ...m, perArchetypeBest: pab }, m.ascensionLevel ?? 0);
             const achievements = [...(m.achievements ?? []), ...newAchievements];
+            // Boss Rush: record a best-time if the run cleared. Skip
+            // writes for incomplete runs so a failed attempt doesn't
+            // shadow a real victory.
+            let bossRushBestSeconds = m.bossRushBestSeconds;
+            if (s.bossRush && s.bossRushCleared && (s.runTimerSeconds ?? Infinity) > 0) {
+              const t = Math.floor(s.runTimerSeconds ?? 0);
+              if (bossRushBestSeconds == null || t < bossRushBestSeconds) {
+                bossRushBestSeconds = t;
+              }
+            }
             return {
               ...m,
               runHistory: history,
@@ -316,17 +331,20 @@ export function App(): JSX.Element {
               achievements,
               dailyHistory,
               lastDailyDate,
+              bossRushBestSeconds,
             };
           });
           dailyModeRef.current = false;
+          bossRushModeRef.current = false;
           saveResume(null);
           setResumeAvailable(false);
           setScreen('gameOver');
         },
         onFloorChange: (n) => {
-          // Update resume floor checkpoint — skipped for Daily Runs so
-          // a player can't reload mid-run to retry the same seed.
-          if (!dailyModeRef.current) {
+          // Update resume floor checkpoint — skipped for Daily Runs +
+          // Boss Rush so a player can't reload mid-run to retry the
+          // same seed / shave seconds off their best time.
+          if (!dailyModeRef.current && !bossRushModeRef.current) {
             saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
           }
         },
@@ -364,6 +382,7 @@ export function App(): JSX.Element {
         reducedParticles: settings.reducedParticles,
         startingFloor,
         runSeed,
+        bossRushMode: !!opts?.bossRush,
       });
     }, 30);
   }, [meta, settings.reducedParticles]);
@@ -452,6 +471,8 @@ export function App(): JSX.Element {
             const day = Math.floor(Date.now() / 86_400_000);
             return ARCHETYPES[day % ARCHETYPES.length].name;
           })()}
+          bossRushUnlocked={(meta.ogdoadReached ?? 0) >= 1}
+          bossRushBestSeconds={meta.bossRushBestSeconds}
           onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
           onCinematics={() => setScreen('cinematics')}
           onNewRun={() => setScreen('archetype')}
@@ -459,6 +480,12 @@ export function App(): JSX.Element {
             const day = Math.floor(Date.now() / 86_400_000);
             const arch = ARCHETYPES[day % ARCHETYPES.length].id;
             startRun(arch, { runSeed: day, daily: true });
+          }}
+          onBossRush={() => {
+            // Boss Rush uses the most recent archetype the player ran,
+            // falling back to Magus on a brand-new save.
+            const arch = lastArchetype ?? 'magus';
+            startRun(arch, { bossRush: true });
           }}
           onContinue={() => {
             const r = loadResume();

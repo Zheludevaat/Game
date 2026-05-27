@@ -159,6 +159,15 @@ export interface RunSummary {
    *  Game Over screen can say "Slain by Selene, Warden of the Moon"
    *  instead of just the warden name. */
   deathSphereId?: SphereId;
+  /** Total elapsed run seconds at game-over. Drives Boss Rush best-time
+   *  bookkeeping and shows up on the Game Over screen. */
+  runTimerSeconds?: number;
+  /** True if this run was a Boss Rush attempt — the host uses this to
+   *  branch the post-run write into meta.bossRushBestSeconds. */
+  bossRush?: boolean;
+  /** True if a Boss Rush run cleared all seven Wardens (Selene through
+   *  Kronos) — drives the "new best time" check. */
+  bossRushCleared?: boolean;
 }
 
 interface Vec { x: number; y: number; }
@@ -317,6 +326,10 @@ export interface EngineConfig {
   meta: MetaState;
   reducedParticles?: boolean;
   runSeed?: number;
+  /** Boss Rush mode — start at floor 10, descend +10 each clear, full
+   *  heal between bosses, ends after Ogdoad (floor 80). Score is the
+   *  total elapsed runTimer captured on game-over. */
+  bossRushMode?: boolean;
 }
 
 const ROOM_MARGIN = 18;
@@ -496,6 +509,9 @@ export class GameEngine {
   /** visualKey of whatever last hurt the player — captured into
    *  RunSummary.deathCause when the player dies. Cleared on mount. */
   private lastDamageSource: string | null = null;
+  /** Boss Rush mode — descend +10 each clear, full heal between fights.
+   *  Set from EngineConfig.bossRushMode on mount. */
+  private bossRushMode = false;
 
   // Cached per-room prop placements — recomputed on enterRoom so the
   // deterministic layout stays stable across redraws of the same room.
@@ -562,6 +578,7 @@ export class GameEngine {
     this.meta = config.meta;
     this.archetype = getArchetype(config.archetypeId);
     this.runSeed = config.runSeed ?? Math.floor(Math.random() * 0xffffffff);
+    this.bossRushMode = !!config.bossRushMode;
 
     // Reset per-run summary fields
     this.summary.floorReached = config.startingFloor ?? 1;
@@ -603,7 +620,22 @@ export class GameEngine {
     this.summary.archetype = this.archetype;
 
     this.initPlayer();
-    this.goToFloor(config.startingFloor ?? 1);
+    // Boss Rush: jump straight to the first boss floor with a survival
+    // stat boost so the player isn't fighting Selene with floor-1 gear.
+    if (this.bossRushMode) {
+      const p = this.player;
+      p.attack += 22;
+      p.spellPower += 22;
+      p.maxHp += 60;
+      p.hp = p.maxHp;
+      p.maxMp += 40;
+      p.mp = p.maxMp;
+      p.armor += 2;
+      p.luck += 2;
+      this.goToFloor(10);
+    } else {
+      this.goToFloor(config.startingFloor ?? 1);
+    }
 
     this.running = true;
     this.paused = false;
@@ -1846,6 +1878,8 @@ export class GameEngine {
       this.cbs.onGameOver({
         ...this.summary,
         bestFloor: Math.max(this.summary.bestFloor, this.summary.floorReached),
+        runTimerSeconds: this.runTimer,
+        bossRush: this.bossRushMode,
       });
     }
   }
@@ -3879,7 +3913,39 @@ export class GameEngine {
 
   private descend(): void {
     this.floorTransition = { t: 0, duration: 0.6 };
-    this.goToFloor(this.floor.number + 1);
+    if (this.bossRushMode) {
+      // Final Warden defeated — Boss Rush is over, fire the
+      // game-over flow with a cleared flag so the host writes a
+      // best-time. The summary uses ogdoadReached=false because the
+      // mode skips the Eighth Sphere on purpose.
+      if (this.floor.number >= 70) {
+        this.bossRushFinish();
+        return;
+      }
+      // Boss-to-boss — skip the seven intermediate floors per Warden.
+      // Full heal between fights so each Warden is fresh combat.
+      const p = this.player;
+      p.hp = p.maxHp;
+      p.mp = p.maxMp;
+      this.goToFloor(this.floor.number + 10);
+    } else {
+      this.goToFloor(this.floor.number + 1);
+    }
+  }
+
+  /** End a successful Boss Rush — fire onGameOver with the cleared
+   *  flag set so the host can persist the best time. Called when the
+   *  player takes the stairs from floor 70 in boss-rush mode. */
+  private bossRushFinish(): void {
+    if (this.gameOverFired) return;
+    this.gameOverFired = true;
+    this.cbs.onGameOver({
+      ...this.summary,
+      bestFloor: Math.max(this.summary.bestFloor, this.summary.floorReached),
+      runTimerSeconds: this.runTimer,
+      bossRush: true,
+      bossRushCleared: true,
+    });
   }
 
   private updateCamera(dt: number): void {
