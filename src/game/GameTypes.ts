@@ -24,6 +24,22 @@ export interface ArchetypeDef {
     dashCooldown: number;
     manaRegen: number; // per second
   };
+  /** Signature ability — one per archetype, fires on the ultimate input. */
+  ultimate: UltimateDef;
+}
+
+export type UltimateId = 'wordOfPower' | 'lanternFlare' | 'astralStep';
+
+export interface UltimateDef {
+  id: UltimateId;
+  name: string;
+  glyph: string;
+  /** Seconds between casts. Tracked on PlayerState.ultimateCd. */
+  cooldown: number;
+  /** Short tooltip surfacing the effect — shown on the HUD ring + select screens. */
+  description: string;
+  /** Accent colour for the ring + particles. */
+  colour: string;
 }
 
 export type RelicId =

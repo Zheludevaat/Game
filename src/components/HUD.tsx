@@ -39,6 +39,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
         <PlayerStatusStrip status={hud.playerStatus} />
         <LoadoutStrip hud={hud} />
         <ConsumableStrip hud={hud} />
+        <UltimateIndicator hud={hud} />
       </div>
 
       <div className="hud-top-right">
@@ -277,6 +278,63 @@ function SynergyStrip({ synergies }: { synergies: HudSnapshot['synergies'] }): J
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function UltimateIndicator({ hud }: { hud: HudSnapshot }): JSX.Element {
+  const ready = hud.ultimateCdMax > 0
+    ? Math.max(0, 1 - hud.ultimateCd / hud.ultimateCdMax)
+    : 1;
+  const isReady = hud.ultimateCd <= 0.01;
+  const remaining = Math.max(0, Math.ceil(hud.ultimateCd));
+  return (
+    <div
+      title={`${hud.ultimateName} — ${isReady ? 'READY' : `${remaining}s`}`}
+      style={{
+        marginTop: 8,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      <div style={{
+        position: 'relative',
+        width: 30, height: 30,
+        border: `2px solid ${isReady ? hud.ultimateColour : '#3b265c'}`,
+        background: 'rgba(0,0,0,0.55)',
+        boxShadow: isReady ? `0 0 12px ${hud.ultimateColour}88` : 'none',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: isReady ? hud.ultimateColour : 'var(--bone)',
+        fontSize: 16,
+        opacity: isReady ? 1 : 0.6,
+      }}>
+        <span style={{ position: 'relative', zIndex: 2 }}>{hud.ultimateGlyph}</span>
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: `linear-gradient(to top, ${hud.ultimateColour}33 0%, ${hud.ultimateColour}33 ${ready * 100}%, transparent ${ready * 100}%)`,
+            zIndex: 1,
+          }}
+        />
+      </div>
+      <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--bone)' }}>
+        <div style={{ color: isReady ? hud.ultimateColour : 'var(--bone)' }}>
+          {hud.ultimateName.toUpperCase()}
+        </div>
+        <div style={{ opacity: 0.7 }}>
+          {(() => {
+            if (!isReady) return `${remaining}s`;
+            switch (hud.inputMethod) {
+              case 'touch':      return 'TAP ULT — READY';
+              case 'controller': return 'L STICK CLICK — READY';
+              default:           return '[V or F] READY';
+            }
+          })()}
+        </div>
+      </div>
     </div>
   );
 }

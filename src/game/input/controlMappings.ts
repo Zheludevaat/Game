@@ -8,7 +8,8 @@ export type ActionName =
   | 'cycleWeapon'
   | 'cycleSpell'
   | 'cycleConsumable'
-  | 'useConsumable';
+  | 'useConsumable'
+  | 'ultimate';
 
 export interface GamepadMap {
   attack: number;
@@ -22,6 +23,8 @@ export interface GamepadMap {
   /** Trigger pads — LT cycles the selected consumable, RT uses it. */
   cycleConsumable: number;
   useConsumable: number;
+  /** Stick click — fires the archetype's signature ultimate. */
+  ultimate: number;
   // D-pad
   dpadUp: number;
   dpadDown: number;
@@ -54,6 +57,7 @@ export const DEFAULT_GAMEPAD_MAP: GamepadMap = {
   cycleWeapon: 5,   // RB / R1 — cycles between known weapons
   cycleConsumable: 6, // LT / L2 — cycles between carried consumables
   useConsumable: 7,   // RT / R2 — uses the selected consumable
+  ultimate: 10,     // L Stick Click — archetype ultimate
   pause: 9,         // Start / Menu / +
   map: 8,           // Select / Share / −
   dpadUp: 12,
@@ -74,6 +78,7 @@ export const SWITCH_GAMEPAD_MAP: GamepadMap = {
   cycleWeapon: 5,   // R
   cycleConsumable: 6, // ZL
   useConsumable: 7,   // ZR
+  ultimate: 10,     // L Stick Click
   pause: 9,         // + (Plus)
   map: 8,           // − (Minus)
   dpadUp: 12,

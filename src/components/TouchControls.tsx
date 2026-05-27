@@ -117,6 +117,7 @@ export function TouchControls({ input }: Props): JSX.Element {
         {button('cycleSpell', '↻S')}
         {button('cycleConsumable', '↻I')}
         {button('useConsumable', 'USE I')}
+        {button('ultimate', 'ULT')}
       </div>
       <div className="touch-pause">
         {button('pause', '☰')}

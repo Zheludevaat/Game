@@ -93,6 +93,12 @@ export interface HudSnapshot {
   freeNextSpell: boolean;
   /** Earned relic synergies — HUD renders one badge per id. */
   synergies: SynergyId[];
+  /** Current / max archetype ultimate cooldown — drives the HUD ring. */
+  ultimateCd: number;
+  ultimateCdMax: number;
+  ultimateName: string;
+  ultimateGlyph: string;
+  ultimateColour: string;
   // For game over
   alive: boolean;
 }
@@ -195,6 +201,10 @@ interface PlayerState {
   /** Counter of coin / essence pickups consumed in this run — drives the
    *  Alchemical Mint synergy's every-12th relic drop. */
   pickupTally: number;
+  /** Seconds remaining on the archetype ultimate cooldown. Ready at 0. */
+  ultimateCd: number;
+  /** Max cooldown — copied from the archetype's ultimate.cooldown on mount. */
+  ultimateCdMax: number;
 }
 
 interface Enemy {
@@ -639,6 +649,8 @@ export class GameEngine {
       freeNextSpell: false,
       synergies: [],
       pickupTally: 0,
+      ultimateCd: 0,
+      ultimateCdMax: a.ultimate.cooldown,
     };
     this.tutorialStartPos = { x: this.player.pos.x, y: this.player.pos.y };
     this.grantRelic(a.startingRelic, true);
@@ -925,6 +937,158 @@ export class GameEngine {
         p.freeNextSpell = true;
         this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'ECHO', '#a4faf0');
         break;
+    }
+  }
+
+  /** Fire the archetype's signature ability. Resolves via archetype.ultimate.id
+   *  so each archetype gets a distinct move; the input handler already gates
+   *  on `ultimateCd <= 0`. Sets the cooldown after a successful cast. */
+  private useUltimate(): void {
+    const p = this.player;
+    const u = this.archetype.ultimate;
+    p.ultimateCd = p.ultimateCdMax;
+    audio.sfx('shrine');
+    this.spawnDamageNumber(p.pos.x, p.pos.y - 22, u.name.toUpperCase(), u.colour);
+    if (!this.reducedParticles) {
+      this.particles.burst(p.pos.x, p.pos.y - 6, 24, {
+        colour: u.colour, life: 0.7, maxLife: 0.7, drag: 0.86,
+      });
+    }
+    switch (u.id) {
+      case 'wordOfPower': {
+        // Six-bolt starburst — auto-aims the first three projectiles at
+        // the three nearest enemies, the rest fan radially. Each bolt
+        // is a player-owned violet projectile, pierces one, damage
+        // scaled off spellPower for parity with Magus's caster identity.
+        const sources = [...this.enemies]
+          .filter((e) => e.hp > 0)
+          .sort((a, b) => {
+            const da = Math.hypot(a.pos.x - p.pos.x, a.pos.y - p.pos.y);
+            const db = Math.hypot(b.pos.x - p.pos.x, b.pos.y - p.pos.y);
+            return da - db;
+          })
+          .slice(0, 3);
+        const dmg = Math.round(p.spellPower * p.damageMul * 1.8);
+        const baseSpeed = 200;
+        const baseLife = 1.4;
+        const aimedAngles = sources.map((e) => Math.atan2(e.pos.y - p.pos.y, e.pos.x - p.pos.x));
+        const allAngles = aimedAngles.slice();
+        // Pad up to 6 directions with evenly-spaced angles offset from
+        // the player's facing, so the salvo always reads as a full
+        // starburst even with no enemies in the room.
+        const base = Math.atan2(p.facing.y, p.facing.x);
+        let pad = 0;
+        while (allAngles.length < 6) {
+          const a = base + (pad * Math.PI * 2) / 6;
+          allAngles.push(a);
+          pad += 1;
+        }
+        for (const a of allAngles) {
+          this.projectiles.push({
+            id: nid(),
+            pos: { x: p.pos.x, y: p.pos.y - 4 },
+            vel: { x: Math.cos(a) * baseSpeed, y: Math.sin(a) * baseSpeed },
+            life: baseLife,
+            radius: 4,
+            damage: dmg,
+            fromPlayer: true,
+            pierce: 2,
+            homing: true,
+            colour: '#dac8ff',
+            trailColour: '#9b6cff',
+          });
+        }
+        // Big bright halo so the cast reads as significant.
+        if (!this.reducedParticles) {
+          for (let i = 0; i < 18; i++) {
+            const a = (i / 18) * Math.PI * 2;
+            this.particles.emit({
+              x: p.pos.x, y: p.pos.y - 4,
+              vx: Math.cos(a) * 160, vy: Math.sin(a) * 160,
+              life: 0.45, maxLife: 0.45, size: 1.6, colour: u.colour, drag: 0.8,
+            });
+          }
+        }
+        break;
+      }
+      case 'lanternFlare': {
+        // 90 px radial stun + tickle damage. Stuns for 1.5 s, soft burn
+        // for the brief flash. Reads as a defensive panic button.
+        const radius = 90;
+        const flareDmg = Math.round(p.attack * p.damageMul * 0.6);
+        for (const e of this.enemies) {
+          if (e.hp <= 0) continue;
+          const d = Math.hypot(e.pos.x - p.pos.x, e.pos.y - p.pos.y);
+          if (d > radius) continue;
+          applyStatusEffect(e, 'stun', this.timeAlive, { duration: 1.5 });
+          this.damageEnemy(e, flareDmg, {
+            x: e.pos.x - p.pos.x, y: e.pos.y - p.pos.y,
+          }, 80, { fromPlayer: true, canCrit: false });
+        }
+        // Expanding gold ring telegraphing the radius.
+        if (!this.reducedParticles) {
+          for (let i = 0; i < 24; i++) {
+            const a = (i / 24) * Math.PI * 2;
+            this.particles.emit({
+              x: p.pos.x, y: p.pos.y - 4,
+              vx: Math.cos(a) * 220, vy: Math.sin(a) * 220,
+              life: 0.55, maxLife: 0.55, size: 1.8, colour: u.colour, drag: 0.78,
+            });
+          }
+        }
+        this.camera.shakeT = Math.max(this.camera.shakeT, 0.2);
+        this.camera.shakeMag = Math.max(this.camera.shakeMag, 3.2);
+        break;
+      }
+      case 'astralStep': {
+        // Long teleport in the facing direction. Damages any enemy
+        // intersected along the line + grants i-frames for the step.
+        const dist = 80;
+        const fx = p.facing.x || 1;
+        const fy = p.facing.y;
+        const len = Math.hypot(fx, fy) || 1;
+        const ux = fx / len;
+        const uy = fy / len;
+        const startX = p.pos.x;
+        const startY = p.pos.y;
+        const endX = clamp(p.pos.x + ux * dist, ROOM_MARGIN + 4, ROOM_W - ROOM_MARGIN - 4);
+        const endY = clamp(p.pos.y + uy * dist, ROOM_MARGIN + 4, ROOM_H - ROOM_MARGIN - 4);
+        // Line-segment vs circle for each enemy.
+        const stepDmg = Math.round(p.attack * p.damageMul * 1.6);
+        const lineDx = endX - startX;
+        const lineDy = endY - startY;
+        const lineLen2 = lineDx * lineDx + lineDy * lineDy || 1;
+        for (const e of this.enemies) {
+          if (e.hp <= 0) continue;
+          // Projection of enemy onto the line
+          const t = Math.max(0, Math.min(1, ((e.pos.x - startX) * lineDx + (e.pos.y - startY) * lineDy) / lineLen2));
+          const px = startX + t * lineDx;
+          const py = startY + t * lineDy;
+          const d = Math.hypot(e.pos.x - px, e.pos.y - py);
+          if (d < e.radius + 12) {
+            this.damageEnemy(e, stepDmg, { x: ux, y: uy }, 100, { fromPlayer: true });
+          }
+        }
+        p.pos.x = endX;
+        p.pos.y = endY;
+        p.iframes = Math.max(p.iframes, 0.4);
+        // Cyan after-streak from start to end.
+        if (!this.reducedParticles) {
+          const steps = 14;
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            this.particles.emit({
+              x: startX + lineDx * t,
+              y: startY + lineDy * t - 4,
+              vx: 0, vy: -8,
+              life: 0.45, maxLife: 0.45, size: 1.8, colour: u.colour, drag: 0.88,
+            });
+          }
+        }
+        this.camera.shakeT = Math.max(this.camera.shakeT, 0.15);
+        this.camera.shakeMag = Math.max(this.camera.shakeMag, 2.4);
+        break;
+      }
     }
   }
 
@@ -1350,6 +1514,7 @@ export class GameEngine {
     p.spellTimer = Math.max(0, p.spellTimer - dt);
     p.attackCooldown = Math.max(0, p.attackCooldown - dt);
     p.spellCooldown = Math.max(0, p.spellCooldown - dt);
+    p.ultimateCd = Math.max(0, p.ultimateCd - dt);
     p.mp = Math.min(p.maxMp, p.mp + p.manaRegen * dt);
     if (this.comboPulse > 0) this.comboPulse = Math.max(0, this.comboPulse - dt);
     if (this.critFlashT > 0) this.critFlashT = Math.max(0, this.critFlashT - dt);
@@ -1550,6 +1715,7 @@ export class GameEngine {
     }
     if (s.cycleConsumablePressed) this.cycleConsumable();
     if (s.useConsumablePressed)   this.useSelectedConsumable();
+    if (s.ultimatePressed && p.ultimateCd <= 0) this.useUltimate();
 
     // Death check
     if (p.hp <= 0) this.tryRevive();
@@ -5158,6 +5324,11 @@ export class GameEngine {
       consumableIdx: p.consumableIdx,
       freeNextSpell: p.freeNextSpell,
       synergies: p.synergies.slice(),
+      ultimateCd: p.ultimateCd,
+      ultimateCdMax: p.ultimateCdMax || 1,
+      ultimateName: this.archetype.ultimate.name,
+      ultimateGlyph: this.archetype.ultimate.glyph,
+      ultimateColour: this.archetype.ultimate.colour,
       alive: !this.dead,
     });
   }

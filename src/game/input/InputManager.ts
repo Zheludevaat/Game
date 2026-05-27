@@ -72,6 +72,7 @@ export interface InputState {
   cycleSpellPressed: boolean;
   cycleConsumablePressed: boolean;
   useConsumablePressed: boolean;
+  ultimatePressed: boolean;
   uiUp: boolean;
   uiDown: boolean;
   uiLeft: boolean;
@@ -342,6 +343,7 @@ export class InputManager {
       interactPressed: false, pausePressed: false, mapPressed: false,
       cycleWeaponPressed: false, cycleSpellPressed: false,
       cycleConsumablePressed: false, useConsumablePressed: false,
+      ultimatePressed: false,
       uiUp: false, uiDown: false, uiLeft: false, uiRight: false,
       uiConfirm: false, uiCancel: false,
     };
@@ -372,6 +374,7 @@ export class InputManager {
     s.cycleSpellPressed  ||= this.keysPressedThisFrame.has('KeyR');
     s.cycleConsumablePressed ||= this.keysPressedThisFrame.has('KeyG');
     s.useConsumablePressed   ||= this.keysPressedThisFrame.has('KeyH');
+    s.ultimatePressed        ||= this.keysPressedThisFrame.has('KeyV') || this.keysPressedThisFrame.has('KeyF');
 
     s.uiUp     ||= this.keysPressedThisFrame.has('ArrowUp')    || this.keysPressedThisFrame.has('KeyW');
     s.uiDown   ||= this.keysPressedThisFrame.has('ArrowDown')  || this.keysPressedThisFrame.has('KeyS');
@@ -403,6 +406,7 @@ export class InputManager {
       s.cycleSpellPressed  ||= !!this.touchPressedThisFrame['cycleSpell'];
       s.cycleConsumablePressed ||= !!this.touchPressedThisFrame['cycleConsumable'];
       s.useConsumablePressed   ||= !!this.touchPressedThisFrame['useConsumable'];
+      s.ultimatePressed        ||= !!this.touchPressedThisFrame['ultimate'];
     }
 
     // Gamepad
@@ -455,6 +459,7 @@ export class InputManager {
       s.cycleSpellPressed   ||= padFired('cycleSpell',  m.cycleSpell,  this.padPressed(m.cycleSpell));
       s.cycleConsumablePressed ||= padFired('cycleConsumable', m.cycleConsumable, this.padPressed(m.cycleConsumable));
       s.useConsumablePressed   ||= padFired('useConsumable',   m.useConsumable,   this.padPressed(m.useConsumable));
+      s.ultimatePressed        ||= padFired('ultimate',        m.ultimate,        this.padPressed(m.ultimate));
 
       s.uiUp     ||= this.padPressed(m.dpadUp);
       s.uiDown   ||= this.padPressed(m.dpadDown);

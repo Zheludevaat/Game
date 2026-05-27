@@ -20,6 +20,14 @@ export const ARCHETYPES: ArchetypeDef[] = [
       dashCooldown: 0.9,
       manaRegen: 4,
     },
+    ultimate: {
+      id: 'wordOfPower',
+      name: 'Word of Power',
+      glyph: '☿',
+      cooldown: 14,
+      colour: '#9b6cff',
+      description: 'A six-bolt starburst that seeks the nearest enemies.',
+    },
   },
   {
     id: 'hermit',
@@ -40,6 +48,14 @@ export const ARCHETYPES: ArchetypeDef[] = [
       dashCooldown: 1.1,
       manaRegen: 2,
     },
+    ultimate: {
+      id: 'lanternFlare',
+      name: 'Lantern Flare',
+      glyph: '✶',
+      cooldown: 18,
+      colour: '#ffe6a3',
+      description: 'A radial flare stuns every enemy within ninety paces.',
+    },
   },
   {
     id: 'star',
@@ -59,6 +75,14 @@ export const ARCHETYPES: ArchetypeDef[] = [
       luck: 3,
       dashCooldown: 0.7,
       manaRegen: 6,
+    },
+    ultimate: {
+      id: 'astralStep',
+      name: 'Astral Step',
+      glyph: '✦',
+      cooldown: 12,
+      colour: '#a4faf0',
+      description: 'A long-range step that cleaves every enemy passed through.',
     },
   },
 ];

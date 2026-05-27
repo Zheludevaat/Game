@@ -53,6 +53,15 @@ export function ArchetypeSelect({ onSelect, onBack, lastArchetype }: Props): JSX
                 </div>
                 <div className="help-text" style={{ fontSize: 10 }}>{RELICS[a.startingRelic].description}</div>
               </div>
+              <div className="pixel-divider" />
+              <div style={{ fontSize: 11, letterSpacing: '0.12em' }}>
+                <span className="violet-text">Signature Ability</span>
+                <div style={{ fontSize: 12, color: a.ultimate.colour }}>
+                  {a.ultimate.glyph} {a.ultimate.name}
+                </div>
+                <div className="help-text" style={{ fontSize: 10 }}>{a.ultimate.description}</div>
+                <div className="help-text" style={{ fontSize: 9, opacity: 0.7 }}>Cooldown {a.ultimate.cooldown}s</div>
+              </div>
               <div style={{ marginTop: 'auto' }}>
                 <PixelButton onClick={() => onSelect(a.id)} focused={focus === i}>Begin</PixelButton>
               </div>
