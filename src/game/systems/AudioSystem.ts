@@ -42,6 +42,34 @@ const SPHERE_TOP_VOICE: Record<string, { freq: number; type: OscillatorType; gai
   ogdoad:  { freq: 528, type: 'sine',     gain: 0.040 }, // bright octave above all
 };
 
+// Four-note arpeggios played on floor entry — gives each sphere a
+// theme cue the player can hum back. Frequencies are loosely tonal to
+// the sphere's TOP_VOICE so the stinger sits atop the drone.
+const SPHERE_FLOOR_ARP: Record<string, number[]> = {
+  moon:    [440, 523, 659, 880],   // A4 - C5 - E5 - A5  (pale silver)
+  mercury: [330, 392, 494, 659],   // E4 - G4 - B4 - E5  (perfect 4th rise)
+  venus:   [264, 330, 396, 528],   // C4 - E4 - G4 - C5  (warm major)
+  sun:     [220, 277, 330, 440],   // A3 - C#4 - E4 - A5 (bright major-7)
+  mars:    [110, 165, 220, 277],   // A2 - E3 - A3 - C#4 (dissonant ascent)
+  jupiter: [82,  110, 165, 196],   // E2 - A2 - E3 - G3  (deep brass)
+  saturn:  [55,  82,  110, 138],   // A1 - E2 - A2 - C#3 (cold black)
+  ogdoad:  [528, 660, 792, 1056],  // C5 - E5 - G5 - C6  (radiant)
+};
+
+// Boss stinger — a low rumble that swells into a dissonant pair as
+// the player crosses the boss-room threshold. Tritone interval keyed
+// to the sphere, drag 1.4 s total.
+const SPHERE_BOSS_STINGER: Record<string, { low: number; high: number }> = {
+  moon:    { low: 110, high: 156 }, // A2 + Eb3
+  mercury: { low: 130, high: 184 }, // C3 + F#3
+  venus:   { low: 146, high: 207 }, // D3 + G#3
+  sun:     { low: 165, high: 233 }, // E3 + A#3
+  mars:    { low: 87,  high: 123 }, // F2 + B2
+  jupiter: { low: 73,  high: 104 }, // D2 + G#2
+  saturn:  { low: 55,  high: 78  }, // A1 + Eb2
+  ogdoad:  { low: 220, high: 311 }, // A3 + Eb4 (bright but unresolved)
+};
+
 export class AudioSystem {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -190,6 +218,69 @@ export class AudioSystem {
         } catch { /* */ }
       }
     };
+  }
+
+  /** Per-sphere four-note arpeggio scheduled when the player enters a
+   *  new floor. Reuses sfxGain so the stinger sits above the ambient
+   *  drone without competing with cinematic pads. */
+  playFloorStinger(sphereId?: string): void {
+    if (!this.unlocked || !this.ctx) return;
+    const arp = (sphereId ? SPHERE_FLOOR_ARP[sphereId] : undefined) ?? SPHERE_FLOOR_ARP.moon;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const stepMs = 0.16;
+    arp.forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = freq;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      o.connect(g);
+      g.connect(this.sfxGain);
+      const at = now + i * stepMs;
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(0.10 - i * 0.012, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + stepMs * 1.4);
+      o.start(at);
+      o.stop(at + stepMs * 1.5);
+    });
+  }
+
+  /** Sphere-keyed two-voice stinger played at the moment the player
+   *  enters a boss room. A low rumble + dissonant high voice swell
+   *  together for 1.4 s, dropping straight into the bossWarn one-shot. */
+  playBossStinger(sphereId?: string): void {
+    if (!this.unlocked || !this.ctx) return;
+    const def = (sphereId ? SPHERE_BOSS_STINGER[sphereId] : undefined) ?? SPHERE_BOSS_STINGER.moon;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const dur = 1.4;
+    // Low rumble — sawtooth body
+    const lo = ctx.createOscillator();
+    lo.type = 'sawtooth';
+    lo.frequency.value = def.low * 0.5;
+    const loG = ctx.createGain();
+    loG.gain.value = 0;
+    loG.gain.setValueAtTime(0, now);
+    loG.gain.linearRampToValueAtTime(0.22, now + dur * 0.4);
+    loG.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    lo.connect(loG);
+    loG.connect(this.sfxGain);
+    lo.start(now);
+    lo.stop(now + dur + 0.1);
+    // High voice — square dissonance
+    const hi = ctx.createOscillator();
+    hi.type = 'square';
+    hi.frequency.value = def.high;
+    const hiG = ctx.createGain();
+    hiG.gain.value = 0;
+    hiG.gain.setValueAtTime(0, now + 0.15);
+    hiG.gain.linearRampToValueAtTime(0.10, now + dur * 0.55);
+    hiG.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    hi.connect(hiG);
+    hiG.connect(this.sfxGain);
+    hi.start(now + 0.15);
+    hi.stop(now + dur + 0.1);
   }
 
   /** Quick attack-decay chime used as a beat-advance cue inside films. */

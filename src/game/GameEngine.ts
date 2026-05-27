@@ -1211,6 +1211,9 @@ export class GameEngine {
     audio.stopAmbience();
     audio.startDungeonAmbience(sph.id);
     audio.sfx('descend');
+    // Per-sphere four-note stinger so each new floor opens with a
+    // theme cue, not just the descend whoosh.
+    audio.playFloorStinger(sph.id);
   }
 
   private enterRoom(room: Room, entryPos: Vec): void {
@@ -1248,6 +1251,9 @@ export class GameEngine {
     this.camera.y = this.cameraDest.y;
     if (room.type === 'boss') {
       audio.sfx('bossWarn');
+      // Sphere-keyed two-voice stinger plays alongside the bossWarn —
+      // gives each Warden's arrival its own tonal signature.
+      audio.playBossStinger(sphereForFloor(this.floor.number).id);
       this.bossBannerTimer = 2.2;
       this.camera.shakeT = 0.8;
       this.camera.shakeMag = 5;
