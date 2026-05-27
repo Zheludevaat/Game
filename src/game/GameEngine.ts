@@ -3743,58 +3743,7 @@ export class GameEngine {
       this.timeAlive + 0.06,
       Math.max(this.hitPauseUntil, this.timeAlive + pauseDur),
     );
-    if (!this.reducedParticles) {
-      const accent = sphereForFloor(this.floor.number).accent;
-      // Red gore sparkle — visceral "this enemy is wounded" cue.
-      for (let i = 0; i < 4; i++) {
-        this.particles.emit({
-          x: e.pos.x, y: e.pos.y,
-          vx: (Math.random() - 0.5) * 80, vy: (Math.random() - 0.5) * 80,
-          life: 0.3, maxLife: 0.3, size: 1.5, colour: '#e23a4a', drag: 0.9,
-        });
-      }
-      // Sphere-accent glint sparkles — every hit reads as belonging to
-      // the current floor's hue, layered over the gore so the room
-      // theme bleeds into combat feedback.
-      for (let i = 0; i < 4; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const sp = 60 + Math.random() * 40;
-        this.particles.emit({
-          x: e.pos.x, y: e.pos.y,
-          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-          life: 0.28, maxLife: 0.28, size: 1.2, colour: accent, drag: 0.88,
-        });
-      }
-      // Impact ring — 8 small particles flung radially outward from
-      // the strike point, giving every hit a brief expanding flash.
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        const sp = 110;
-        this.particles.emit({
-          x: e.pos.x, y: e.pos.y,
-          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-          life: 0.18, maxLife: 0.18, size: 1.4, colour: '#ffffff', drag: 0.78,
-        });
-      }
-      // Knockback dust — "kicked up" at the actual point of impact,
-      // launched perpendicular to the knockback direction (sideways
-      // splash, not straight back along the punch axis). Tinted with
-      // the sphere accent so the dust reads as belonging to the room.
-      if (knockStrength > 60) {
-        // Perpendicular unit vectors: rotate (nx, ny) by ±90°
-        const perpX = -ny;
-        const perpY = nx;
-        for (let i = 0; i < 4; i++) {
-          const side = i % 2 === 0 ? 1 : -1;
-          this.particles.emit({
-            x: prevX, y: prevY,
-            vx: perpX * side * (30 + Math.random() * 30) - nx * 10,
-            vy: perpY * side * (30 + Math.random() * 30) - ny * 10,
-            life: 0.32, maxLife: 0.32, size: 1.3, colour: accent, drag: 0.86,
-          });
-        }
-      }
-    }
+    this.spawnHitFx(e.pos.x, e.pos.y, prevX, prevY, nx, ny, knockStrength);
 
     // Status application — roll once per hit per source.
     if (fromPlayer && opts?.appliesStatus && e.hp > 0) {
@@ -3825,6 +3774,68 @@ export class GameEngine {
       this.bumpCombo();
     }
     return { isCrit, killed: e.hp <= 0 };
+  }
+
+  /** Per-hit particle juice — gore sparkle, sphere-accent glints, white
+   *  impact ring, plus side-splash dust on heavy knockbacks. Lifted out
+   *  of damageEnemy's body so the damage path reads as logic; the
+   *  visual concern lives here. Gated by reducedParticles. */
+  private spawnHitFx(
+    hx: number, hy: number,
+    prevX: number, prevY: number,
+    nx: number, ny: number,
+    knockStrength: number,
+  ): void {
+    if (this.reducedParticles) return;
+    const accent = sphereForFloor(this.floor.number).accent;
+    // Red gore sparkle — visceral "this enemy is wounded" cue.
+    for (let i = 0; i < 4; i++) {
+      this.particles.emit({
+        x: hx, y: hy,
+        vx: (Math.random() - 0.5) * 80, vy: (Math.random() - 0.5) * 80,
+        life: 0.3, maxLife: 0.3, size: 1.5, colour: '#e23a4a', drag: 0.9,
+      });
+    }
+    // Sphere-accent glint sparkles — every hit reads as belonging to the
+    // current floor's hue, layered over the gore so the room theme
+    // bleeds into combat feedback.
+    for (let i = 0; i < 4; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random() * 40;
+      this.particles.emit({
+        x: hx, y: hy,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.28, maxLife: 0.28, size: 1.2, colour: accent, drag: 0.88,
+      });
+    }
+    // Impact ring — 8 small particles flung radially outward from the
+    // strike point, giving every hit a brief expanding flash.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const sp = 110;
+      this.particles.emit({
+        x: hx, y: hy,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.18, maxLife: 0.18, size: 1.4, colour: '#ffffff', drag: 0.78,
+      });
+    }
+    // Knockback dust — "kicked up" at the original (pre-knockback) pos,
+    // launched perpendicular to the knockback direction (sideways
+    // splash, not straight back along the punch axis). Tinted with the
+    // sphere accent so the dust reads as belonging to the room.
+    if (knockStrength > 60) {
+      const perpX = -ny;
+      const perpY = nx;
+      for (let i = 0; i < 4; i++) {
+        const side = i % 2 === 0 ? 1 : -1;
+        this.particles.emit({
+          x: prevX, y: prevY,
+          vx: perpX * side * (30 + Math.random() * 30) - nx * 10,
+          vy: perpY * side * (30 + Math.random() * 30) - ny * 10,
+          life: 0.32, maxLife: 0.32, size: 1.3, colour: accent, drag: 0.86,
+        });
+      }
+    }
   }
 
   private bumpCombo(): void {
