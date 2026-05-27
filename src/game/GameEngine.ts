@@ -37,6 +37,7 @@ import {
   BOSS_RUSH_BOOST, MAGNET_RADIUS, HIT_PAUSE,
   ULTIMATE_DAMAGE_MUL, SYNERGY, RELIC,
 } from './data/balance';
+import { DAMAGE_COLOURS } from './data/uiColours';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
 import {
@@ -866,7 +867,7 @@ export class GameEngine {
         this.player.mp = this.player.maxMp;
       }
       audio.sfx('synergy');
-      this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 22, '✦ COMBINATION ✦', '#ffe6a3');
+      this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 22, '✦ COMBINATION ✦', DAMAGE_COLOURS.crit);
       this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 12, def.name, def.colour);
       if (!this.reducedParticles) {
         this.particles.burst(this.player.pos.x, this.player.pos.y - 8, 28, {
@@ -935,7 +936,7 @@ export class GameEngine {
     this.player.weaponIdx = this.player.weapons.length - 1;
     if (!this.summary.weaponsFound.includes(id)) this.summary.weaponsFound.push(id);
     const w = WEAPONS[id];
-    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, w.name, '#f4d27a');
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, w.name, DAMAGE_COLOURS.weapon);
     this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 18, {
       colour: w.swingColour, life: 0.8, maxLife: 0.8, drag: 0.85,
     });
@@ -962,8 +963,8 @@ export class GameEngine {
     this.meta.unlockedCodex = [...this.meta.unlockedCodex, id];
     this.cbs.onCodexUnlock?.(id);
     // Floating revelation
-    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 22, 'REVELATION', '#ffe6a3');
-    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 12, entry.title, '#9b6cff');
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 22, 'REVELATION', DAMAGE_COLOURS.crit);
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 12, entry.title, DAMAGE_COLOURS.spell);
     this.particles.burst(this.player.pos.x, this.player.pos.y - 8, 22, {
       colour: '#ffe6a3', life: 1.0, maxLife: 1.0, drag: 0.88,
     });
@@ -976,7 +977,7 @@ export class GameEngine {
     this.player.spellIdx = this.player.spells.length - 1;
     if (!this.summary.spellsFound.includes(id)) this.summary.spellsFound.push(id);
     const sp = SPELLS[id];
-    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, sp.name, '#9b6cff');
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, sp.name, DAMAGE_COLOURS.spell);
     this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 18, {
       colour: sp.projColour, life: 0.8, maxLife: 0.8, drag: 0.85,
     });
@@ -1054,13 +1055,13 @@ export class GameEngine {
         break;
       case 'manaPhial':
         p.mp = Math.min(p.maxMp, p.mp + 30);
-        this.spawnDamageNumber(p.pos.x, p.pos.y - 8, '+30 MP', '#9b6cff');
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 8, '+30 MP', DAMAGE_COLOURS.spell);
         break;
       case 'cleansingSalt': {
         // Drop every debuff (keep shield/regen if already up).
         p.status = p.status.filter((s) => s.kind === 'shield' || s.kind === 'regen');
         applyStatusEffect(p, 'shield', this.timeAlive, { duration: 4, magnitude: 12 });
-        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'CLEANSED', '#6cf6e5');
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'CLEANSED', DAMAGE_COLOURS.heal);
         break;
       }
       case 'emberBomb': {
@@ -1093,7 +1094,7 @@ export class GameEngine {
       }
       case 'hourglassSand': {
         this.timeStopUntil = Math.max(this.timeStopUntil, this.timeAlive + 1.5);
-        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'TIME STOP', '#ffe6a3');
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'TIME STOP', DAMAGE_COLOURS.crit);
         // Halo ring radiating outward.
         if (!this.reducedParticles) {
           for (let i = 0; i < 14; i++) {
@@ -1109,7 +1110,7 @@ export class GameEngine {
       }
       case 'echoCharm':
         p.freeNextSpell = true;
-        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'ECHO', '#a4faf0');
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'ECHO', DAMAGE_COLOURS.echo);
         break;
     }
   }
@@ -1978,13 +1979,13 @@ export class GameEngine {
       p.weaponIdx = (p.weaponIdx + 1) % p.weapons.length;
       audio.sfx('pickup');
       const w = WEAPONS[p.weapons[p.weaponIdx]];
-      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, w.name, '#f4d27a');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, w.name, DAMAGE_COLOURS.weapon);
     }
     if (s.cycleSpellPressed && p.spells.length > 1) {
       p.spellIdx = (p.spellIdx + 1) % p.spells.length;
       audio.sfx('pickup');
       const sp = SPELLS[p.spells[p.spellIdx]];
-      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, sp.name, '#9b6cff');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 16, sp.name, DAMAGE_COLOURS.spell);
     }
     if (s.cycleConsumablePressed) this.cycleConsumable();
     if (s.useConsumablePressed)   this.useSelectedConsumable();
@@ -2004,7 +2005,7 @@ export class GameEngine {
       if (this.hasSynergy('crownedVessel')) p.mp = p.maxMp;
       p.iframes = 1.4;
       this.particles.burst(p.pos.x, p.pos.y, 40, { colour: '#ffd97a', life: 1.2, maxLife: 1.2 });
-      this.spawnDamageNumber(p.pos.x, p.pos.y, '+REVIVE', '#ffd97a');
+      this.spawnDamageNumber(p.pos.x, p.pos.y, '+REVIVE', DAMAGE_COLOURS.revive);
       audio.sfx('shrine');
       return;
     }
@@ -2415,7 +2416,7 @@ export class GameEngine {
           const keyChance = this.hasSynergy('cartographersKey') ? 1.0 : RELIC.keyOfTheGateChance;
           const consume = !(p.relics.includes('keyOfTheGate') && Math.random() < keyChance);
           if (p.keys <= 0) {
-            this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'LOCKED', '#e23a4a');
+            this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'LOCKED', DAMAGE_COLOURS.error);
             return;
           }
           if (consume) p.keys -= 1;
@@ -2457,7 +2458,7 @@ export class GameEngine {
       room.type === 'exit' ||
       (room.type === 'sanctuary' && room.sanctuaryNpcId === 'lampwright')
     ) {
-      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'TOO FAR', '#9b6cff');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'TOO FAR', DAMAGE_COLOURS.spell);
     }
   }
 
@@ -2470,13 +2471,13 @@ export class GameEngine {
     if (!ware) return;
     const p = this.player;
     if (p.coins < ware.cost) {
-      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'NOT ENOUGH', '#e23a4a');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'NOT ENOUGH', DAMAGE_COLOURS.error);
       return;
     }
     // Inventory check — refuse the sale if the player already has
     // max stacks of this consumable so the player can't waste coins.
     if (!this.canAcceptConsumable(ware.consumableId)) {
-      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'FULL', '#9b6cff');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'FULL', DAMAGE_COLOURS.spell);
       return;
     }
     p.coins -= ware.cost;
@@ -2633,7 +2634,7 @@ export class GameEngine {
       pz.failed = true;
       const p = this.player;
       p.essence = Math.max(0, p.essence - 5);
-      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, '−5 ✦', '#e23a4a');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 12, '−5 ✦', DAMAGE_COLOURS.error);
       audio.sfx('playerHit');
       this.currentRoom.shrineUsed = true;
       this.puzzleHoldTimer = 0.6;
@@ -2649,7 +2650,7 @@ export class GameEngine {
       } else {
         // Pool exhausted — drop 20 essence as a thank-you.
         p.essence += 20;
-        this.spawnDamageNumber(p.pos.x, p.pos.y - 12, '+20 ✦', '#ffe6a3');
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 12, '+20 ✦', DAMAGE_COLOURS.crit);
       }
       audio.sfx('shrine');
       this.particles.burst(p.pos.x, p.pos.y - 6, 32, {
@@ -2755,7 +2756,7 @@ export class GameEngine {
       if (dotDmg > 0) {
         e.hp -= dotDmg;
         if (Math.round(dotDmg) > 0) {
-          this.spawnDamageNumber(e.pos.x + (Math.random() - 0.5) * 6, e.pos.y - 6, `${Math.round(dotDmg)}`, '#ff7a3a');
+          this.spawnDamageNumber(e.pos.x + (Math.random() - 0.5) * 6, e.pos.y - 6, `${Math.round(dotDmg)}`, DAMAGE_COLOURS.burn);
         }
         if (e.hp <= 0) { this.killEnemy(e, i); continue; }
       }
@@ -2878,7 +2879,7 @@ export class GameEngine {
               const dd = Math.hypot(ally.pos.x - e.pos.x, ally.pos.y - e.pos.y);
               if (dd < auraR) {
                 ally.hp = Math.min(ally.maxHp, ally.hp + 4);
-                this.spawnDamageNumber(ally.pos.x, ally.pos.y - 8, '+4', '#ffe6a3');
+                this.spawnDamageNumber(ally.pos.x, ally.pos.y - 8, '+4', DAMAGE_COLOURS.crit);
                 healed++;
               }
             }
@@ -3645,7 +3646,7 @@ export class GameEngine {
     const before = this.player.hp;
     this.player.hp = Math.min(this.player.maxHp, this.player.hp + n);
     const delta = this.player.hp - before;
-    if (delta > 0) this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 8, `+${delta}`, '#6cf6e5');
+    if (delta > 0) this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 8, `+${delta}`, DAMAGE_COLOURS.heal);
   }
 
   private damageEnemy(
@@ -3848,7 +3849,7 @@ export class GameEngine {
     p.hp -= dmg;
     p.flash = Math.max(p.flash, 0.08);
     this.lastDamageSource = source;
-    this.spawnDamageNumber(p.pos.x + (Math.random() - 0.5) * 6, p.pos.y - 8, `${dmg}`, '#ff7a3a');
+    this.spawnDamageNumber(p.pos.x + (Math.random() - 0.5) * 6, p.pos.y - 8, `${dmg}`, DAMAGE_COLOURS.burn);
     // Audio feedback for stacking DoT — throttled to one play per
     // half-second so a 3-stack burn doesn't fire continuously.
     if (this.timeAlive - this.lastDotTickSfx > 0.5) {
@@ -3884,7 +3885,7 @@ export class GameEngine {
         });
       }
     }
-    this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'PARRY', '#ffe6a3');
+    this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'PARRY', DAMAGE_COLOURS.crit);
     p.iframes = Math.max(p.iframes, 0.3);
     this.camera.shakeT = Math.max(this.camera.shakeT, 0.22);
     this.camera.shakeMag = Math.max(this.camera.shakeMag, 3.5);
@@ -3929,7 +3930,7 @@ export class GameEngine {
     // Shield absorbs first; if anything punches through, armor reduces it.
     const through = absorbWithShield(p, raw);
     if (through <= 0) {
-      this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'SHIELD', '#6cf6e5');
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'SHIELD', DAMAGE_COLOURS.heal);
       if (!this.reducedParticles) {
         this.particles.burst(p.pos.x, p.pos.y - 4, 10, {
           colour: '#6cf6e5', life: 0.4, maxLife: 0.4, drag: 0.86,
@@ -3954,7 +3955,7 @@ export class GameEngine {
     this.camera.shakeT = Math.max(this.camera.shakeT, 0.30 + dmgFrac * 0.25);
     this.camera.shakeMag = Math.max(this.camera.shakeMag, 3 + dmgFrac * 4);
     audio.sfx('playerHit');
-    this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `${dmg}`, '#e23a4a');
+    this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `${dmg}`, DAMAGE_COLOURS.error);
     // Visual response — sphere-tinted crimson burst at the player so
     // taking damage reads as an EVENT, not just a number popping. Mirror
     // of the damageEnemy burst on the inverse side of the exchange.
@@ -4097,7 +4098,7 @@ export class GameEngine {
             pr.colour = '#cdf6ff';
             pr.trailColour = '#6cf6e5';
             pr.damage *= 2;
-            this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'REFLECT', '#cdf6ff');
+            this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'REFLECT', DAMAGE_COLOURS.reflect);
             if (!this.reducedParticles) {
               this.particles.burst(pr.pos.x, pr.pos.y, 10, {
                 colour: '#cdf6ff', life: 0.4, maxLife: 0.4, drag: 0.86,
@@ -4196,7 +4197,7 @@ export class GameEngine {
             pos: { x: p.pos.x + 14, y: p.pos.y - 6 },
             kind: 'relic', value: 0, relic: id, life: 24,
           });
-          this.spawnDamageNumber(p.pos.x, p.pos.y - 18, 'MINT', '#ffe6a3');
+          this.spawnDamageNumber(p.pos.x, p.pos.y - 18, 'MINT', DAMAGE_COLOURS.crit);
         }
       }
     }
@@ -4207,30 +4208,30 @@ export class GameEngine {
           const ess = Math.max(1, Math.round(pk.value / 3 * essBonus));
           p.essence += ess;
           this.summary.essenceCollected += ess;
-          this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${ess}✦`, '#9b6cff');
+          this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${ess}✦`, DAMAGE_COLOURS.spell);
         } else {
           p.coins += pk.value;
           this.summary.coinsCollected += pk.value;
-          if (pk.value >= 3) this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${pk.value}`, '#f4d27a');
+          if (pk.value >= 3) this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${pk.value}`, DAMAGE_COLOURS.weapon);
         }
         break;
       case 'essence': {
         const gained = Math.max(1, Math.round(pk.value * essBonus));
         p.essence += gained;
         this.summary.essenceCollected += gained;
-        if (gained >= 2) this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${gained}`, '#9b6cff');
+        if (gained >= 2) this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `+${gained}`, DAMAGE_COLOURS.spell);
         break;
       }
       case 'key':
         p.keys += pk.value;
-        this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'KEY', '#6cf6e5');
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'KEY', DAMAGE_COLOURS.heal);
         break;
       case 'hp':
         this.healPlayer(pk.value);
         break;
       case 'mp':
         p.mp = Math.min(p.maxMp, p.mp + pk.value);
-        this.spawnDamageNumber(p.pos.x, p.pos.y - 6, `+${pk.value}MP`, '#9b6cff');
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 6, `+${pk.value}MP`, DAMAGE_COLOURS.spell);
         break;
       case 'relic':
         if (pk.relic) this.grantRelic(pk.relic);
@@ -4524,7 +4525,7 @@ export class GameEngine {
         // Push back
         this.player.pos.x = clamp(p.x, ROOM_MARGIN + 4, ROOM_W - ROOM_MARGIN - 4);
         this.player.pos.y = clamp(p.y, ROOM_MARGIN + 4, ROOM_H - ROOM_MARGIN - 4);
-        this.spawnDamageNumber(p.x, p.y - 8, 'LOCKED', '#e23a4a');
+        this.spawnDamageNumber(p.x, p.y - 8, 'LOCKED', DAMAGE_COLOURS.error);
         return;
       }
       if (useKey) this.player.keys -= 1;
