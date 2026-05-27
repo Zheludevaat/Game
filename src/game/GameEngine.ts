@@ -19,7 +19,7 @@ import {
 import {
   ShrineVariant, pickShrineVariant, shrineDisplayName,
 } from './data/shrines';
-import { NPCS, NpcDef, npcForSphere } from './data/npcs';
+import { NPCS, NpcDef, npcForSphere, PENITENT_LINES } from './data/npcs';
 import {
   STATUS_CONFIG, StatusEffect, StatusEffectKind,
   applyStatusEffect, tickStatusEffects, hasStatus, absorbWithShield,
@@ -3301,6 +3301,32 @@ export class GameEngine {
           kind: 'essence', value: 3, life: 40,
         });
       }
+      // Spawn the Penitent kneeling over the fallen Warden's lamp.
+      // Stays in the boss room until the player takes the stairs (the
+      // descend flow clears all NPCs anyway). Ambient — no passive
+      // gift, just the sphere-keyed lament surfaced on first proximity.
+      const sphereId = sphereForFloor(this.floor.number).id;
+      const line = PENITENT_LINES[sphereId];
+      this.npcs.push({
+        id: nid(),
+        defId: 'penitent',
+        pos: { x: e.pos.x, y: e.pos.y + 16 },
+        phase: 0,
+        nextPassiveAt: 0,
+        proximityT: 0,
+        spokenAmbient: false,
+        ambientIdx: 0,
+      });
+      // Inject the single sphere-keyed line into the def's runtime
+      // ambient table — we don't mutate the shared NPCS def, instead
+      // the engine reads it from PenitentLine table during proximity.
+      // (The ambient-line system surfaces def.ambientLines[idx]; we
+      // override that by writing the line directly into the spawned
+      // entity's seen-line cache.)
+      const npc = this.npcs[this.npcs.length - 1];
+      // Stash the sphere line on the entity via a side channel for the
+      // updateNpcs branch to read.
+      (npc as NpcEntity & { spokenLine?: string }).spokenLine = line;
     } else {
       audio.sfx('enemyHit');
       this.dropLoot(e);
@@ -4134,11 +4160,18 @@ export class GameEngine {
       if (!def) continue;
       npc.phase += dt * 0.9;
       // Ambient line — surface as a floating note the first time the
-      // player walks within range.
-      if (!npc.spokenAmbient && def.ambientLines && def.ambientLines.length) {
+      // player walks within range. Per-entity `spokenLine` (used by
+      // the Penitent for its sphere-keyed lament) takes precedence
+      // over def.ambientLines so the engine can override without
+      // mutating shared NPC data.
+      const ent = npc as NpcEntity & { spokenLine?: string };
+      const hasLine = ent.spokenLine
+        || (def.ambientLines && def.ambientLines.length > 0);
+      if (!npc.spokenAmbient && hasLine) {
         const d = Math.hypot(p.pos.x - npc.pos.x, p.pos.y - npc.pos.y);
         if (d < 72) {
-          const line = def.ambientLines[npc.ambientIdx % def.ambientLines.length];
+          const line = ent.spokenLine
+            ?? def.ambientLines![npc.ambientIdx % def.ambientLines!.length];
           npc.spokenAmbient = true;
           this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, line, def.colour);
         }
@@ -5727,6 +5760,39 @@ export class GameEngine {
         // Spearpoint glow
         ctx.fillStyle = def.colour;
         ctx.fillRect(x + 3, y - 11, 3, 2);
+      } else if (def.id === 'penitent') {
+        // Kneeling hooded figure, hands resting on a small lamp that
+        // burns in the sphere's accent colour. The colour comes from
+        // sphereForFloor since the penitent's def colour is the default
+        // gold; the per-sphere tint reads as "this Warden's lamp."
+        const accent = sphereForFloor(this.floor.number).accent;
+        const accentRgb = hexToRgbString(accent);
+        // Robe — folded kneel shape
+        ctx.fillStyle = '#231142';
+        ctx.fillRect(x - 5, y - 1, 10, 7);
+        // Hood
+        ctx.fillStyle = '#1a0f2c';
+        ctx.fillRect(x - 4, y - 6, 8, 4);
+        // Face shadow
+        ctx.fillStyle = '#0a0420';
+        ctx.fillRect(x - 3, y - 4, 6, 2);
+        // Hands cupping the lamp
+        ctx.fillStyle = '#3b265c';
+        ctx.fillRect(x - 3, y + 3, 6, 2);
+        // Lamp body — small dark vessel with a flame in the sphere accent
+        ctx.fillStyle = '#1a0f2c';
+        ctx.fillRect(x - 2, y + 1, 4, 3);
+        ctx.fillStyle = accent;
+        ctx.fillRect(x - 1, y - 1, 2, 3);
+        // Bright flame core
+        ctx.fillStyle = '#ffe6a3';
+        ctx.fillRect(x, y, 1, 2);
+        // Faint sphere-accent halo around the lamp (subtle)
+        const lampHalo = ctx.createRadialGradient(x, y, 1, x, y, 10);
+        lampHalo.addColorStop(0, `rgba(${accentRgb}, 0.35)`);
+        lampHalo.addColorStop(1, `rgba(${accentRgb}, 0)`);
+        ctx.fillStyle = lampHalo;
+        ctx.fillRect(x - 10, y - 10, 20, 20);
       } else if (def.id === 'diviner') {
         // Tall figure with hands spread, a brass-rim mirror floating
         // before him catching gold light. Robe in violet.

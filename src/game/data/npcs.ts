@@ -137,6 +137,33 @@ export const NPCS: Record<string, NpcDef> = {
     ],
     passive: { kind: 'mp', amount: 12, radius: 44, every: 6.0 },
   },
+  penitent: {
+    id: 'penitent',
+    name: 'The Penitent',
+    title: 'Mourner of the Lamp',
+    sphere: null,           // spawned via boss death, not sphere rolls
+    interaction: 'ambient',
+    colour: '#ffe6a3',
+    // Sphere-keyed lines live in PENITENT_LINES below — the spawner
+    // picks one based on the Warden that just fell. We leave this empty
+    // so the default ambient-line surfaced is filled in by the engine.
+    ambientLines: [],
+  },
+};
+
+/** Sphere-keyed lament spoken by the Penitent over a fallen Warden's
+ *  lamp. The engine picks the line for the current sphere when the
+ *  Penitent spawns; the ambient-line system surfaces it on first
+ *  proximity. */
+export const PENITENT_LINES: Record<SphereId, string> = {
+  moon:    '"Selene asked nothing of us. We gave her everything."',
+  mercury: '"Hermes ran the message to its end. He carried it home."',
+  venus:   '"The Garlandkeep wept for her. She was a kindness in chains."',
+  sun:     '"Helios burned for the door. The door is gone now."',
+  mars:    '"Ares only knew the spear. He has nothing else left."',
+  jupiter: '"Zeus heard the prayer and answered. Both went silent."',
+  saturn:  '"Kronos kept every hour. He has dropped them all at once."',
+  ogdoad:  '"The Eighth has no lamp. There is nothing to mourn."',
 };
 
 /** Pick the wandering NPC for a given sphere — null if no in-run NPC
