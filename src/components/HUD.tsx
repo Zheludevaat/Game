@@ -453,6 +453,7 @@ function UltimateIndicator({ hud }: { hud: HudSnapshot }): JSX.Element {
 function ConsumableStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
   const hasItems = hud.consumables && hud.consumables.length > 0;
   const buffs = hud.freeNextSpell || hud.reflectCharges > 0;
+  const isTouch = hud.inputMethod === 'touch';
   if (!hasItems && !buffs) {
     return (
       <div style={{
@@ -466,7 +467,7 @@ function ConsumableStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
     <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
       {hasItems && (
         <span style={{ fontSize: 9, color: 'var(--bone)', opacity: 0.75, letterSpacing: '0.18em', marginRight: 2 }}>
-          [G / H]
+          {isTouch ? '↻I / USE I →' : '[G / H]'}
         </span>
       )}
       {hud.consumables.map((slot, i) => {
