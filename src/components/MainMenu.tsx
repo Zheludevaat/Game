@@ -24,9 +24,12 @@ interface Props {
   bossRushUnlocked: boolean;
   /** Persistent best Boss Rush clear time in seconds. */
   bossRushBestSeconds?: number;
+  /** Persistent best Time Attack score (composite). */
+  timeAttackBestScore?: number;
   onNewRun: () => void;
   onDailyRun: () => void;
   onBossRush: () => void;
+  onTimeAttack: () => void;
   onContinue: () => void;
   onMeta: () => void;
   onSettings: () => void;
@@ -137,6 +140,7 @@ export function MainMenu(p: Props): JSX.Element {
     { onActivate: p.onNewRun },
     { onActivate: p.dailyAttemptedToday ? () => undefined : p.onDailyRun, disabled: p.dailyAttemptedToday },
     { onActivate: p.bossRushUnlocked ? p.onBossRush : () => undefined, disabled: !p.bossRushUnlocked },
+    { onActivate: p.onTimeAttack },
     { onActivate: p.resumeAvailable ? p.onContinue : () => undefined, disabled: !p.resumeAvailable },
     { onActivate: p.onCodex },
     { onActivate: p.onCinematics },
@@ -182,21 +186,28 @@ export function MainMenu(p: Props): JSX.Element {
           >
             Boss Rush {p.bossRushUnlocked ? '' : '(clear Ogdoad to unlock)'}
           </PixelButton>
-          <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 3}>
+          <PixelButton
+            onClick={p.onTimeAttack}
+            focused={focus === 3}
+            badge={p.timeAttackBestScore == null ? 'NEW' : `★ ${p.timeAttackBestScore}`}
+          >
+            Time Attack
+          </PixelButton>
+          <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 4}>
             Continue {p.resumeAvailable ? '' : '(none)'}
           </PixelButton>
-          <PixelButton onClick={p.onCodex} focused={focus === 4} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
+          <PixelButton onClick={p.onCodex} focused={focus === 5} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
             Codex Hermeticum
           </PixelButton>
-          <PixelButton onClick={p.onCinematics} focused={focus === 5} badge="▶">
+          <PixelButton onClick={p.onCinematics} focused={focus === 6} badge="▶">
             Cinematics
           </PixelButton>
-          <PixelButton onClick={p.onMeta} focused={focus === 6} badge={`✦ ${p.essence}`}>
+          <PixelButton onClick={p.onMeta} focused={focus === 7} badge={`✦ ${p.essence}`}>
             Meta Progression
           </PixelButton>
-          <PixelButton onClick={p.onSettings} focused={focus === 7}>Settings</PixelButton>
-          <PixelButton onClick={p.onController} focused={focus === 8}>Controller Test</PixelButton>
-          <PixelButton onClick={p.onHowTo} focused={focus === 9}>How to Play</PixelButton>
+          <PixelButton onClick={p.onSettings} focused={focus === 8}>Settings</PixelButton>
+          <PixelButton onClick={p.onController} focused={focus === 9}>Controller Test</PixelButton>
+          <PixelButton onClick={p.onHowTo} focused={focus === 10}>How to Play</PixelButton>
         </div>
         <div className="main-menu-stats" style={{ marginTop: 18, fontSize: 11, letterSpacing: '0.3em', color: 'var(--teal)' }}>
           Best Floor: <span className="gold-text">{p.bestFloor}</span> &nbsp;·&nbsp; Essence: <span className="gold-text">{p.essence}</span>

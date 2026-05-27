@@ -75,6 +75,9 @@ export function App(): JSX.Element {
   const [pendingBossIntro, setPendingBossIntro] = useState<string | null>(null);
   // Archetype + run options stashed when a new-run cinematic is queued.
   const [pendingRunStart, setPendingRunStart] = useState<{ id: ArchetypeId; floor?: number; runSeed?: number } | null>(null);
+  /** When set, archetype-select fires startRun with timeAttack=true
+   *  on confirmation. Cleared on return-to-menu. */
+  const [pendingTimeAttack, setPendingTimeAttack] = useState(false);
   /** True while a Daily Run is in progress — the game-over flow appends
    *  to meta.dailyHistory instead of meta.runHistory, and the Continue
    *  button stays disabled. */
@@ -82,6 +85,9 @@ export function App(): JSX.Element {
   /** True while a Boss Rush run is in progress — game-over compares the
    *  runTimer against meta.bossRushBestSeconds and saves the lower. */
   const bossRushModeRef = useRef(false);
+  /** True while a Time Attack run is in progress — game-over computes
+   *  a composite score (floor + bosses + time bonus) and saves the best. */
+  const timeAttackModeRef = useRef(false);
 
   // --- Loading screen timer ---
   // First-load goes through the Tabula opening film instead of straight to
@@ -215,18 +221,19 @@ export function App(): JSX.Element {
     };
   }, [screen]);
 
-  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; daily?: boolean; bossRush?: boolean }) => {
+  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; daily?: boolean; bossRush?: boolean; timeAttack?: boolean }) => {
     saveLastArchetype(archetypeId);
     setLastArchetype(archetypeId);
     setSummary(null);
     dailyModeRef.current = !!opts?.daily;
     bossRushModeRef.current = !!opts?.bossRush;
+    timeAttackModeRef.current = !!opts?.timeAttack;
     // First time ever: gate through "The Gate Opens" cinematic, then
     // resume into the actual run on its onDone. Resume flow (opts.floor
     // > 1) skips the cinematic — that's a continuation, not a new run.
     // Daily Runs + Boss Rush also skip the cinematic to keep the timed
     // attempt clean.
-    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1 && !opts?.daily && !opts?.bossRush;
+    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1 && !opts?.daily && !opts?.bossRush && !opts?.timeAttack;
     if (isFirstRun) {
       setPendingRunStart({ id: archetypeId, floor: opts?.floor, runSeed: opts?.runSeed });
       setScreen('newRunIntro');
@@ -238,7 +245,7 @@ export function App(): JSX.Element {
     // attempted fresh and can't be picked up mid-run from Continue.
     const runSeed = opts?.runSeed ?? Math.floor(Math.random() * 0xffffffff);
     const startingFloor = opts?.floor ?? 1;
-    if (!opts?.daily && !opts?.bossRush) {
+    if (!opts?.daily && !opts?.bossRush && !opts?.timeAttack) {
       saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
       setResumeAvailable(true);
     } else {
@@ -324,6 +331,22 @@ export function App(): JSX.Element {
                 bossRushBestSeconds = t;
               }
             }
+            // Time Attack: composite score = floor × 1000 + bosses × 500
+            // − floor(seconds / 10). Saves the higher score regardless of
+            // whether the run cleared (a tall + slow Magus run can still
+            // top a fast + shallow Star run).
+            let timeAttackBestScore = m.timeAttackBestScore;
+            let timeAttackBestFloor = m.timeAttackBestFloor;
+            if (timeAttackModeRef.current) {
+              const seconds = Math.floor(s.runTimerSeconds ?? 0);
+              const score = s.floorReached * 1000
+                + s.bossesDefeated * 500
+                - Math.floor(seconds / 10);
+              if (timeAttackBestScore == null || score > timeAttackBestScore) {
+                timeAttackBestScore = score;
+                timeAttackBestFloor = s.floorReached;
+              }
+            }
             return {
               ...m,
               runHistory: history,
@@ -332,19 +355,22 @@ export function App(): JSX.Element {
               dailyHistory,
               lastDailyDate,
               bossRushBestSeconds,
+              timeAttackBestScore,
+              timeAttackBestFloor,
             };
           });
           dailyModeRef.current = false;
           bossRushModeRef.current = false;
+          timeAttackModeRef.current = false;
           saveResume(null);
           setResumeAvailable(false);
           setScreen('gameOver');
         },
         onFloorChange: (n) => {
-          // Update resume floor checkpoint — skipped for Daily Runs +
-          // Boss Rush so a player can't reload mid-run to retry the
-          // same seed / shave seconds off their best time.
-          if (!dailyModeRef.current && !bossRushModeRef.current) {
+          // Update resume floor checkpoint — skipped for Daily Runs,
+          // Boss Rush, and Time Attack so a player can't reload mid-run
+          // to retry the same seed / shave time off their best score.
+          if (!dailyModeRef.current && !bossRushModeRef.current && !timeAttackModeRef.current) {
             saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
           }
         },
@@ -473,6 +499,7 @@ export function App(): JSX.Element {
           })()}
           bossRushUnlocked={(meta.ogdoadReached ?? 0) >= 1}
           bossRushBestSeconds={meta.bossRushBestSeconds}
+          timeAttackBestScore={meta.timeAttackBestScore}
           onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
           onCinematics={() => setScreen('cinematics')}
           onNewRun={() => setScreen('archetype')}
@@ -486,6 +513,12 @@ export function App(): JSX.Element {
             // falling back to Magus on a brand-new save.
             const arch = lastArchetype ?? 'magus';
             startRun(arch, { bossRush: true });
+          }}
+          onTimeAttack={() => {
+            // Time Attack routes through archetype select so the player
+            // can pick the kit they want to speed-run with.
+            setPendingTimeAttack(true);
+            setScreen('archetype');
           }}
           onContinue={() => {
             const r = loadResume();
@@ -502,8 +535,15 @@ export function App(): JSX.Element {
       {screen === 'archetype' && (
         <ArchetypeSelect
           lastArchetype={lastArchetype}
-          onSelect={(id) => startRun(id)}
-          onBack={() => setScreen('menu')}
+          onSelect={(id) => {
+            if (pendingTimeAttack) {
+              setPendingTimeAttack(false);
+              startRun(id, { timeAttack: true });
+            } else {
+              startRun(id);
+            }
+          }}
+          onBack={() => { setPendingTimeAttack(false); setScreen('menu'); }}
         />
       )}
 

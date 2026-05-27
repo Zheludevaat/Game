@@ -275,6 +275,12 @@ export interface MetaState {
   /** Best Boss Rush clear time in seconds. Set on a full eight-boss
    *  clear; undefined if never cleared. Lower is better. */
   bossRushBestSeconds?: number;
+  /** Best Time Attack score (composite: floor + bosses + time bonus).
+   *  Higher is better. Undefined if never attempted. */
+  timeAttackBestScore?: number;
+  /** floorReached on the run that set timeAttackBestScore — surfaced
+   *  on the menu as a sanity-check next to the raw score. */
+  timeAttackBestFloor?: number;
 }
 
 export interface DailyHistoryEntry {
