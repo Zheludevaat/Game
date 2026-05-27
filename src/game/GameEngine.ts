@@ -1742,11 +1742,16 @@ export class GameEngine {
     p.pos.x = clamp(p.pos.x, passL ? 2 : ROOM_MARGIN, passR ? ROOM_W - 2 : ROOM_W - ROOM_MARGIN);
     p.pos.y = clamp(p.pos.y, passU ? 2 : ROOM_MARGIN + 4, passD ? ROOM_H - 2 : ROOM_H - ROOM_MARGIN);
 
-    // Tutorial: detect once the player moves a tile or so.
+    // Tutorial: detect on FIRST movement input rather than waiting for
+    // 16 px of travel. The travel-threshold check used to take ~12
+    // frames at base speed to satisfy, leaving the "move" prompt on
+    // screen well after the player had already moved. Reading the input
+    // state directly clears the prompt on the same frame the player
+    // pushes the stick / arrow / joystick.
     if (this.tutorialActive && !this.tutorialDidMove) {
-      const dx = p.pos.x - this.tutorialStartPos.x;
-      const dy = p.pos.y - this.tutorialStartPos.y;
-      if (Math.hypot(dx, dy) > 16) this.tutorialDidMove = true;
+      if (Math.abs(s.moveX) > 0.1 || Math.abs(s.moveY) > 0.1) {
+        this.tutorialDidMove = true;
+      }
     }
 
     // Actions
@@ -1835,6 +1840,10 @@ export class GameEngine {
         p.mp = Math.max(0, p.mp - cost);
         if (p.freeNextSpell) p.freeNextSpell = false;
       }
+      // Clear the tutorial spell-prompt on the press even if the cast
+      // fails for lack of mana — the player has demonstrated they know
+      // the binding, which is what the prompt teaches.
+      if (this.tutorialActive && s.spellPressed) this.tutorialDidSpell = true;
     }
 
     if (s.interactPressed) {
