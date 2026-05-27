@@ -52,7 +52,7 @@ export function HUD({ hud, input, onShopBuy, onShopClose }: Props): JSX.Element 
 
       <div className="hud-top-right">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-          <RunTimer seconds={hud.runTimer} />
+          <RunTimer seconds={hud.runTimer} mode={hud.mode} />
           {hud.combo >= 2 && <ComboTag count={hud.combo} pulse={hud.comboPulse} />}
           {!isTouch && (
             <button
@@ -175,7 +175,7 @@ function Minimap({ rooms }: { rooms: HudSnapshot['rooms'] }): JSX.Element {
   const h = (maxY - minY + 1) * (cell + 1);
   return (
     <div style={{ marginTop: 8, padding: 4, border: '1px solid var(--gold-3)', background: 'rgba(0,0,0,0.6)' }}>
-      <div style={{ position: 'relative', width: w, height: h }}>
+      <div style={{ position: 'relative', width: w, height: h, marginBottom: 2 }}>
         {rooms.map((r) => {
           if (!r.discovered) return null;
           const colour = colourForRoom(r.type, r.current);
@@ -211,6 +211,7 @@ function Minimap({ rooms }: { rooms: HudSnapshot['rooms'] }): JSX.Element {
           );
         })}
       </div>
+      <MinimapLegend />
     </div>
   );
 }
@@ -227,9 +228,47 @@ function colourForRoom(type: HudSnapshot['rooms'][number]['type'], current: bool
     case 'boss': return '#ff3a4a';
     case 'trap': return '#ff9a4a';
     case 'sanctuary': return '#cdf6ff';
-    case 'secret': return '#9b6cff';
+    // Secret rooms used to share the shrine purple — players couldn't
+    // tell which floor had which type. Rose-pink reads distinct from
+    // every other minimap hue.
+    case 'secret': return '#ff6caf';
     default: return '#3b265c';
   }
+}
+
+/** Tiny inline legend rendered below the minimap so players can decode
+ *  the colour palette without learning by accident. Order matches the
+ *  likely encounter sequence on a typical floor. */
+function MinimapLegend(): JSX.Element {
+  const entries: { colour: string; label: string }[] = [
+    { colour: '#f4d27a', label: 'TREASURE' },
+    { colour: '#9b6cff', label: 'SHRINE' },
+    { colour: '#ff6caf', label: 'SECRET' },
+    { colour: '#cdf6ff', label: 'SANCTUARY' },
+    { colour: '#e23a4a', label: 'LOCKED' },
+    { colour: '#ff9a4a', label: 'TRAP' },
+    { colour: '#ff7a5a', label: 'MINI-BOSS' },
+    { colour: '#ff3a4a', label: 'BOSS' },
+  ];
+  return (
+    <div style={{
+      marginTop: 4,
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '2px 6px',
+      fontSize: 8,
+      letterSpacing: '0.12em',
+      color: 'rgba(231,227,215,0.7)',
+      maxWidth: 132,
+    }}>
+      {entries.map((e) => (
+        <span key={e.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+          <span style={{ width: 5, height: 5, background: e.colour, display: 'inline-block' }} />
+          {e.label}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function LoadoutStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
@@ -263,17 +302,23 @@ function LoadoutStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
   );
 }
 
-function RunTimer({ seconds }: { seconds: number }): JSX.Element {
+function RunTimer({ seconds, mode }: { seconds: number; mode?: HudSnapshot['mode'] }): JSX.Element {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
+  const racing = mode === 'timeAttack';
   return (
     <div style={{
       fontFamily: 'monospace',
-      fontSize: 10,
+      fontSize: racing ? 11 : 10,
       letterSpacing: '0.18em',
-      color: 'var(--bone)',
-      opacity: 0.7,
+      color: racing ? '#ff7a5a' : 'var(--bone)',
+      opacity: racing ? 1 : 0.7,
+      padding: racing ? '1px 6px' : 0,
+      border: racing ? '1px solid #ff7a5a' : 'none',
+      textShadow: racing ? '0 0 6px #ff7a5a99' : 'none',
+      animation: racing ? 'tutorial-pulse 1.6s ease-in-out infinite' : undefined,
     }}>
+      {racing && <span style={{ marginRight: 6, fontSize: 9 }}>RACE</span>}
       {String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
     </div>
   );
@@ -511,7 +556,22 @@ function ShrinePrompt({ name, effect, downside }: { name: string; effect: string
       footer={<>Interact / Enter — Accept &nbsp;·&nbsp; Esc / B — Decline</>}
     >
       <div className="glow-text" style={{ fontSize: 13 }}>Boon: <span className="gold-text">{effect}</span></div>
-      <div className="crimson-text" style={{ fontSize: 13 }}>Cost: {downside}</div>
+      {/* Cost as a high-contrast pill — players were committing to
+       *  Distillation / Library shrines without reading the price line.
+       *  The pill keeps the downside from reading like flavour text. */}
+      <div style={{ marginTop: 6, display: 'flex', justifyContent: 'center' }}>
+        <span style={{
+          display: 'inline-block',
+          padding: '3px 10px',
+          background: 'rgba(226, 58, 74, 0.22)',
+          border: '1px solid #e23a4a',
+          color: '#ffb9b1',
+          letterSpacing: '0.2em',
+          fontSize: 11,
+        }}>
+          COST · {downside}
+        </span>
+      </div>
     </ModalPanel>
   );
 }

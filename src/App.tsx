@@ -413,6 +413,7 @@ export function App(): JSX.Element {
         startingFloor,
         runSeed,
         bossRushMode: mode === 'bossRush',
+        mode,
         skipTutorial: settings.skipTutorial,
       });
     }, 30);
@@ -632,6 +633,10 @@ export function App(): JSX.Element {
           summary={summary}
           bestFloor={bestFloor}
           essenceTotal={essence}
+          mode={runModeRef.current}
+          bossRushBestSeconds={meta.bossRushBestSeconds}
+          bossRushBestFloor={meta.bossRushBestFloor}
+          timeAttackBestScore={meta.timeAttackBestScore}
           onNewRun={() => {
             stopRun();
             setScreen('archetype');

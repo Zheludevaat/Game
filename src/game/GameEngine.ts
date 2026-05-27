@@ -2,7 +2,7 @@ import { PALETTE, ROOM_H, ROOM_W, TILE, VIRTUAL_H, VIRTUAL_W } from './constants
 import { RNG, hashSeed } from './math/rng';
 import { clamp, dist, lerp, norm } from './math/vec2';
 import {
-  ArchetypeDef, Floor, MetaState, RelicId, Room, RoomDoorState, RoomType, ShrineKind,
+  ArchetypeDef, Floor, MetaState, RelicId, Room, RoomDoorState, RoomType, RunMode, ShrineKind,
   SpellId, SpellVisual, WeaponId,
 } from './GameTypes';
 import { getArchetype } from './data/archetypes';
@@ -117,6 +117,9 @@ export interface HudSnapshot {
   playerStatus: { kind: StatusEffectKind; remaining: number; stacks: number }[];
   /** Total elapsed run seconds (frozen during pause/menu/cinematic). */
   runTimer: number;
+  /** Active run mode — drives mode-specific HUD treatments (Time Attack
+   *  timer styling, mode-aware GameOver best-line). */
+  mode: RunMode;
   /** Current / max dash cooldown — drives the HUD dash ring. */
   dashCooldown: number;
   dashCooldownMax: number;
@@ -410,6 +413,10 @@ export interface EngineConfig {
    *  heal between bosses, ends after Ogdoad (floor 80). Score is the
    *  total elapsed runTimer captured on game-over. */
   bossRushMode?: boolean;
+  /** Active run mode — the engine reflects this back through HudSnapshot
+   *  so mode-specific HUD treatments (Time Attack timer styling, etc.)
+   *  don't need the host to thread it separately. Defaults to standard. */
+  mode?: RunMode;
   /** Skip the first-run tutorial regardless of `meta.seenTutorial`.
    *  Threaded from SettingsState so the player can opt out without
    *  resetting their save. */
@@ -567,6 +574,10 @@ export class GameEngine {
   private bossBannerTimer = 0;
   private roomClearEffects: RoomClearEffect[] = [];
   private radiusPulses: RadiusPulse[] = [];
+  /** Transient "Left behind: 3 coins, 1 item" line posted on descend
+   *  when the previous floor had un-collected pickups. Ticks down via
+   *  updateTimers; HUD reads via emitHud. */
+  private leftBehindHint: { text: string; t: number; duration: number } | null = null;
   private bossSnapshot: { hp: number; maxHp: number; name: string } | null = null;
   // Set to true the first time the player enters this run's boss room.
   // Stays true across deaths inside the same run; reset on a new run.
@@ -629,6 +640,9 @@ export class GameEngine {
   /** Boss Rush mode — descend +10 each clear, full heal between fights.
    *  Set from EngineConfig.bossRushMode on mount. */
   private bossRushMode = false;
+  /** Active run mode — drives HudSnapshot.mode and unlocks mode-specific
+   *  HUD treatments without the host needing to re-thread it. */
+  private mode: RunMode = 'standard';
   /** timeAlive of the last dotTick SFX play — throttle so stacked DoT
    *  doesn't sound like a machine gun. */
   private lastDotTickSfx = -1;
@@ -699,6 +713,7 @@ export class GameEngine {
     this.archetype = getArchetype(config.archetypeId);
     this.runSeed = config.runSeed ?? Math.floor(Math.random() * 0xffffffff);
     this.bossRushMode = !!config.bossRushMode;
+    this.mode = config.mode ?? (config.bossRushMode ? 'bossRush' : 'standard');
 
     // Reset per-run summary fields
     this.summary.floorReached = config.startingFloor ?? 1;
@@ -1340,6 +1355,27 @@ export class GameEngine {
   }
 
   private goToFloor(n: number): void {
+    // Count anything the player left lying on the previous floor —
+    // coins / essence / relics that despawn silently with the floor
+    // wipe used to read as "the game ate my loot." Surface a brief HUD
+    // line so the player learns to sweep before stairs.
+    if (this.pickups.length > 0) {
+      const tally = { coin: 0, essence: 0, hp: 0, mp: 0, special: 0 };
+      for (const pk of this.pickups) {
+        if (pk.kind === 'coin') tally.coin += pk.value;
+        else if (pk.kind === 'essence') tally.essence += pk.value;
+        else if (pk.kind === 'hp') tally.hp += pk.value;
+        else if (pk.kind === 'mp') tally.mp += pk.value;
+        else tally.special += 1;
+      }
+      const parts: string[] = [];
+      if (tally.coin)    parts.push(`${tally.coin} coin${tally.coin === 1 ? '' : 's'}`);
+      if (tally.essence) parts.push(`${tally.essence} ✦`);
+      if (tally.special) parts.push(`${tally.special} item${tally.special === 1 ? '' : 's'}`);
+      if (parts.length > 0) {
+        this.leftBehindHint = { text: `Left behind: ${parts.join(', ')}`, t: 0, duration: 2.4 };
+      }
+    }
     const seed = hashSeed(this.runSeed, n);
     this.floor = generateFloor({ floor: n, seed });
     this.summary.floorReached = Math.max(this.summary.floorReached, n);
@@ -1777,6 +1813,10 @@ export class GameEngine {
       const r = this.radiusPulses[i];
       r.t += dt;
       if (r.t > r.duration) this.radiusPulses.splice(i, 1);
+    }
+    if (this.leftBehindHint) {
+      this.leftBehindHint.t += dt;
+      if (this.leftBehindHint.t > this.leftBehindHint.duration) this.leftBehindHint = null;
     }
   }
 
@@ -2428,6 +2468,11 @@ export class GameEngine {
   private tryInteract(): void {
     const p = this.player;
     const room = this.currentRoom;
+    // Suppress interact during the boss-room banner / floor transition.
+    // Without this, mashing the interact button on boss-room entry
+    // could pop the shrine modal OVER the cinematic banner, layering
+    // two competing inputs and obscuring the boss intro stinger.
+    if (this.bossBannerTimer > 0 || this.floorTransition) return;
     if (this.tutorialActive) this.tutorialDidInteract = true;
 
     // Diagnostic — fires whenever interact is pressed, regardless of
@@ -6272,6 +6317,7 @@ export class GameEngine {
     const room = this.currentRoom;
     const prompts: string[] = [];
     const hint = this.computeHint();
+    if (this.leftBehindHint) prompts.push(this.leftBehindHint.text);
     // Prompts use the same ranges tryInteract opens at, so the HUD
     // hint appears exactly when pressing interact will do something.
     if (room.type === 'exit' && this.isNearCenter(p.pos)) prompts.push('Press Interact to descend');
@@ -6282,6 +6328,31 @@ export class GameEngine {
     if (room.hasShrine && !room.shrineUsed) {
       const d = dist(p.pos, { x: ROOM_W / 2, y: ROOM_H / 2 - 8 });
       if (d < 34) prompts.push('Press Interact to commune');
+    }
+    // Locked-door telegraph — surface "🔒 KEY REQUIRED" while the player
+    // is closing on a door whose far-side room is locked and unvisited.
+    // Without this, the only feedback was being pushed back AFTER the
+    // game already silently deducted a key — feels arbitrary on a first
+    // encounter.
+    {
+      const approachDist = 32;
+      const dwHalf = 22;
+      const inXDoor = Math.abs(p.pos.x - ROOM_W / 2) < dwHalf;
+      const inYDoor = Math.abs(p.pos.y - ROOM_H / 2) < dwHalf;
+      const neighbours: Array<[boolean, number, number]> = [
+        [room.doors.left  && p.pos.x < approachDist            && inYDoor, -1,  0],
+        [room.doors.right && p.pos.x > ROOM_W - approachDist   && inYDoor,  1,  0],
+        [room.doors.up    && p.pos.y < approachDist            && inXDoor,  0, -1],
+        [room.doors.down  && p.pos.y > ROOM_H - approachDist   && inXDoor,  0,  1],
+      ];
+      for (const [near, dx, dy] of neighbours) {
+        if (!near) continue;
+        const nb = this.floor.roomGrid.get(`${room.grid.x + dx},${room.grid.y + dy}`);
+        if (nb && nb.type === 'locked' && !nb.visited) {
+          prompts.push(p.keys > 0 ? '🔒 Locked — one key' : '🔒 KEY REQUIRED');
+          break;
+        }
+      }
     }
     // Nearby weapon / spell / relic pickup — surface a stat preview so
     // the player can decide whether to swap before stepping on it.
@@ -6383,6 +6454,7 @@ export class GameEngine {
       comboPulse: this.comboPulse,
       playerStatus: p.status.map((s) => ({ kind: s.kind, remaining: s.remaining, stacks: s.stacks })),
       runTimer: this.runTimer,
+      mode: this.mode,
       dashCooldown: p.dashCooldown,
       dashCooldownMax: p.dashCdMax || 1,
       tutorialPrompts: this.computeTutorialPrompts(),

@@ -1,4 +1,5 @@
 import { RunSummary } from '../game/GameEngine';
+import { RunMode } from '../game/GameTypes';
 import { RELICS } from '../game/data/relics';
 import { WEAPONS } from '../game/data/weapons';
 import { SPELLS } from '../game/data/spells';
@@ -59,12 +60,47 @@ interface Props {
   summary: RunSummary;
   bestFloor: number;
   essenceTotal: number;
+  mode?: RunMode;
+  /** Best Boss Rush time in seconds (clean clear). Omitted for non-bossRush. */
+  bossRushBestSeconds?: number;
+  /** Highest Boss Rush floor reached, even on a failed run. */
+  bossRushBestFloor?: number;
+  /** Best Time Attack composite score. Omitted for non-timeAttack. */
+  timeAttackBestScore?: number;
   onNewRun: () => void;
   onMenu: () => void;
   onCodex: () => void;
 }
 
-export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onMenu, onCodex }: Props): JSX.Element {
+function modeBestLine(
+  mode: RunMode | undefined,
+  bestFloor: number,
+  bossRushBestSeconds?: number,
+  bossRushBestFloor?: number,
+  timeAttackBestScore?: number,
+): JSX.Element {
+  if (mode === 'bossRush') {
+    if (bossRushBestSeconds != null) {
+      const m = Math.floor(bossRushBestSeconds / 60);
+      const s = bossRushBestSeconds % 60;
+      return <>Boss Rush best: <span className="gold-text">{m}:{String(s).padStart(2, '0')}</span></>;
+    }
+    return <>Boss Rush best floor: <span className="gold-text">F{bossRushBestFloor ?? 0}</span></>;
+  }
+  if (mode === 'timeAttack') {
+    return <>Time Attack best: <span className="gold-text">★ {timeAttackBestScore ?? 0}</span></>;
+  }
+  if (mode === 'daily') {
+    return <>Daily run — see history</>;
+  }
+  return <>Best Floor: <span className="gold-text">{bestFloor}</span></>;
+}
+
+export function GameOverScreen({
+  summary, bestFloor, essenceTotal,
+  mode, bossRushBestSeconds, bossRushBestFloor, timeAttackBestScore,
+  onNewRun, onMenu, onCodex,
+}: Props): JSX.Element {
   const items = [
     { onActivate: onNewRun },
     { onActivate: onCodex },
@@ -133,9 +169,14 @@ export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onM
         </div>
         <div className="pixel-divider" />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, letterSpacing: '0.2em' }}>
-          <span>Best Floor: <span className="gold-text">{bestFloor}</span></span>
+          <span>{modeBestLine(mode, bestFloor, bossRushBestSeconds, bossRushBestFloor, timeAttackBestScore)}</span>
           <span>Total Essence: <span className="gold-text">{essenceTotal}</span></span>
         </div>
+        {mode === 'timeAttack' && summary.runTimerSeconds != null && (
+          <div style={{ marginTop: 6, textAlign: 'center', fontSize: 13, letterSpacing: '0.2em', color: '#ff7a5a' }}>
+            FINAL TIME — {String(Math.floor(summary.runTimerSeconds / 60)).padStart(2, '0')}:{String(Math.floor(summary.runTimerSeconds % 60)).padStart(2, '0')}
+          </div>
+        )}
         <div className="pixel-divider" />
         <div style={{ fontSize: 12, letterSpacing: '0.18em', marginBottom: 6 }} className="glow-text">SPHERES VISITED</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
