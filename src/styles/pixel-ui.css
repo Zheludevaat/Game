@@ -281,7 +281,10 @@
 .hud-bottom-right {
   position: absolute;
   padding: 8px 12px;
-  font-size: 12px;
+  /* Apple HIG floor at 11px keeps the HUD readable on iPhone SE while
+   * the upper clamp lets larger phones / desktop still use the
+   * authored 12px size. Scales smoothly between 320 and 480 px. */
+  font-size: clamp(11px, 1.6vw, 12px);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--bone);
@@ -292,10 +295,22 @@
   top: calc(12px + var(--safe-top)); left: calc(12px + var(--safe-left));
   /* Cap the top-left strip's vertical reach so the consumable +
      ultimate + synergy + status pills don't bleed off-screen on a
-     short landscape phone. The strip scrolls if needed. */
+     short landscape phone. The strip scrolls if needed; on touch
+     devices a thin teal border-right cues the player that there's
+     more below the fold (scrollbars are hidden globally). */
   max-height: calc(100vh - 24px - var(--safe-top) - var(--safe-bottom));
   overflow-y: auto;
   scrollbar-width: none;
+}
+.hud-top-left::-webkit-scrollbar { display: none; }
+/* Touch / coarse-pointer devices get a subtle right-edge tick so the
+ * scrollable strip is discoverable — desktop / mouse keeps the hidden
+ * scrollbar since the scroll-wheel makes it obvious. */
+@media (pointer: coarse) {
+  .hud-top-left {
+    border-right: 1px solid rgba(108, 246, 229, 0.25);
+    padding-right: 4px;
+  }
 }
 .hud-top-left::-webkit-scrollbar { display: none; }
 .hud-top-right  { top: calc(12px + var(--safe-top)); right: calc(12px + var(--safe-right)); text-align: right; }
@@ -500,6 +515,13 @@
   right: calc(20px + var(--safe-right));
   bottom: calc(220px + var(--safe-bottom));
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  /* Cap horizontal reach so a 6-button row (cycleWeapon / cycleSpell /
+   * cycleConsumable / useConsumable / ultimate / map) can wrap onto a
+   * second row on narrow phones instead of pushing off-screen. The
+   * flex-wrap + right-justify keeps the right edge anchored. */
+  max-width: clamp(220px, 60vw, 380px);
   gap: 8px;
   pointer-events: auto;
 }
@@ -771,7 +793,6 @@
     height: 80px;
   }
 }
-
 /* iPhone landscape — three cards must share a ~390 px viewport height.
  * Drop the portrait, shrink stat font, tighten dividers so a card +
  * "Begin" button fits inside ~310 px of usable height. The starting-
