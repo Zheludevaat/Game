@@ -3,7 +3,7 @@ import { RNG, hashSeed } from './math/rng';
 import { clamp, dist, lerp, norm } from './math/vec2';
 import {
   ArchetypeDef, Floor, MetaState, RelicId, Room, RoomDoorState, RoomType, ShrineKind,
-  SpellId, WeaponId,
+  SpellId, SpellVisual, WeaponId,
 } from './GameTypes';
 import { getArchetype } from './data/archetypes';
 import { RELICS, RELIC_IDS } from './data/relics';
@@ -315,6 +315,14 @@ interface Projectile {
   homing: boolean;
   colour: string;
   trailColour: string;
+  /** Visual kind drawn each frame — matches SpellDef.projVisual. */
+  visual?: SpellVisual;
+  /** AOE radius applied on hit / expiry. 0 / undefined means single-target. */
+  explodeRadius?: number;
+  /** Status effect applied on contact. */
+  appliesStatus?: AppliesStatus;
+  /** HP gifted back to the player per enemy killed by this projectile. */
+  healOnKill?: number;
 }
 
 interface Pickup {
@@ -383,6 +391,8 @@ interface SigilHazard {
    * Used for Selene's tidal-pulse — safe zone in the middle, danger ring
    * expanding outward. */
   safeRadius?: number;
+  /** Status effect applied to anything inside the blast on detonation. */
+  appliesStatus?: AppliesStatus;
 }
 
 export interface EngineConfig {
@@ -2325,8 +2335,8 @@ export class GameEngine {
         fromPlayer: true,
         radius: sp.radius,
         colour: sp.projColour,
+        appliesStatus: sp.appliesStatus,
       };
-      (sigil as SigilHazard & { appliesStatus?: AppliesStatus }).appliesStatus = sp.appliesStatus;
       this.sigils.push(sigil);
       audio.sfx('spell');
       // Wrath Splinter — instant-cast sigils (no range, no delay) layer
@@ -2355,13 +2365,11 @@ export class GameEngine {
         homing,
         colour: sp.projColour,
         trailColour: sp.trailColour,
+        visual: sp.projVisual,
+        explodeRadius: sp.explodeRadius,
+        appliesStatus: sp.appliesStatus,
+        healOnKill: sp.healOnKill,
       };
-      // Mark visual kind on the projectile via a side channel
-      type ProjMeta = Projectile & { visual?: string; explodeRadius?: number; appliesStatus?: AppliesStatus; healOnKill?: number };
-      (proj as ProjMeta).visual = sp.projVisual;
-      (proj as ProjMeta).explodeRadius = sp.explodeRadius;
-      (proj as ProjMeta).appliesStatus = sp.appliesStatus;
-      (proj as ProjMeta).healOnKill = sp.healOnKill;
       this.projectiles.push(proj);
     }
     audio.sfx('spell');
@@ -4017,15 +4025,14 @@ export class GameEngine {
 
       if (pr.fromPlayer) {
         // hit enemies
-        const prMeta = pr as Projectile & { appliesStatus?: AppliesStatus; healOnKill?: number };
-        const prStatus = prMeta.appliesStatus;
+        const prStatus = pr.appliesStatus;
         for (const e of this.enemies) {
           const d = Math.hypot(e.pos.x - pr.pos.x, e.pos.y - pr.pos.y);
           if (d < pr.radius + e.radius) {
             const r = this.damageEnemy(e, pr.damage, { x: pr.vel.x, y: pr.vel.y }, 90, {
               fromPlayer: true, appliesStatus: prStatus,
             });
-            if (prMeta.healOnKill && r.killed) this.healPlayer(prMeta.healOnKill);
+            if (pr.healOnKill && r.killed) this.healPlayer(pr.healOnKill);
             if (this.player.relics.includes('pulseHeart') && r.isCrit) {
               this.healPlayer(this.hasSynergy('pulseCrown') ? 4 : 2);
               if (this.hasSynergy('pulseCrown') && Math.random() < SYNERGY.pulseCrownHeartChance) {
@@ -4036,7 +4043,7 @@ export class GameEngine {
                 });
               }
             }
-            const explodeR = (pr as Projectile & { explodeRadius?: number }).explodeRadius ?? 0;
+            const explodeR = pr.explodeRadius ?? 0;
             // Every spell impact gets a small burst + shake so the hit reads
             // as an event, not just a number popping up.
             if (!this.reducedParticles) {
@@ -4328,7 +4335,7 @@ export class GameEngine {
         const colour = s.colour ?? '#e23a4a';
         if (s.fromPlayer) {
           // damage all enemies in radius
-          const sStatus = (s as SigilHazard & { appliesStatus?: AppliesStatus }).appliesStatus;
+          const sStatus = s.appliesStatus;
           for (const e of this.enemies) {
             const d = Math.hypot(e.pos.x - s.pos.x, e.pos.y - s.pos.y);
             if (d < radius + e.radius) {
@@ -5987,7 +5994,7 @@ export class GameEngine {
       const r = pr.radius;
       const vx = pr.vel.x, vy = pr.vel.y;
       const speed = Math.hypot(vx, vy) || 1;
-      const visual = (pr as Projectile & { visual?: string }).visual ?? 'orb';
+      const visual = pr.visual ?? 'orb';
       const angle = Math.atan2(vy, vx);
 
       if (visual === 'shard') {
