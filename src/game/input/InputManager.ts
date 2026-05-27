@@ -321,6 +321,13 @@ export class InputManager {
   tick(): void {
     this.scanPads();
     this.computeState();
+    // Advance the pad's previous-button snapshot AFTER computeState has
+    // read it. This is the canonical edge-detection pattern: prev
+    // reflects the LAST frame, current reflects THIS frame, padPressed
+    // = current && !prev fires once at the rising edge. The same
+    // discipline applies to background scanPads calls — they touch
+    // gamepadInfo (current) but never prev.
+    this.prevPadButtons = this.gamepadInfo.pressed.slice();
     this.keysPressedThisFrame.clear();
     this.touchPressedThisFrame = {};
   }
@@ -558,7 +565,15 @@ export class InputManager {
     }
 
     this.gamepadInfo = newPad;
-    this.prevPadButtons = pressed.slice();
+    // NOTE: prevPadButtons is NOT updated here. It's updated at the end
+    // of tick() AFTER computeState consumes it for edge detection.
+    // Updating prev here used to clobber the edge state — padPressed
+    // (now && !prev) returned false on the very frame a button was
+    // pressed because prev had just been overwritten with `pressed`.
+    // That broke every edge-only gamepad action (dash, interact,
+    // pause, map, cycleWeapon, cycleSpell). Attack and Spell appeared
+    // to work because they also OR in their *Held branch via padDown,
+    // which doesn't read prev.
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
