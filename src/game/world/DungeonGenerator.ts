@@ -227,6 +227,42 @@ export function generateFloor(opts: GenOptions): Floor {
     }
   }
 
+  // Secret rooms — one per floor at 70 % probability, placed adjacent
+  // to a regular enemy room. The secret room itself stays off the
+  // minimap until the player physically enters it (markNeighbours-
+  // Discovered in the engine skips secret rooms), so the player
+  // discovers it by trying an unexpected door. Brass Ear still reveals
+  // every cell since it's a meta-knowledge relic.
+  if (rng.chance(0.7)) {
+    const enemyRooms = [...grid.values()].filter((r) => r.type === 'enemy');
+    shuffleInPlace(enemyRooms, rng);
+    for (const candidate of enemyRooms) {
+      const { x, y } = candidate.grid;
+      const dirs = shuffle([
+        { dx: 1, dy: 0, side: 'right' as const, opp: 'left' as const },
+        { dx: -1, dy: 0, side: 'left' as const, opp: 'right' as const },
+        { dx: 0, dy: 1, side: 'down' as const, opp: 'up' as const },
+        { dx: 0, dy: -1, side: 'up' as const, opp: 'down' as const },
+      ], rng);
+      let placed = false;
+      for (const d of dirs) {
+        const nx = x + d.dx, ny = y + d.dy;
+        if (grid.has(keyOf(nx, ny))) continue;
+        // Free cell — drop the secret room and stitch one door.
+        const secret = addRoom(nx, ny, 'secret', pickRoomName('secret', rng));
+        secret.cleared = true;
+        secret.enemiesSpawned = true;
+        secret.hasChest = true;
+        secret.chestLocked = false;
+        candidate.doors[d.side] = true;
+        secret.doors[d.opp] = true;
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
+  }
+
   const rooms = [...grid.values()];
   const startRoom = grid.get('0,0')!;
 

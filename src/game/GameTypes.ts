@@ -180,7 +180,8 @@ export type RoomType =
   | 'miniBoss'
   | 'boss'
   | 'trap'
-  | 'sanctuary';
+  | 'sanctuary'
+  | 'secret';
 
 export interface RoomGrid {
   x: number;

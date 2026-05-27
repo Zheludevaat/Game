@@ -62,6 +62,7 @@ export function MapOverlay({ hud, onClose }: Props): JSX.Element {
           <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#ff3a4a', marginRight: 4 }} />Boss</span>
           <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#ff9a4a', marginRight: 4 }} />Trap</span>
           <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#cdf6ff', marginRight: 4 }} />Sanctuary</span>
+          <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#9b6cff', marginRight: 4 }} />Secret</span>
           <span><span style={{ display: 'inline-block', width: 6, height: 6, background: '#f4d27a', marginRight: 4, verticalAlign: 'middle' }} />Chest</span>
           <span><span style={{ display: 'inline-block', width: 6, height: 6, background: '#9b6cff', marginRight: 4, verticalAlign: 'middle' }} />Shrine</span>
         </div>
@@ -85,6 +86,7 @@ function colourForRoom(type: HudSnapshot['rooms'][number]['type'], current: bool
     case 'boss': return '#ff3a4a';
     case 'trap': return '#ff9a4a';
     case 'sanctuary': return '#cdf6ff';
+    case 'secret': return '#9b6cff';
     default: return '#3b265c';
   }
 }

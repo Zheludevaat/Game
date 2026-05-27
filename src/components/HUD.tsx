@@ -217,6 +217,7 @@ function colourForRoom(type: HudSnapshot['rooms'][number]['type'], current: bool
     case 'boss': return '#ff3a4a';
     case 'trap': return '#ff9a4a';
     case 'sanctuary': return '#cdf6ff';
+    case 'secret': return '#9b6cff';
     default: return '#3b265c';
   }
 }

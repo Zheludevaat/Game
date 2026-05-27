@@ -1361,7 +1361,11 @@ export class GameEngine {
     for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) {
       if (Math.abs(dx) + Math.abs(dy) !== 1) continue;
       const n = this.floor.roomGrid.get(`${x + dx},${y + dy}`);
-      if (n) n.discovered = true;
+      // Secret rooms only become discovered after the player actually
+      // enters them — neighbour-reveal skips them so they stay off the
+      // minimap. Brass Ear still pops them via the relic's emit-hud
+      // override; that path runs separately.
+      if (n && n.type !== 'secret') n.discovered = true;
     }
   }
 
@@ -2382,6 +2386,28 @@ export class GameEngine {
 
   private openChestLoot(x: number, y: number): void {
     audio.sfx('chest');
+    // Secret-room chests bypass the standard roll table and drop a
+    // guaranteed relic plus a consumable — the reward for spotting the
+    // unlit corridor and walking through. Falls through to the normal
+    // loot path if no un-owned relic exists.
+    if (this.currentRoom.type === 'secret') {
+      const owned = new Set(this.player.relics);
+      const pool = RELIC_IDS.filter((id) => !owned.has(id));
+      if (pool.length > 0) {
+        const id = pool[Math.floor(Math.random() * pool.length)];
+        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: id, life: 30 });
+        // Bonus consumable next to the relic, if there's room for one.
+        const cPool = CONSUMABLE_IDS.filter((cid) => this.canAcceptConsumable(cid));
+        if (cPool.length > 0) {
+          const cid = cPool[Math.floor(Math.random() * cPool.length)];
+          this.pickups.push({ id: nid(), pos: { x: x + 14, y }, kind: 'consumable', value: 0, consumable: cid, life: 24 });
+        }
+        this.particles.burst(x, y, 36, { colour: PALETTE.gold, life: 1.2, maxLife: 1.2, drag: 0.88 });
+        return;
+      }
+      // Fall through to standard loot — every relic already owned, but
+      // the player still deserves a thank-you handful.
+    }
     const r = Math.random();
     // 12% weapon, 12% spell, 14% relic, rest is gold/essence
     if (r < 0.12) {
