@@ -70,6 +70,8 @@ export interface InputState {
   mapPressed: boolean;
   cycleWeaponPressed: boolean;
   cycleSpellPressed: boolean;
+  cycleConsumablePressed: boolean;
+  useConsumablePressed: boolean;
   uiUp: boolean;
   uiDown: boolean;
   uiLeft: boolean;
@@ -339,6 +341,7 @@ export class InputManager {
       dashPressed: false, spellPressed: false, spellHeld: false,
       interactPressed: false, pausePressed: false, mapPressed: false,
       cycleWeaponPressed: false, cycleSpellPressed: false,
+      cycleConsumablePressed: false, useConsumablePressed: false,
       uiUp: false, uiDown: false, uiLeft: false, uiRight: false,
       uiConfirm: false, uiCancel: false,
     };
@@ -367,6 +370,8 @@ export class InputManager {
     s.mapPressed      ||= this.keysPressedThisFrame.has('KeyM') || this.keysPressedThisFrame.has('Tab');
     s.cycleWeaponPressed ||= this.keysPressedThisFrame.has('KeyQ');
     s.cycleSpellPressed  ||= this.keysPressedThisFrame.has('KeyR');
+    s.cycleConsumablePressed ||= this.keysPressedThisFrame.has('KeyG');
+    s.useConsumablePressed   ||= this.keysPressedThisFrame.has('KeyH');
 
     s.uiUp     ||= this.keysPressedThisFrame.has('ArrowUp')    || this.keysPressedThisFrame.has('KeyW');
     s.uiDown   ||= this.keysPressedThisFrame.has('ArrowDown')  || this.keysPressedThisFrame.has('KeyS');
@@ -396,6 +401,8 @@ export class InputManager {
       s.mapPressed      ||= !!this.touchPressedThisFrame['map'];
       s.cycleWeaponPressed ||= !!this.touchPressedThisFrame['cycleWeapon'];
       s.cycleSpellPressed  ||= !!this.touchPressedThisFrame['cycleSpell'];
+      s.cycleConsumablePressed ||= !!this.touchPressedThisFrame['cycleConsumable'];
+      s.useConsumablePressed   ||= !!this.touchPressedThisFrame['useConsumable'];
     }
 
     // Gamepad
@@ -446,6 +453,8 @@ export class InputManager {
       s.mapPressed          ||= padFired('map',         m.map,         this.padPressed(m.map));
       s.cycleWeaponPressed  ||= padFired('cycleWeapon', m.cycleWeapon, this.padPressed(m.cycleWeapon));
       s.cycleSpellPressed   ||= padFired('cycleSpell',  m.cycleSpell,  this.padPressed(m.cycleSpell));
+      s.cycleConsumablePressed ||= padFired('cycleConsumable', m.cycleConsumable, this.padPressed(m.cycleConsumable));
+      s.useConsumablePressed   ||= padFired('useConsumable',   m.useConsumable,   this.padPressed(m.useConsumable));
 
       s.uiUp     ||= this.padPressed(m.dpadUp);
       s.uiDown   ||= this.padPressed(m.dpadDown);

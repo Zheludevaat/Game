@@ -40,6 +40,8 @@ const PAD_LABELS: Record<GamepadAction, string> = {
   map: 'Map',
   cycleWeapon: 'Cycle Weapon',
   cycleSpell: 'Cycle Spell',
+  cycleConsumable: 'Cycle Item',
+  useConsumable: 'Use Item',
   dpadUp: 'D-pad Up',
   dpadDown: 'D-pad Down',
   dpadLeft: 'D-pad Left',

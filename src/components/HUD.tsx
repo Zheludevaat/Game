@@ -2,6 +2,7 @@ import { HudSnapshot } from '../game/GameEngine';
 import { RELICS } from '../game/data/relics';
 import { WEAPONS } from '../game/data/weapons';
 import { SPELLS } from '../game/data/spells';
+import { CONSUMABLES } from '../game/data/consumables';
 import { STATUS_CONFIG } from '../game/data/statusEffects';
 import { InputManager } from '../game/input/InputManager';
 
@@ -36,6 +37,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
         </div>
         <PlayerStatusStrip status={hud.playerStatus} />
         <LoadoutStrip hud={hud} />
+        <ConsumableStrip hud={hud} />
       </div>
 
       <div className="hud-top-right">
@@ -242,6 +244,64 @@ function ComboTag({ count, pulse }: { count: number; pulse: number }): JSX.Eleme
       }}
     >
       ×{count}
+    </div>
+  );
+}
+
+function ConsumableStrip({ hud }: { hud: HudSnapshot }): JSX.Element | null {
+  if (!hud.consumables || hud.consumables.length === 0) {
+    return (
+      <div style={{
+        marginTop: 6, fontSize: 9, color: 'var(--bone)', opacity: 0.55, letterSpacing: '0.16em',
+      }}>
+        ITEMS — none
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ fontSize: 9, color: 'var(--bone)', opacity: 0.75, letterSpacing: '0.18em', marginRight: 2 }}>
+        [G / H]
+      </span>
+      {hud.consumables.map((slot, i) => {
+        const def = CONSUMABLES[slot.id];
+        const selected = i === hud.consumableIdx;
+        return (
+          <div
+            key={slot.id}
+            title={`${def.name} ×${slot.count} — ${def.description}`}
+            style={{
+              minWidth: 24,
+              padding: '1px 3px',
+              fontSize: 12,
+              lineHeight: 1.1,
+              textAlign: 'center',
+              color: def.colour,
+              background: selected ? 'rgba(244, 210, 122, 0.18)' : 'rgba(0, 0, 0, 0.45)',
+              border: `1px solid ${selected ? '#f4d27a' : '#3b265c'}`,
+              boxShadow: selected ? '0 0 6px rgba(244, 210, 122, 0.55)' : 'none',
+            }}
+          >
+            {def.glyph}
+            <div style={{ fontSize: 8, color: 'var(--bone)', opacity: 0.85 }}>
+              ×{slot.count}
+            </div>
+          </div>
+        );
+      })}
+      {hud.freeNextSpell && (
+        <span
+          title="Next spell costs no mana"
+          style={{
+            fontSize: 9,
+            color: '#a4faf0',
+            letterSpacing: '0.18em',
+            marginLeft: 6,
+          }}
+        >
+          ECHO
+        </span>
+      )}
     </div>
   );
 }

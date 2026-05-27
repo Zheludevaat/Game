@@ -45,6 +45,8 @@ const ACTION_LABELS: Array<{ key: keyof GamepadMap; pretty: string }> = [
   { key: 'interact', pretty: 'Interact / Use' },
   { key: 'cycleWeapon', pretty: 'Cycle Weapon' },
   { key: 'cycleSpell', pretty: 'Cycle Spell' },
+  { key: 'cycleConsumable', pretty: 'Cycle Item' },
+  { key: 'useConsumable', pretty: 'Use Item' },
   { key: 'pause', pretty: 'Pause' },
   { key: 'map', pretty: 'Map' },
 ];

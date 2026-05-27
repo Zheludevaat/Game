@@ -6,7 +6,9 @@ export type ActionName =
   | 'pause'
   | 'map'
   | 'cycleWeapon'
-  | 'cycleSpell';
+  | 'cycleSpell'
+  | 'cycleConsumable'
+  | 'useConsumable';
 
 export interface GamepadMap {
   attack: number;
@@ -17,6 +19,9 @@ export interface GamepadMap {
   map: number;
   cycleWeapon: number;
   cycleSpell: number;
+  /** Trigger pads — LT cycles the selected consumable, RT uses it. */
+  cycleConsumable: number;
+  useConsumable: number;
   // D-pad
   dpadUp: number;
   dpadDown: number;
@@ -47,6 +52,8 @@ export const DEFAULT_GAMEPAD_MAP: GamepadMap = {
   interact: 3,      // Y / Triangle (Xbox Y, top)
   cycleSpell: 4,    // LB / L1 — cycles between known spells
   cycleWeapon: 5,   // RB / R1 — cycles between known weapons
+  cycleConsumable: 6, // LT / L2 — cycles between carried consumables
+  useConsumable: 7,   // RT / R2 — uses the selected consumable
   pause: 9,         // Start / Menu / +
   map: 8,           // Select / Share / −
   dpadUp: 12,
@@ -65,6 +72,8 @@ export const SWITCH_GAMEPAD_MAP: GamepadMap = {
   interact: 2,      // Y button (Nintendo left)
   cycleSpell: 4,    // L
   cycleWeapon: 5,   // R
+  cycleConsumable: 6, // ZL
+  useConsumable: 7,   // ZR
   pause: 9,         // + (Plus)
   map: 8,           // − (Minus)
   dpadUp: 12,

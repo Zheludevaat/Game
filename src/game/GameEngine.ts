@@ -10,6 +10,10 @@ import { RELICS, RELIC_IDS } from './data/relics';
 import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
 import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
 import {
+  CONSUMABLES, CONSUMABLE_IDS, ConsumableId,
+  CONSUMABLE_SLOT_CAP, CONSUMABLE_STACK_CAP,
+} from './data/consumables';
+import {
   STATUS_CONFIG, StatusEffect, StatusEffectKind,
   applyStatusEffect, tickStatusEffects, hasStatus, absorbWithShield,
   speedMultiplierFromStatus,
@@ -78,6 +82,12 @@ export interface HudSnapshot {
   dashCooldownMax: number;
   /** Active tutorial prompts (gold ghost-text overlays). Empty after first run. */
   tutorialPrompts: string[];
+  /** Consumable slots carried by the player (cap 3 distinct kinds). */
+  consumables: { id: ConsumableId; count: number }[];
+  /** Index into `consumables` of the selected slot. */
+  consumableIdx: number;
+  /** True while the player's next spell is free (Echo Charm active). */
+  freeNextSpell: boolean;
   // For game over
   alive: boolean;
 }
@@ -156,6 +166,15 @@ interface PlayerState {
   status: StatusEffect[];
   /** Wall-clock (engine timeAlive) at the last dash launch — used by parry. */
   dashStartT: number;
+  /** Active consumable inventory — at most CONSUMABLE_SLOT_CAP distinct
+   *  kinds, each stacking up to CONSUMABLE_STACK_CAP. */
+  consumables: { id: ConsumableId; count: number }[];
+  /** Index into `consumables` of the currently selected slot. Clamped on
+   *  cycle. Re-clamped down to length-1 when a slot empties. */
+  consumableIdx: number;
+  /** When true, the player's next spell cast costs no mana — set by
+   *  Echo Charm consumable, cleared on the next successful cast. */
+  freeNextSpell: boolean;
 }
 
 interface Enemy {
@@ -214,11 +233,12 @@ interface Projectile {
 interface Pickup {
   id: number;
   pos: Vec;
-  kind: 'coin' | 'essence' | 'key' | 'hp' | 'mp' | 'relic' | 'weapon' | 'spell';
+  kind: 'coin' | 'essence' | 'key' | 'hp' | 'mp' | 'relic' | 'weapon' | 'spell' | 'consumable';
   value: number;
   relic?: RelicId;
   weapon?: WeaponId;
   spell?: SpellId;
+  consumable?: ConsumableId;
   life: number;
 }
 
@@ -590,6 +610,9 @@ export class GameEngine {
       attackHitTimer: 0,
       status: [],
       dashStartT: -1,
+      consumables: [],
+      consumableIdx: 0,
+      freeNextSpell: false,
     };
     this.tutorialStartPos = { x: this.player.pos.x, y: this.player.pos.y };
     this.grantRelic(a.startingRelic, true);
@@ -705,6 +728,128 @@ export class GameEngine {
     });
     audio.sfx('chest');
     return true;
+  }
+
+  /** True if the player has room for one more of this consumable kind —
+   *  either an existing entry below CONSUMABLE_STACK_CAP, or room for a
+   *  new entry under CONSUMABLE_SLOT_CAP. Drop-rolls skip kinds that
+   *  fail this so a fully-stocked inventory doesn't waste a chest roll. */
+  private canAcceptConsumable(id: ConsumableId): boolean {
+    const existing = this.player.consumables.find((c) => c.id === id);
+    if (existing) return existing.count < CONSUMABLE_STACK_CAP;
+    return this.player.consumables.length < CONSUMABLE_SLOT_CAP;
+  }
+
+  private grantConsumable(id: ConsumableId): void {
+    const c = CONSUMABLES[id];
+    const existing = this.player.consumables.find((e) => e.id === id);
+    if (existing) {
+      if (existing.count >= CONSUMABLE_STACK_CAP) return;
+      existing.count += 1;
+    } else {
+      if (this.player.consumables.length >= CONSUMABLE_SLOT_CAP) return;
+      this.player.consumables.push({ id, count: 1 });
+      // Auto-select the newly-acquired kind so the next "use" press
+      // doesn't fire whatever was selected before.
+      this.player.consumableIdx = this.player.consumables.length - 1;
+    }
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, c.name, c.colour);
+    this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 16, {
+      colour: c.colour, life: 0.7, maxLife: 0.7, drag: 0.86,
+    });
+  }
+
+  private cycleConsumable(): void {
+    if (this.player.consumables.length < 2) return;
+    this.player.consumableIdx = (this.player.consumableIdx + 1) % this.player.consumables.length;
+    const slot = this.player.consumables[this.player.consumableIdx];
+    const c = CONSUMABLES[slot.id];
+    audio.sfx('pickup');
+    this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 16, `${c.name} ×${slot.count}`, c.colour);
+  }
+
+  private useSelectedConsumable(): void {
+    const p = this.player;
+    if (p.consumables.length === 0) return;
+    if (p.consumableIdx >= p.consumables.length) p.consumableIdx = 0;
+    const slot = p.consumables[p.consumableIdx];
+    const def = CONSUMABLES[slot.id];
+    this.applyConsumableEffect(slot.id);
+    slot.count -= 1;
+    if (slot.count <= 0) {
+      p.consumables.splice(p.consumableIdx, 1);
+      if (p.consumableIdx >= p.consumables.length) {
+        p.consumableIdx = Math.max(0, p.consumables.length - 1);
+      }
+    }
+    audio.sfx('shrine');
+    this.particles.burst(p.pos.x, p.pos.y - 6, 18, {
+      colour: def.colour, life: 0.8, maxLife: 0.8, drag: 0.84,
+    });
+  }
+
+  private applyConsumableEffect(id: ConsumableId): void {
+    const p = this.player;
+    switch (id) {
+      case 'healingPhial':
+        this.healPlayer(25);
+        break;
+      case 'manaPhial':
+        p.mp = Math.min(p.maxMp, p.mp + 30);
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 8, '+30 MP', '#9b6cff');
+        break;
+      case 'cleansingSalt': {
+        // Drop every debuff (keep shield/regen if already up).
+        p.status = p.status.filter((s) => s.kind === 'shield' || s.kind === 'regen');
+        applyStatusEffect(p, 'shield', this.timeAlive, { duration: 4, magnitude: 12 });
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'CLEANSED', '#6cf6e5');
+        break;
+      }
+      case 'emberBomb': {
+        const radius = 64;
+        // Visual ring telegraph + burst.
+        this.particles.burst(p.pos.x, p.pos.y, 28, {
+          colour: '#ff7a3a', life: 0.8, maxLife: 0.8, drag: 0.85,
+        });
+        for (let i = 0; i < 18; i++) {
+          const a = (i / 18) * Math.PI * 2;
+          this.particles.emit({
+            x: p.pos.x, y: p.pos.y,
+            vx: Math.cos(a) * 180, vy: Math.sin(a) * 180,
+            life: 0.32, maxLife: 0.32, size: 1.8, colour: '#ffe6a3', drag: 0.78,
+          });
+        }
+        for (const e of this.enemies) {
+          if (e.hp <= 0) continue;
+          const d = Math.hypot(e.pos.x - p.pos.x, e.pos.y - p.pos.y);
+          if (d > radius) continue;
+          const knock = { x: e.pos.x - p.pos.x, y: e.pos.y - p.pos.y };
+          this.damageEnemy(e, 18, knock, 220, { fromPlayer: true, canCrit: false });
+          applyStatusEffect(e, 'burn', this.timeAlive, { duration: 2.2 });
+        }
+        this.camera.shakeT = Math.max(this.camera.shakeT, 0.18);
+        this.camera.shakeMag = Math.max(this.camera.shakeMag, 2.6);
+        break;
+      }
+      case 'hourglassSand': {
+        this.timeStopUntil = Math.max(this.timeStopUntil, this.timeAlive + 1.5);
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'TIME STOP', '#ffe6a3');
+        // Halo ring radiating outward.
+        for (let i = 0; i < 14; i++) {
+          const a = (i / 14) * Math.PI * 2;
+          this.particles.emit({
+            x: p.pos.x, y: p.pos.y,
+            vx: Math.cos(a) * 80, vy: Math.sin(a) * 80,
+            life: 0.6, maxLife: 0.6, size: 1.5, colour: '#ffe6a3', drag: 0.86,
+          });
+        }
+        break;
+      }
+      case 'echoCharm':
+        p.freeNextSpell = true;
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 14, 'ECHO', '#a4faf0');
+        break;
+    }
   }
 
   private goToFloor(n: number): void {
@@ -1296,11 +1441,14 @@ export class GameEngine {
 
     if ((s.spellPressed || s.spellHeld) && p.spellCooldown <= 0) {
       const sp = SPELLS[p.spells[p.spellIdx]];
-      if (p.mp >= sp.manaCost) {
+      // Echo Charm consumable — next cast is free, then the flag clears.
+      const cost = p.freeNextSpell ? 0 : sp.manaCost;
+      if (p.mp >= cost) {
         this.castSpell();
         p.spellCooldown = sp.cooldown;
         p.spellTimer = 0.18;
-        p.mp = Math.max(0, p.mp - sp.manaCost);
+        p.mp = Math.max(0, p.mp - cost);
+        if (p.freeNextSpell) p.freeNextSpell = false;
       }
     }
 
@@ -1320,6 +1468,8 @@ export class GameEngine {
       const sp = SPELLS[p.spells[p.spellIdx]];
       this.spawnDamageNumber(p.pos.x, p.pos.y - 16, sp.name, '#9b6cff');
     }
+    if (s.cycleConsumablePressed) this.cycleConsumable();
+    if (s.useConsumablePressed)   this.useSelectedConsumable();
 
     // Death check
     if (p.hp <= 0) this.tryRevive();
@@ -1652,6 +1802,17 @@ export class GameEngine {
       if (pool.length > 0) {
         const id = pool[Math.floor(Math.random() * pool.length)];
         this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: id, life: 20 });
+        return;
+      }
+    }
+    if (r < 0.53) {
+      // consumable — 15% of chest rolls. Skip kinds that would put
+      // the slot row over CONSUMABLE_SLOT_CAP if they're new AND would
+      // exceed CONSUMABLE_STACK_CAP on an existing entry.
+      const pool = CONSUMABLE_IDS.filter((id) => this.canAcceptConsumable(id));
+      if (pool.length > 0) {
+        const id = pool[Math.floor(Math.random() * pool.length)];
+        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'consumable', value: 0, consumable: id, life: 22 });
         return;
       }
     }
@@ -3105,6 +3266,7 @@ export class GameEngine {
       case 'hp':      return '#ff7a8a';
       case 'mp':      return '#9b6cff';
       case 'key':     return '#6cf6e5';
+      case 'consumable': return '#a4faf0';
       default:        return '#f4d27a';
     }
   }
@@ -3152,6 +3314,9 @@ export class GameEngine {
         break;
       case 'spell':
         if (pk.spell) this.grantSpell(pk.spell);
+        break;
+      case 'consumable':
+        if (pk.consumable) this.grantConsumable(pk.consumable);
         break;
     }
     audio.sfx('pickup');
@@ -4032,6 +4197,27 @@ export class GameEngine {
           ctx.fillRect(pk.pos.x - 1, pk.pos.y - 7 + wobble, 2, 2);
           break;
         }
+        case 'consumable': {
+          const cdef = pk.consumable ? CONSUMABLES[pk.consumable] : null;
+          if (!cdef) break;
+          // Small flask silhouette tinted to the consumable's colour, with
+          // a soft halo. Reads as a pickup-able phial from across a room.
+          const rgb = hexToRgbString(cdef.colour);
+          const halo = ctx.createRadialGradient(pk.pos.x, pk.pos.y + wobble, 2, pk.pos.x, pk.pos.y + wobble, 14);
+          halo.addColorStop(0, `rgba(${rgb}, 0.55)`);
+          halo.addColorStop(1, `rgba(${rgb}, 0)`);
+          ctx.fillStyle = halo;
+          ctx.fillRect(pk.pos.x - 14, pk.pos.y - 14 + wobble, 28, 28);
+          // Flask body
+          ctx.fillStyle = '#1a0f2c';
+          ctx.fillRect(pk.pos.x - 3, pk.pos.y - 3 + wobble, 6, 7);
+          ctx.fillStyle = cdef.colour;
+          ctx.fillRect(pk.pos.x - 2, pk.pos.y - 1 + wobble, 4, 4);
+          // Bright stopper highlight
+          ctx.fillStyle = '#ffe6a3';
+          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 4 + wobble, 2, 2);
+          break;
+        }
       }
     }
   }
@@ -4209,6 +4395,11 @@ export class GameEngine {
         case 'relic':   this.paintLight(pk.pos.x, pk.pos.y, 26, '244, 210, 122', 0.32); break;
         case 'weapon':  this.paintLight(pk.pos.x, pk.pos.y, 22, '244, 210, 122', 0.24); break;
         case 'spell':   this.paintLight(pk.pos.x, pk.pos.y, 22, '155, 108, 255', 0.24); break;
+        case 'consumable': {
+          const cdef = pk.consumable ? CONSUMABLES[pk.consumable] : null;
+          if (cdef) this.paintLight(pk.pos.x, pk.pos.y, 18, hexToRgbString(cdef.colour), 0.28);
+          break;
+        }
       }
     }
 
@@ -4720,7 +4911,7 @@ export class GameEngine {
     // Magnet pulls coins / essence / hp / mp automatically; we only
     // gate on the items that REPLACE current equipment.
     for (const pk of this.pickups) {
-      if (pk.kind !== 'weapon' && pk.kind !== 'spell' && pk.kind !== 'relic') continue;
+      if (pk.kind !== 'weapon' && pk.kind !== 'spell' && pk.kind !== 'relic' && pk.kind !== 'consumable') continue;
       const d = dist(p.pos, pk.pos);
       if (d > 36) continue;
       if (pk.kind === 'weapon' && pk.weapon) {
@@ -4737,6 +4928,9 @@ export class GameEngine {
       } else if (pk.kind === 'relic' && pk.relic) {
         const r = RELICS[pk.relic];
         prompts.push(`${r.name} — ${r.description}`);
+      } else if (pk.kind === 'consumable' && pk.consumable) {
+        const c = CONSUMABLES[pk.consumable];
+        prompts.push(`${c.name} — ${c.description}`);
       }
       break; // one tooltip at a time even if multiple pickups overlap
     }
@@ -4796,6 +4990,9 @@ export class GameEngine {
       dashCooldown: p.dashCooldown,
       dashCooldownMax: p.dashCdMax || 1,
       tutorialPrompts: this.computeTutorialPrompts(),
+      consumables: p.consumables.map((c) => ({ id: c.id, count: c.count })),
+      consumableIdx: p.consumableIdx,
+      freeNextSpell: p.freeNextSpell,
       alive: !this.dead,
     });
   }
