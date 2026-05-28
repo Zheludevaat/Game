@@ -2570,11 +2570,14 @@ export class GameEngine {
     // the press was registered. Useful both for diagnosing the
     // "interact doesn't work" report (it DID fire, just nothing was
     // close enough) and as general UX feedback.
+    const hasLimitedNpc = room.type === 'sanctuary'
+      && this.npcs.some((n) => NPCS[n.defId]?.interaction === 'limited');
     if (
       (room.hasChest && !room.chestOpened) ||
       (room.hasShrine && !room.shrineUsed) ||
       room.type === 'exit' ||
-      (room.type === 'sanctuary' && room.sanctuaryNpcId === 'lampwright')
+      (room.type === 'sanctuary' && room.sanctuaryNpcId === 'lampwright') ||
+      hasLimitedNpc
     ) {
       this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'TOO FAR', DAMAGE_COLOURS.spell);
     }
@@ -2599,12 +2602,19 @@ export class GameEngine {
       p.coins -= cost;
       p.attack += 2;
       npc.interactionUsed = true;
-      this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, '+2 ATTACK', DAMAGE_COLOURS.weapon);
+      // Surface the new total so the player sees the persistent gain,
+      // not just the delta — "+2 → 14 ATK" reads as a meaningful
+      // milestone, "+2 ATTACK" alone reads as a tiny pop.
+      this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, `+2 → ${p.attack} ATK`, DAMAGE_COLOURS.weapon);
       this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `−${cost}c`, DAMAGE_COLOURS.error);
       audio.sfx('chest');
       if (!this.reducedParticles) {
-        this.particles.burst(npc.pos.x, npc.pos.y, 18, {
-          colour: '#f4d27a', life: 0.65, maxLife: 0.65, drag: 0.86,
+        this.particles.burst(npc.pos.x, npc.pos.y, 24, {
+          colour: '#f4d27a', life: 0.75, maxLife: 0.75, drag: 0.86,
+        });
+        // Radial ring at the player too — reads as "the gift carries with you"
+        this.particles.burst(p.pos.x, p.pos.y, 10, {
+          colour: '#ffe6a3', life: 0.5, maxLife: 0.5, drag: 0.82,
         });
       }
       return;
@@ -2621,13 +2631,24 @@ export class GameEngine {
       npc.interactionUsed = true;
       // Reveal every room on the current floor on the minimap.
       for (const r of this.floor.rooms) r.discovered = true;
-      this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, 'MAP REVEALED', DAMAGE_COLOURS.spell);
+      this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, 'FLOOR REVEALED', DAMAGE_COLOURS.spell);
       this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `−${cost} ✦`, DAMAGE_COLOURS.error);
       audio.sfx('shrine');
       if (!this.reducedParticles) {
         this.particles.burst(npc.pos.x, npc.pos.y, 18, {
           colour: '#a4faf0', life: 0.65, maxLife: 0.65, drag: 0.86,
         });
+        // Expanding teal ring at the player — visual signal that the
+        // minimap just changed, so the player knows to glance up. The
+        // map-update is otherwise silent and easy to miss.
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2;
+          this.particles.emit({
+            x: p.pos.x, y: p.pos.y,
+            vx: Math.cos(a) * 160, vy: Math.sin(a) * 160,
+            life: 0.4, maxLife: 0.4, size: 1.5, colour: '#a4faf0', drag: 0.8,
+          });
+        }
       }
       return;
     }
@@ -6438,7 +6459,8 @@ export class GameEngine {
       if (d < 34) prompts.push('Press Interact to commune');
     }
     // Limited-interaction NPC prompt — Smith forge, Cartographer map.
-    // Shows the cost so the player can decide before pressing.
+    // Each is one-shot per encounter; the "(once)" suffix telegraphs
+    // that so the player doesn't expect to repeat-buy.
     for (const npc of this.npcs) {
       const def = NPCS[npc.defId];
       if (!def || def.interaction !== 'limited') continue;
@@ -6447,9 +6469,9 @@ export class GameEngine {
       if (npc.interactionUsed) {
         prompts.push(`${def.name} — already given`);
       } else if (def.id === 'smith') {
-        prompts.push('Interact — 30c for +2 ATK');
+        prompts.push(`Interact — 30c for +2 ATK (once)${p.coins < 30 ? ' · NEED COIN' : ''}`);
       } else if (def.id === 'cartographer') {
-        prompts.push('Interact — 5 ✦ to reveal floor');
+        prompts.push(`Interact — 5 ✦ to reveal this floor (once)${p.essence < 5 ? ' · NEED ESSENCE' : ''}`);
       }
     }
     // Locked-door telegraph — surface "🔒 KEY REQUIRED" while the player

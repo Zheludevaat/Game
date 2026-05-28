@@ -278,26 +278,31 @@ function drawDiviner(ctx: CanvasRenderingContext2D, x: number, y: number, _r: Np
 }
 
 function drawChorister(ctx: CanvasRenderingContext2D, x: number, y: number, r: NpcDrawCtx, def: NpcDef): void {
-  // Tall standing figure, arms slightly raised, surrounded by a halo
-  // of fixed-star pinpricks. The Chorister hymns the Powers — the
-  // light reads as belonging to the cosmos, not to her.
+  // Tall standing figure, arms slightly raised, surrounded by 7
+  // twinkling fixed-star pinpricks — the realm beyond the planets.
+  // Halo is intentionally softer than the lamp-keepers'; the light
+  // here belongs to the cosmos, not to a torch she carries.
   const accentRgb = hexToRgbString(def.colour);
-  // Halo — soft cream radial bloom encompassing the whole sprite
+  // Halo — cream radial bloom, gentle so the seven twinkling stars
+  // remain readable inside it.
   const halo = ctx.createRadialGradient(x, y - 2, 2, x, y - 2, 22);
-  halo.addColorStop(0, `rgba(${accentRgb}, 0.45)`);
+  halo.addColorStop(0, `rgba(${accentRgb}, 0.32)`);
   halo.addColorStop(1, `rgba(${accentRgb}, 0)`);
   ctx.fillStyle = halo;
   ctx.fillRect(x - 22, y - 24, 44, 44);
-  // Robe — pale ivory
+  // Robe body — dark indigo so the cream trim reads as light TRACE
+  // on a dark figure rather than a solid bright silhouette.
   ctx.fillStyle = '#3b265c';
   ctx.fillRect(x - 4, y - 2, 8, 10);
+  // Belt + hem — the def.colour cream stripes
   ctx.fillStyle = def.colour;
   ctx.fillRect(x - 5, y + 4, 10, 1);
   ctx.fillRect(x - 4, y + 8, 8, 1);
-  // Raised sleeves
+  // Raised sleeves — arms lifted in the act of singing
+  ctx.fillStyle = '#3b265c';
   ctx.fillRect(x - 6, y - 1, 2, 4);
   ctx.fillRect(x + 4, y - 1, 2, 4);
-  // Hood (open — the Chorister is unhooded, the cosmos sees her face)
+  // Head — unhooded, the cosmos sees her face
   ctx.fillStyle = '#231142';
   ctx.fillRect(x - 4, y - 6, 8, 4);
   ctx.fillStyle = def.colour;
@@ -306,11 +311,16 @@ function drawChorister(ctx: CanvasRenderingContext2D, x: number, y: number, r: N
   ctx.fillStyle = '#0a0420';
   ctx.fillRect(x - 3, y - 4, 2, 1);
   ctx.fillRect(x + 1, y - 4, 2, 1);
-  // Star pinpricks orbiting — twinkle from `r.timeAlive` so the cosmos
-  // breathes around her without animating the sprite
-  const t = r.timeAlive;
+  // Crown-mark at brow — the Eighth Sphere's signature
   ctx.fillStyle = '#fff7d6';
-  const stars: [number, number, number][] = [
+  ctx.fillRect(x - 1, y - 8, 2, 1);
+  // Seven star pinpricks, each twinkling on its own phase. The fixed
+  // stars of the Ogdoad — Pleroma — orbiting the singer in a fan
+  // above her head. Phase = entityId-derived so multiple Choristers
+  // in the same view wouldn't lock-step.
+  const t = r.timeAlive + r.entityId * 0.7;
+  ctx.fillStyle = '#fff7d6';
+  const stars: readonly [number, number, number][] = [
     [-10, -10, 0], [ 9, -8, 1], [-11,  -1, 2], [11,  2, 3],
     [-7, -14, 4], [ 6, -14, 5], [ -1, -16, 6],
   ];
@@ -320,9 +330,6 @@ function drawChorister(ctx: CanvasRenderingContext2D, x: number, y: number, r: N
     ctx.fillRect(x + sx, y + sy, 1, 1);
   }
   ctx.globalAlpha = 1;
-  // Bright crown-mark at brow — the Eighth Sphere's signature
-  ctx.fillStyle = '#fff7d6';
-  ctx.fillRect(x - 1, y - 8, 2, 1);
 }
 
 export const NPCS: Record<string, NpcDef> = {

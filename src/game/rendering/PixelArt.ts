@@ -1,5 +1,6 @@
 import { PALETTE } from '../constants';
 import type { SphereDef } from '../data/spheres';
+import type { ShrineKind } from '../GameTypes';
 import {
   drawCrack, drawRivet, drawMicroRune, drawMossPatch, drawSpiral,
   drawTideRipple, drawPetalCluster, drawSlash, drawCog, drawStarburst,
@@ -1060,19 +1061,17 @@ export function drawChest(
   }
 }
 
-/** ShrineKind drives the column-top decoration. The base platform +
- *  column are shared; each kind ships a 30-40-line custom top so the
+/** Kind drives the column-top decoration. The base platform + column
+ *  are shared; each kind ships a 30-40-line custom top so the
  *  alchemical operation reads from across the room before the player
- *  opens the modal. */
-type ShrineKindArg =
-  | 'calcination' | 'dissolution' | 'separation' | 'conjunction'
-  | 'fermentation' | 'distillation' | 'coagulation'
-  | 'cursed' | 'library' | 'puzzle';
-
+ *  opens the modal. The kind type is the canonical ShrineKind union
+ *  from GameTypes — keeps the rendering surface in lockstep with the
+ *  gameplay union, so adding a new kind there fails the type check
+ *  here until a matching crown branch lands. */
 export function drawShrine(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, used: boolean, t: number,
-  kind: ShrineKindArg = 'calcination',
+  kind: ShrineKind = 'calcination',
 ): void {
   // Cursed shrines get a darker stone — the rot has eaten the column.
   const cursed = kind === 'cursed';
@@ -1132,7 +1131,7 @@ export function drawShrine(
 function drawShrineCrown(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, t: number,
-  kind: ShrineKindArg,
+  kind: ShrineKind,
 ): void {
   switch (kind) {
     case 'calcination': {
