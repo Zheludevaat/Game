@@ -32,22 +32,14 @@ import { bossIntroShots } from './game/data/cinematicBossIntro';
 import { ENDING_CINEMATIC } from './game/data/cinematicEnding';
 import { SPHERE_BY_ID, SphereId } from './game/data/spheres';
 
-type Screen =
-  | 'loading' | 'menu' | 'archetype' | 'game' | 'pause' | 'settings'
-  | 'controllerTest' | 'howTo' | 'gameOver' | 'meta' | 'map'
-  | 'codex' | 'prologue' | 'epilogue' | 'cinematics'
-  | 'tabula'        // opening film (replaces card Prologue as default)
-  | 'newRunIntro'   // "The Gate Opens" between archetype select and game
-  | 'bossIntro'     // sphere-specific Warden manifest film
-  | 'ending';       // "The Eighth Sphere" climactic ending film
+import { useScreenMachine, Screen } from './components/useScreenMachine';
 
 export function App(): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const inputRef = useRef<InputManager | null>(null);
 
-  const [screen, setScreen] = useState<Screen>('loading');
-  const [previousScreen, setPreviousScreen] = useState<Screen>('menu');
+  const { screen, go, back, replace } = useScreenMachine('loading');
   const [settings, setSettings] = useState<SettingsState>(() => loadSettings());
   // Settings ref — always points at the latest settings object so the
   // InputManager's mapping provider can read settings.gamepadMap on
@@ -80,7 +72,7 @@ export function App(): JSX.Element {
   // ahead. The film is replayable from the Cinematics gallery.
   useEffect(() => {
     const t = setTimeout(() => {
-      setScreen(meta.seenPrologue ? 'menu' : 'tabula');
+      replace(meta.seenPrologue ? 'menu' : 'tabula');
     }, 1400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,18 +167,22 @@ export function App(): JSX.Element {
     const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1;
     if (isFirstRun) {
       setPendingRunStart({ id: archetypeId, floor: opts?.floor, runSeed: opts?.runSeed });
-      setScreen('newRunIntro');
+      go('newRunIntro');
       return;
     }
-    setScreen('game');
+    go('game');
     // Persist a resume entry — used by Continue button next time
     const runSeed = opts?.runSeed ?? Math.floor(Math.random() * 0xffffffff);
     const startingFloor = opts?.floor ?? 1;
     saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
     setResumeAvailable(true);
-    setTimeout(() => {
+    // Wait for React to flush the canvas to the DOM, then mount the engine.
+    requestAnimationFrame(() => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) {
+        console.warn('[startRun] canvas not available after rAF — mounting skipped');
+        return;
+      }
       const input = new InputManager();
       inputRef.current = input;
       // Wire the live mapping source — InputManager will read
@@ -202,8 +198,8 @@ export function App(): JSX.Element {
       });
       const engine = new GameEngine({
         onHud: setHud,
-        onPause: () => setScreen('pause'),
-        onOpenMap: () => { setPreviousScreen('game'); setScreen('map'); },
+        onPause: () => go('pause'),
+        onOpenMap: () => go('map'),
         onGameOver: (s) => {
           setSummary(s);
           setBestFloor((b) => {
@@ -214,7 +210,7 @@ export function App(): JSX.Element {
           setEssence((e) => { const ne = e + s.essenceCollected; saveEssence(ne); return ne; });
           saveResume(null);
           setResumeAvailable(false);
-          setScreen('gameOver');
+          go('gameOver');
         },
         onFloorChange: (n) => {
           // Update resume floor checkpoint
@@ -231,15 +227,13 @@ export function App(): JSX.Element {
           // First time reaching the Ogdoad: the climactic Ending film.
           // Subsequent times (replays of the same achievement): the card
           // Epilogue, which is shorter and resumable.
-          setPreviousScreen('game');
-          setScreen(meta.seenEnding ? 'epilogue' : 'ending');
+          go(meta.seenEnding ? 'epilogue' : 'ending');
         },
         onBossRoomEntered: (sphereId: string) => {
           // Already seen this sphere's intro across runs? skip.
           if (meta.bossesSeen?.includes(sphereId)) return;
           setPendingBossIntro(sphereId);
-          setPreviousScreen('game');
-          setScreen('bossIntro');
+          go('bossIntro');
         },
       });
       engineRef.current = engine;
@@ -252,8 +246,8 @@ export function App(): JSX.Element {
         startingFloor,
         runSeed,
       });
-    }, 30);
-  }, [meta, settings.reducedParticles]);
+    });
+  }, [meta, settings.reducedParticles, go]);
 
   const stopRun = useCallback(() => {
     const engine = engineRef.current;
@@ -275,6 +269,17 @@ export function App(): JSX.Element {
       || screen === 'ending'
     );
   }, [screen]);
+
+  // Pause on blur — when the player switches tabs / apps / the iPad locks,
+  // the game freezes so they don't die while away.
+  useEffect(() => {
+    const onBlur = (): void => {
+      const engine = engineRef.current;
+      if (engine && !engine.isDead()) engine.setPaused(true);
+    };
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, []);
 
   // Reduced particles toggle should propagate live
   useEffect(() => {
@@ -329,18 +334,18 @@ export function App(): JSX.Element {
           resumeAvailable={resumeAvailable}
           codexUnlocked={meta.unlockedCodex.length}
           codexTotal={CODEX.length}
-          onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
-          onCinematics={() => setScreen('cinematics')}
-          onNewRun={() => setScreen('archetype')}
+          onCodex={() => go('codex')}
+          onCinematics={() => go('cinematics')}
+          onNewRun={() => go('archetype')}
           onContinue={() => {
             const r = loadResume();
-            if (!r) { setScreen('archetype'); return; }
+            if (!r) { go('archetype'); return; }
             startRun(r.archetype, { floor: r.floor, runSeed: r.seed });
           }}
-          onMeta={() => setScreen('meta')}
-          onSettings={() => { setPreviousScreen('menu'); setScreen('settings'); }}
-          onController={() => { setPreviousScreen('menu'); setScreen('controllerTest'); }}
-          onHowTo={() => setScreen('howTo')}
+          onMeta={() => go('meta')}
+          onSettings={() => go('settings')}
+          onController={() => go('controllerTest')}
+          onHowTo={() => go('howTo')}
         />
       )}
 
@@ -348,7 +353,7 @@ export function App(): JSX.Element {
         <ArchetypeSelect
           lastArchetype={lastArchetype}
           onSelect={(id) => startRun(id)}
-          onBack={() => setScreen('menu')}
+          onBack={() => go('menu')}
         />
       )}
 
@@ -363,20 +368,20 @@ export function App(): JSX.Element {
 
       {screen === 'pause' && (
         <PauseMenu
-          onResume={() => setScreen('game')}
-          onSettings={() => { setPreviousScreen('pause'); setScreen('settings'); }}
-          onController={() => { setPreviousScreen('pause'); setScreen('controllerTest'); }}
+          onResume={() => go('game')}
+          onSettings={() => go('settings')}
+          onController={() => go('controllerTest')}
           onQuit={() => {
             stopRun();
             saveResume(null);
             setResumeAvailable(false);
-            setScreen('menu');
+            go('menu');
           }}
         />
       )}
 
       {screen === 'map' && hud && (
-        <MapOverlay hud={hud} onClose={() => setScreen('game')} />
+        <MapOverlay hud={hud} onClose={() => go('game')} />
       )}
 
       {screen === 'settings' && (
@@ -385,19 +390,19 @@ export function App(): JSX.Element {
           onChange={setSettings}
           onResetSave={onResetSave}
           onResetPad={() => inputRef.current?.resetMapping()}
-          onBack={() => setScreen(previousScreen)}
+          onBack={() => back()}
         />
       )}
 
       {screen === 'controllerTest' && (
         <ControllerTest
           input={inputRef.current}
-          onBack={() => setScreen(previousScreen)}
+          onBack={() => back()}
         />
       )}
 
       {screen === 'howTo' && (
-        <HowToPlay onBack={() => setScreen('menu')} />
+        <HowToPlay onBack={() => go('menu')} />
       )}
 
       {screen === 'gameOver' && summary && (
@@ -407,12 +412,12 @@ export function App(): JSX.Element {
           essenceTotal={essence}
           onNewRun={() => {
             stopRun();
-            setScreen('archetype');
+            go('archetype');
           }}
-          onCodex={() => { setPreviousScreen('gameOver'); setScreen('codex'); }}
+          onCodex={() => go('codex')}
           onMenu={() => {
             stopRun();
-            setScreen('menu');
+            go('menu');
           }}
         />
       )}
@@ -422,7 +427,7 @@ export function App(): JSX.Element {
           essence={essence}
           meta={meta}
           onSpend={onSpendMeta}
-          onBack={() => setScreen('menu')}
+          onBack={() => go('menu')}
         />
       )}
 
@@ -430,7 +435,7 @@ export function App(): JSX.Element {
         <CodexScreen
           unlocked={meta.unlockedCodex}
           newIds={summary?.codexUnlockedThisRun ?? []}
-          onBack={() => setScreen(previousScreen === 'gameOver' ? 'gameOver' : 'menu')}
+          onBack={() => back()}
         />
       )}
 
@@ -438,11 +443,11 @@ export function App(): JSX.Element {
         <Prologue
           onContinue={() => {
             setMeta((m) => ({ ...m, seenPrologue: true }));
-            setScreen('archetype');
+            go('archetype');
           }}
           onSkip={() => {
             setMeta((m) => ({ ...m, seenPrologue: true }));
-            setScreen('archetype');
+            go('archetype');
           }}
         />
       )}
@@ -450,12 +455,12 @@ export function App(): JSX.Element {
       {screen === 'epilogue' && (
         <Epilogue
           ogdoadCount={meta.ogdoadReached || 1}
-          onContinue={() => setScreen(previousScreen === 'game' ? 'game' : 'menu')}
+          onContinue={() => back()}
         />
       )}
 
       {screen === 'cinematics' && (
-        <CinematicsScreen onBack={() => setScreen('menu')} endingUnlocked={meta.seenEnding} />
+        <CinematicsScreen onBack={() => go('menu')} endingUnlocked={meta.seenEnding} />
       )}
 
       {screen === 'tabula' && (
@@ -465,7 +470,7 @@ export function App(): JSX.Element {
           mood="cosmos"
           onDone={() => {
             setMeta((m) => ({ ...m, seenPrologue: true }));
-            setScreen('menu');
+            go('menu');
           }}
         />
       )}
@@ -477,7 +482,7 @@ export function App(): JSX.Element {
           mood="ascent"
           onDone={() => {
             setMeta((m) => ({ ...m, seenEnding: true }));
-            setScreen(previousScreen === 'game' ? 'game' : 'menu');
+            back();
           }}
         />
       )}
@@ -510,7 +515,7 @@ export function App(): JSX.Element {
                 ...m,
                 bossesSeen: m.bossesSeen?.includes(sphereId) ? m.bossesSeen : [...(m.bossesSeen ?? []), sphereId],
               }));
-              setScreen('game');
+              go('game');
             }}
           />
         );

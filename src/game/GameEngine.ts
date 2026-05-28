@@ -12,19 +12,19 @@ import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
 import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
+import { NPCS, NPC_BY_ID, NpcDef, NpcPassive } from './data/npcs';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
-import {
-  drawChest, drawEnemy, drawFloorTile, drawInitiate, drawShrine, drawStairs, drawTorch, drawWallTile, getEnemySize,
-} from './rendering/PixelArt';
 import { InputManager } from './input/InputManager';
 import { audio } from './systems/AudioSystem';
+import { Renderer, RenderState, CameraState } from './rendering/Renderer';
 
 export interface HudSnapshot {
   hp: number; maxHp: number;
   mp: number; maxMp: number;
   coins: number; keys: number; essence: number;
   floor: number;
+  lampsLit: number;
   sphereId: SphereId;
   sphereName: string;
   sphereGlyph: string;
@@ -129,7 +129,7 @@ interface Enemy {
   id: number;
   type:
     | 'lesserShade' | 'mercuryImp' | 'saltGolem' | 'lunarWisp'
-    | 'saturnKnight' | 'serpentOfBrass' | 'wardenBoss'
+    | 'saturnKnight' | 'serpentOfBrass' | 'saltBanshee' | 'wardenBoss'
     | 'seleneBoss' | 'hermesBoss' | 'aphroditeBoss' | 'heliosBoss'
     | 'aresBoss' | 'zeusBoss' | 'kronosBoss';
   visualKey: string;
@@ -159,6 +159,13 @@ interface AIState {
   chargeTimer?: number;
   chargeDir?: Vec;
   prepTimer?: number;
+}
+
+interface NpcEntity {
+  def: NpcDef;
+  pos: Vec;
+  facing: Vec;
+  passiveAccum: number;
 }
 
 interface Projectile {
@@ -232,35 +239,7 @@ function wardenDefFromVisual(visualKey: string): BossDef | null {
   return null;
 }
 
-// Per-enemy telegraph colour — used by the wind-up flash so a
-// saturnKnight reads as "violet about to slam" instead of generic orange.
-function enemyTelegraphColour(type: string): string {
-  switch (type) {
-    case 'lesserShade':    return '226, 58, 74';   // crimson
-    case 'mercuryImp':     return '108, 246, 229'; // teal
-    case 'saltGolem':      return '244, 210, 122'; // bone gold
-    case 'lunarWisp':      return '205, 214, 220'; // pale silver
-    case 'saturnKnight':   return '155, 108, 255'; // violet
-    case 'serpentOfBrass': return '200, 152, 63';  // brass
-    default:               return '244, 130, 60';  // fallback warm orange
-  }
-}
-
-// Hex `#rrggbb` → `"r, g, b"` (an rgba() inner triple).
-function hexToRgbString(hex: string): string {
-  let h = hex.replace('#', '');
-  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
-  const n = parseInt(h, 16);
-  return `${(n >> 16) & 0xff}, ${(n >> 8) & 0xff}, ${n & 0xff}`;
-}
-
-// Convert a sphere's hex accent into the format drawTorch wants.
-// Inner core stays white-hot regardless; this just tints the outer
-// flame layers and the wall halo so each floor's torches read distinct.
-function makeTorchTint(sphere: { accent: string }): { rgb: string; halo: string } {
-  const rgb = hexToRgbString(sphere.accent);
-  return { rgb, halo: `rgba(${rgb}, 0.35)` };
-}
+// hexToRgbString and makeTorchTint moved to vec2.ts / Renderer.
 
 interface FloorTransition {
   t: number;
@@ -314,6 +293,7 @@ interface DelayedAction {
 export class GameEngine {
   private canvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
+  private renderer = new Renderer();
   private rafId = 0;
   private lastTime = 0;
   private accumulator = 0;
@@ -325,6 +305,15 @@ export class GameEngine {
 
   private archetype!: ArchetypeDef;
   private runSeed = 0;
+  /** Per-floor seeded RNG for loot and gameplay randomness.
+   *  Reseeded in goToFloor so all runs with the same seed produce
+   *  the same outcomes. Visual-only Math.random() calls are left
+   *  alone — determinism matters for gameplay, not particles. */
+  private rng!: RNG;
+  /** Cached sphere data for the current floor — updated once per frame
+   *  in update() so all render paths read a single ref instead of calling
+   *  sphereForFloor() 14+ times per frame. */
+  private currentSphere!: ReturnType<typeof sphereForFloor>;
   private meta!: MetaState;
   private reducedParticles = false;
 
@@ -335,6 +324,7 @@ export class GameEngine {
   private projectiles: Projectile[] = [];
   private pickups: Pickup[] = [];
   private sigils: SigilHazard[] = [];
+  private npcs: NpcEntity[] = [];
   private particles = new ParticleSystem();
 
   private summary: RunSummary;
@@ -616,11 +606,14 @@ export class GameEngine {
   private goToFloor(n: number): void {
     const seed = hashSeed(this.runSeed, n);
     this.floor = generateFloor({ floor: n, seed });
+    // Reseed per-floor RNG for deterministic loot and game events.
+    this.rng = new RNG(hashSeed(this.runSeed, n + 0x1000));
     this.summary.floorReached = Math.max(this.summary.floorReached, n);
     this.enemies = [];
     this.projectiles = [];
     this.pickups = [];
     this.sigils = [];
+    this.npcs = [];
     this.bossSnapshot = null;
     this.bossBannerTimer = 0;
     this.roomClearEffects = [];
@@ -779,6 +772,29 @@ export class GameEngine {
       this.spawnEnemy(type, { x, y }, floor);
     }
     if (count > 0) room.enemiesSpawned = true;
+
+    // NPC spawning — sanctuary rooms always host an NPC; rare NPCs
+    // (Echo) have a small independent chance on any floor.
+    if (room.type === 'sanctuary') {
+      this.spawnSanctuaryNpc();
+    } else if (this.rng.next() < 0.02) {
+      this.spawnRareNpc();
+    }
+  }
+
+  private spawnSanctuaryNpc(): void {
+    const sphere = this.currentSphere.id;
+    const pool = NPCS.filter((n) => n.spawnRule === 'sanctuary' && (!n.sphere || n.sphere === sphere));
+    if (pool.length === 0) return;
+    const def = pool[Math.floor(this.rng.next() * pool.length)];
+    this.npcs.push({ def, pos: { x: ROOM_W / 2, y: ROOM_H / 2 + 8 }, facing: { x: 0, y: 1 }, passiveAccum: 0 });
+  }
+
+  private spawnRareNpc(): void {
+    const pool = NPCS.filter((n) => n.spawnRule === 'rare');
+    if (pool.length === 0) return;
+    const def = pool[Math.floor(this.rng.next() * pool.length)];
+    this.npcs.push({ def, pos: { x: ROOM_W / 2, y: ROOM_H / 2 + 8 }, facing: { x: 0, y: 1 }, passiveAccum: 0 });
   }
 
   private pickEnemyType(rng: RNG): Enemy['type'] {
@@ -788,6 +804,7 @@ export class GameEngine {
     if (floor >= 2) pool.push('lunarWisp');
     if (floor >= 3) pool.push('saltGolem');
     if (floor >= 4) pool.push('saturnKnight');
+    if (floor >= 8) pool.push('saltBanshee');
     return pool[rng.int(0, pool.length)];
   }
 
@@ -823,6 +840,9 @@ export class GameEngine {
         e.hp = e.maxHp = Math.round(120 * (1 + (floor - 1) * 0.25)); e.speed = 46; e.radius = 14; e.width = 14; e.height = 9; e.contactDamage = 12;
         e.isMiniBoss = true;
         break;
+      case 'saltBanshee':
+        e.hp = e.maxHp = Math.round(18 * lvl); e.speed = 44; e.radius = 8; e.width = 11; e.height = 12; e.contactDamage = 7;
+        break;
       case 'wardenBoss':
         e.hp = e.maxHp = Math.round(260 + 80 * (floor / 10)); e.speed = 28; e.radius = 18; e.width = 18; e.height = 16; e.contactDamage = 16;
         e.isBoss = true;
@@ -856,14 +876,12 @@ export class GameEngine {
   }
 
   private spawnBoss(floor: number, seed: number): void {
-    const rng = new RNG(seed);
     // Pick the Warden by which sphere this boss room sits in. Each
     // sphere has a sphere-specific Warden with its own visual + patterns.
     const sphere = sphereForFloor(floor);
     const def = BOSSES[sphere.id];
     const visualKey = (def?.visualKey ?? 'wardenBoss') as Enemy['type'];
     this.spawnEnemy(visualKey, { x: ROOM_W / 2, y: ROOM_H / 2 - 20 }, floor);
-    void rng;
   }
 
   // --- main loop ----------------------------------------------------------
@@ -893,6 +911,7 @@ export class GameEngine {
 
   private update(dt: number): void {
     this.input.tick();
+    this.currentSphere = sphereForFloor(this.floor.number);
     this.timeAlive += dt;
 
     const s = this.input.state;
@@ -925,6 +944,7 @@ export class GameEngine {
       this.updateProjectiles(dt);
       this.updatePickups(dt);
       this.updateSigils(dt);
+      this.updateNpcs(dt);
       this.updateDelayedActions(dt);
     }
 
@@ -1131,8 +1151,8 @@ export class GameEngine {
     this.camera.shakeT = Math.max(this.camera.shakeT, 0.6);
     this.camera.shakeMag = Math.max(this.camera.shakeMag, 4);
     // Initial impact burst — gold + accent halo radiating from the body.
-    const accent = sphereForFloor(this.floor.number).accent;
     if (!this.reducedParticles) {
+      const accent = this.currentSphere.accent;
       this.particles.burst(this.player.pos.x, this.player.pos.y - 6, 40, {
         colour: accent, life: 1.0, maxLife: 1.0, drag: 0.88,
       });
@@ -1175,7 +1195,7 @@ export class GameEngine {
       this.camera.shakeT = Math.max(this.camera.shakeT, 0.3);
       this.camera.shakeMag = Math.max(this.camera.shakeMag, 2.4);
       if (!this.reducedParticles) {
-        const accent = sphereForFloor(this.floor.number).accent;
+        const accent = this.currentSphere.accent;
         this.particles.burst(p.pos.x, p.pos.y - 6, 36, {
           colour: '#ffffff', life: 0.7, maxLife: 0.7, drag: 0.86,
         });
@@ -1580,6 +1600,22 @@ export class GameEngine {
           }
           break;
         }
+        case 'saltBanshee': {
+          // Ghostly chaser. Fires a slow bolt when in range.
+          this.moveTowards(e, n, e.speed, dt);
+          if (e.cooldown <= 0 && d < 200) {
+            this.projectiles.push({
+              id: nid(),
+              pos: { x: e.pos.x, y: e.pos.y },
+              vel: { x: n.x * 100, y: n.y * 100 },
+              life: 2.5, radius: 4, damage: 9,
+              fromPlayer: false, pierce: 0, homing: false,
+              colour: '#cdd6dc', trailColour: '#3a5a7a',
+            });
+            e.cooldown = 1.8;
+          }
+          break;
+        }
         case 'wardenBoss':
         case 'seleneBoss':
         case 'hermesBoss':
@@ -1740,7 +1776,7 @@ export class GameEngine {
 
   /** Aphrodite — A 3-second sigil drops where the player is standing.
    * If the player is still inside it when it ticks, take damage. */
-  private aphroditeLoveBind(e: Enemy): void {
+  private aphroditeLoveBind(_e: Enemy): void {
     const px = this.player.pos.x;
     const py = this.player.pos.y;
     this.sigils.push({
@@ -1753,7 +1789,6 @@ export class GameEngine {
       radius: 40,
       colour: '#ff9bc1',
     });
-    void e;
     audio.sfx('shrine');
   }
 
@@ -1869,8 +1904,8 @@ export class GameEngine {
   }
 
   /** Zeus — Five lightning sigils mark random tiles around the player. */
-  private zeusWrathOfHeaven(e: Enemy): void {
-    const n = (e.phase ?? 1) >= 2 ? 6 : 5;
+  private zeusWrathOfHeaven(_e: Enemy): void {
+    const n = (this.enemies.find((x) => x.isBoss)?.phase ?? 1) >= 2 ? 6 : 5;
     for (let i = 0; i < n; i++) {
       const ang = (i / n) * Math.PI * 2 + Math.random() * 0.4;
       const r = 50 + Math.random() * 80;
@@ -1887,7 +1922,6 @@ export class GameEngine {
         colour: '#f4d27a',
       });
     }
-    void e;
     audio.sfx('bossWarn');
   }
 
@@ -1903,135 +1937,7 @@ export class GameEngine {
     audio.sfx('bossWarn');
   }
 
-  /** Procedural per-Warden motif painted OVER the base sprite so each
-   * sphere's boss has a unique silhouette. The motifs are small canvas
-   * glyphs (no new pixel art), drawn in the sphere accent colour. */
-  private drawWardenMotif(e: Enemy): void {
-    const ctx = this.ctx;
-    const def = wardenDefFromVisual(e.visualKey);
-    if (!def) return;
-    const t = this.timeAlive;
-    const cx = e.pos.x;
-    const headY = e.pos.y - e.height;     // top of sprite
-    const bodyY = e.pos.y - e.height / 2;
-    ctx.save();
-    switch (e.visualKey) {
-      case 'seleneBoss': {
-        // Crescent moon arc above-left of her head
-        const r = 11, mx = cx - 14, my = headY - 12;
-        ctx.fillStyle = `rgba(255, 247, 214, ${0.7 + 0.2 * Math.sin(t * 2)})`;
-        ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill();
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.beginPath(); ctx.arc(mx + 4, my - 1, r - 1, 0, Math.PI * 2); ctx.fill();
-        ctx.globalCompositeOperation = 'source-over';
-        break;
-      }
-      case 'hermesBoss': {
-        // Two snake curves either side — a caduceus shape
-        const baseY = bodyY;
-        ctx.strokeStyle = `rgba(108, 246, 229, ${0.7 + 0.2 * Math.sin(t * 4)})`;
-        ctx.lineWidth = 2;
-        for (const side of [-1, 1]) {
-          ctx.beginPath();
-          for (let k = 0; k <= 12; k++) {
-            const yy = baseY - 14 + k * 2.5;
-            const xx = cx + side * (10 + Math.sin(k * 0.9 + t * 4) * 4);
-            if (k === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
-          }
-          ctx.stroke();
-        }
-        // Wings at the top — two short triangles
-        ctx.fillStyle = `rgba(164, 250, 240, 0.85)`;
-        ctx.beginPath();
-        ctx.moveTo(cx - 4, headY); ctx.lineTo(cx - 14, headY - 6); ctx.lineTo(cx - 4, headY - 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(cx + 4, headY); ctx.lineTo(cx + 14, headY - 6); ctx.lineTo(cx + 4, headY - 2);
-        ctx.fill();
-        break;
-      }
-      case 'aphroditeBoss': {
-        // A small rose-petal cluster spinning slowly near her chest
-        ctx.translate(cx, bodyY);
-        ctx.rotate(t * 0.6);
-        for (let i = 0; i < 5; i++) {
-          ctx.rotate((Math.PI * 2) / 5);
-          ctx.fillStyle = `rgba(255, 155, 193, ${0.75})`;
-          ctx.beginPath();
-          ctx.ellipse(0, -7, 3.2, 5.2, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.fillStyle = '#ffd0e3';
-        ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
-        break;
-      }
-      case 'heliosBoss': {
-        // Sunburst crown of 8 rays above his head
-        ctx.fillStyle = `rgba(255, 230, 163, ${0.85})`;
-        const cy = headY - 4;
-        ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill();
-        for (let i = 0; i < 8; i++) {
-          const a = (i / 8) * Math.PI * 2 + t * 0.3;
-          const len = 10 + Math.abs(Math.sin(t * 3 + i)) * 2;
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.rotate(a);
-          ctx.fillStyle = `rgba(255, 247, 214, ${0.9})`;
-          ctx.fillRect(-1, -len, 2, len * 0.7);
-          ctx.restore();
-        }
-        break;
-      }
-      case 'aresBoss': {
-        // A small sword + cross-guard floating above the shoulder
-        ctx.translate(cx + 12, headY - 4);
-        ctx.rotate(Math.PI / 5 + Math.sin(t * 1.4) * 0.08);
-        ctx.fillStyle = '#cdd6dc';
-        ctx.fillRect(-1, -12, 2, 18);                   // blade
-        ctx.fillStyle = '#7a5a1a';
-        ctx.fillRect(-4, 4, 8, 2);                       // crossguard
-        ctx.fillStyle = '#e23a4a';
-        ctx.fillRect(-1, 6, 2, 5);                       // hilt
-        break;
-      }
-      case 'zeusBoss': {
-        // Animated lightning bolt to one side
-        ctx.strokeStyle = `rgba(255, 247, 214, ${0.65 + 0.35 * Math.sin(t * 8)})`;
-        ctx.lineWidth = 2;
-        const off = cx + 14;
-        const base = headY + 2;
-        ctx.beginPath();
-        ctx.moveTo(off,     base);
-        ctx.lineTo(off + 4, base + 6);
-        ctx.lineTo(off + 1, base + 8);
-        ctx.lineTo(off + 5, base + 16);
-        ctx.lineTo(off + 2, base + 18);
-        ctx.lineTo(off + 6, base + 26);
-        ctx.stroke();
-        break;
-      }
-      case 'kronosBoss': {
-        // Hourglass icon floating above his head
-        const hx = cx, hy = headY - 8;
-        ctx.fillStyle = `rgba(155, 108, 255, ${0.85})`;
-        ctx.beginPath();
-        ctx.moveTo(hx - 6, hy - 6);
-        ctx.lineTo(hx + 6, hy - 6);
-        ctx.lineTo(hx,     hy);
-        ctx.lineTo(hx + 6, hy + 6);
-        ctx.lineTo(hx - 6, hy + 6);
-        ctx.lineTo(hx,     hy);
-        ctx.closePath();
-        ctx.fill();
-        // Sand falling (animated)
-        ctx.fillStyle = `rgba(244, 210, 122, ${0.8})`;
-        const sandY = hy - 4 + ((t * 12) % 8);
-        ctx.fillRect(hx, sandY, 1, 2);
-        break;
-      }
-    }
-    ctx.restore();
-  }
+  // drawWardenMotif moved to Renderer.ts
 
   private wardenRadialBurst(e: Enemy): void {
     const n = e.phase === 3 ? 16 : e.phase === 2 ? 12 : 8;
@@ -2108,8 +2014,7 @@ export class GameEngine {
       audio.sfx('bossDeath');
       this.camera.shakeT = 1.0; this.camera.shakeMag = 6;
       // The Warden of this sphere has fallen — the soul surrenders its tribute.
-      const sph = sphereForFloor(this.floor.number);
-      this.unlockCodex(`asc.${sph.id}`);
+      this.unlockCodex(`asc.${this.currentSphere.id}`);
       // After two victories, Plotinus on Beauty. After three, Iamblichus on theurgy.
       if (this.summary.bossesDefeated >= 2) this.unlockCodex('ogdoad.beauty');
       if (this.summary.bossesDefeated >= 3) this.unlockCodex('ogdoad.theurgy');
@@ -2235,8 +2140,7 @@ export class GameEngine {
       Math.max(this.hitPauseUntil, this.timeAlive + pauseDur),
     );
     if (!this.reducedParticles) {
-      const accent = sphereForFloor(this.floor.number).accent;
-      // Red gore sparkle — visceral "this enemy is wounded" cue.
+      const accent = this.currentSphere.accent;
       for (let i = 0; i < 4; i++) {
         this.particles.emit({
           x: e.pos.x, y: e.pos.y,
@@ -2531,6 +2435,25 @@ export class GameEngine {
     }
   }
 
+  private updateNpcs(dt: number): void {
+    for (const npc of this.npcs) {
+      // Passive effects (heal, mp, essence) while player is in range
+      if (npc.def.passive) {
+        const d = dist(this.player.pos, npc.pos);
+        if (d < npc.def.passive.radius) {
+          npc.passiveAccum += dt;
+          const interval = 1 / npc.def.passive.perSec;
+          while (npc.passiveAccum >= interval) {
+            npc.passiveAccum -= interval;
+            if (npc.def.passive.kind === 'heal') {
+              this.healPlayer(1);
+            }
+          }
+        }
+      }
+    }
+  }
+
   private handleRoomTransition(): void {
     const p = this.player.pos;
     const cur = this.currentRoom;
@@ -2631,979 +2554,46 @@ export class GameEngine {
       const a = this.delayedActions[i];
       a.t += dt;
       if (a.t >= a.duration) {
-        try { a.fire(); } catch { /* never crash combat */ }
+        try { a.fire(); } catch (e) { console.warn('[combat] delayed action fire failed', e); }
         this.delayedActions.splice(i, 1);
       }
     }
   }
 
-  private drawDelayedActionTelegraphs(): void {
-    for (const a of this.delayedActions) {
-      if (!a.render) continue;
-      const t01 = Math.min(1, a.t / a.duration);
-      this.ctx.save();
-      try { a.render(this.ctx, t01); } catch { /* skip */ }
-      this.ctx.restore();
-    }
-  }
+  // Draw methods moved to Renderer.ts. See drawDelayedActionTelegraphs there.
 
   // --- render -------------------------------------------------------------
 
   private render(): void {
-    const ctx = this.ctx;
-    const canvas = this.canvas;
-    ctx.imageSmoothingEnabled = false;
-
-    // Aspect-fill ("cover") instead of aspect-fit. The game always fills
-    // the entire viewport — no black letterbox bars. Off-axis virtual
-    // pixels get cropped by the canvas, but the player is camera-centred
-    // so the cropped edges are far from the action. Reads more
-    // "fullscreen" on iPhone landscape where 16:9 would leave thick
-    // side bars.
-    const sx = canvas.width / VIRTUAL_W;
-    const sy = canvas.height / VIRTUAL_H;
-    const scale = Math.max(1, Math.max(sx, sy));
-    const offX = Math.floor((canvas.width - VIRTUAL_W * scale) / 2);
-    const offY = Math.floor((canvas.height - VIRTUAL_H * scale) / 2);
-
-    // No letterbox — but clear the canvas to abyss-dark in case a future
-    // change reintroduces gaps. Bars would no longer be a problem.
-    ctx.fillStyle = '#02010a';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.save();
-    ctx.translate(offX, offY);
-    ctx.scale(scale, scale);
-
-    // Camera shake offset
-    let camX = this.camera.x;
-    let camY = this.camera.y;
-    if (this.camera.shakeT > 0) {
-      camX += (Math.random() - 0.5) * this.camera.shakeMag;
-      camY += (Math.random() - 0.5) * this.camera.shakeMag;
-    }
-
-    ctx.save();
-    ctx.translate(-Math.floor(camX), -Math.floor(camY));
-
-    this.drawRoom();
-    this.drawShrineDecor();
-    this.drawChests();
-    this.drawStairsIfExit();
-    this.drawSigils();
-    this.drawDelayedActionTelegraphs();
-    this.drawPickups();
-    this.drawEnemiesAll();
-    this.drawPlayer();
-    this.drawProjectiles();
-    this.particles.draw(ctx);
-    this.drawDamageNumbers();
-    this.drawRoomClearEffects();
-
-    // Dynamic dungeon lighting — multiplies a dark tint over the whole
-    // room, then punches additive light wells at torches / the player /
-    // pickups / chests / boss-lamps so the world reads as lit by its
-    // own torches instead of evenly bright.
-    this.drawLighting();
-
-    // Time-stop visual — violet tint + tight central pulse during freeze
-    if (this.timeAlive < this.timeStopUntil) {
-      const left = this.timeStopUntil - this.timeAlive;
-      const a = Math.min(1, left * 1.4); // brightest mid-effect, dims at end
-      ctx.fillStyle = `rgba(91, 58, 134, ${0.18 * a})`;
-      ctx.fillRect(0, 0, ROOM_W, ROOM_H);
-      // Three thin diagonal "frozen" lines crossing the screen
-      ctx.strokeStyle = `rgba(155, 108, 255, ${0.55 * a})`;
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 3; i++) {
-        const off = i * 80;
-        ctx.beginPath();
-        ctx.moveTo(0, off);
-        ctx.lineTo(ROOM_W, off + 200);
-        ctx.stroke();
-      }
-    }
-
-    ctx.restore();
-
-    // Vignette
-    const vg = ctx.createRadialGradient(VIRTUAL_W / 2, VIRTUAL_H / 2, VIRTUAL_H * 0.25, VIRTUAL_W / 2, VIRTUAL_H / 2, VIRTUAL_H * 0.7);
-    vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,0.7)');
-    ctx.fillStyle = vg;
-    ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
-
-    // Death sequence — lamp extinguishes. Iris closes around the body
-    // and the world drifts toward black so the GameOver screen lands
-    // on a fully dark canvas.
-    if (this.dyingT >= 0) {
-      const t = Math.min(1, this.dyingT / this.dyingDuration);
-      const darkness = Math.min(0.92, t * 0.95);
-      ctx.fillStyle = `rgba(0, 0, 0, ${darkness})`;
-      ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
-    }
-
-    // Floor transition
-    if (this.floorTransition) {
-      const t = this.floorTransition.t / this.floorTransition.duration;
-      const a = t < 0.5 ? t * 2 : 1 - (t - 0.5) * 2;
-      ctx.fillStyle = `rgba(244, 210, 122, ${a * 0.7})`;
-      ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
-    }
-
-    ctx.restore();
-  }
-
-  private drawRoom(): void {
-    const ctx = this.ctx;
-    const rng = new RNG(this.currentRoom.seed);
-    // Per-sphere visual identity: walls' cap-stones and torch flame
-    // colour shift toward the current sphere's accent. Cheap palette
-    // pass; every floor reads as its own sphere at a glance.
-    const sphere = sphereForFloor(this.floor.number);
-    const wallTint = sphere.accent;
-    const torchTint = makeTorchTint(sphere);
-    // floor
-    for (let y = 0; y < ROOM_H; y += TILE) {
-      for (let x = 0; x < ROOM_W; x += TILE) {
-        const t = (x + y * 7 + this.currentRoom.seed) & 0xffff;
-        drawFloorTile(ctx, x, y, TILE, t);
-      }
-    }
-    // Occult circle in arena rooms
-    if (this.currentRoom.type === 'enemy' || this.currentRoom.type === 'miniBoss' || this.currentRoom.type === 'boss' || this.currentRoom.type === 'shrine') {
-      this.drawOccultCircle(ROOM_W / 2, ROOM_H / 2, this.currentRoom.type === 'boss' ? 100 : 60);
-    }
-    // walls (top and bottom)
-    for (let x = 0; x < ROOM_W; x += TILE) {
-      drawWallTile(ctx, x, 0, TILE, true, wallTint);
-      drawWallTile(ctx, x, ROOM_H - TILE, TILE, false, wallTint);
-    }
-    for (let y = TILE; y < ROOM_H - TILE; y += TILE) {
-      drawWallTile(ctx, 0, y, TILE, false, wallTint);
-      drawWallTile(ctx, ROOM_W - TILE, y, TILE, false, wallTint);
-    }
-    // Doors
-    this.drawDoors();
-    // Torches
-    const torchT = this.timeAlive;
-    for (let i = 1; i <= 4; i++) {
-      const x = (ROOM_W / 5) * i;
-      drawTorch(ctx, x - 2, 18, torchT + i * 0.5, torchTint);
-    }
-    // Boss decoration: seven lamps ringing the arena. Sphere-tinted —
-    // the Warden's own sphere accent burns in each lamp, matching the
-    // torches on the wall above.
-    if (this.currentRoom.type === 'boss') {
-      const cx = ROOM_W / 2, cy = ROOM_H / 2;
-      const lampRgb = hexToRgbString(sphere.accent);
-      for (let i = 0; i < 7; i++) {
-        const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
-        const px = cx + Math.cos(a) * 110;
-        const py = cy + Math.sin(a) * 80;
-        ctx.fillStyle = '#3b265c';
-        ctx.fillRect(px - 2, py, 4, 6);
-        const flick = 0.6 + Math.sin(torchT * 4 + i) * 0.3;
-        ctx.fillStyle = `rgba(${lampRgb}, ${flick})`;
-        ctx.beginPath();
-        ctx.arc(px, py - 4, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(px, py - 4, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    // Dust motes
-    if (!this.reducedParticles && Math.random() < 0.4) {
-      this.particles.emit({
-        x: rng.range(20, ROOM_W - 20),
-        y: rng.range(40, ROOM_H - 40),
-        vx: (Math.random() - 0.5) * 4,
-        vy: -3 - Math.random() * 4,
-        life: 2, maxLife: 2, size: 1, colour: 'rgba(244,210,122,0.5)',
-        drag: 0.98,
-      });
-    }
-  }
-
-  private drawOccultCircle(cx: number, cy: number, r: number): void {
-    const ctx = this.ctx;
-    const t = this.timeAlive;
-    // Use the current sphere's colour palette so the floor's pentagram
-    // reads as part of THIS sphere, not the default Mercury-teal cosmos.
-    const sphere = sphereForFloor(this.floor.number);
-    const ringColour = hexToRgbString(sphere.colour);
-    const accentColour = hexToRgbString(sphere.accent);
-    ctx.save();
-    // Faint halo behind the circle — sphere accent
-    const halo = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 1.4);
-    halo.addColorStop(0, `rgba(${accentColour}, 0.08)`);
-    halo.addColorStop(1, `rgba(${accentColour}, 0)`);
-    ctx.fillStyle = halo;
-    ctx.fillRect(cx - r * 1.5, cy - r * 1.5, r * 3, r * 3);
-
-    // Outer rotating ring of glyph marks — sphere ring colour
-    ctx.strokeStyle = `rgba(${ringColour}, ${0.45 + Math.sin(t * 1.2) * 0.1})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.stroke();
-    // glyph ticks
-    ctx.fillStyle = `rgba(${ringColour}, 0.55)`;
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2 + t * 0.18;
-      const gx = cx + Math.cos(a) * r;
-      const gy = cy + Math.sin(a) * r;
-      ctx.fillRect(gx - 1, gy - 1, 2, 2);
-    }
-
-    // Inner ring
-    ctx.strokeStyle = `rgba(${ringColour}, 0.35)`;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Pentagram — sphere accent
-    ctx.strokeStyle = `rgba(${accentColour}, ${0.55 + Math.sin(t * 2) * 0.15})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < 5; i++) {
-      const a = (((i * 2) % 5) / 5) * Math.PI * 2 - Math.PI / 2;
-      const x = cx + Math.cos(a) * r * 0.92;
-      const y = cy + Math.sin(a) * r * 0.92;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.stroke();
-
-    // Centre rune — pulsing diamond (sphere ring colour)
-    const pulse = 0.5 + 0.5 * Math.sin(t * 3);
-    ctx.fillStyle = `rgba(${ringColour}, ${0.4 + pulse * 0.4})`;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(Math.PI / 4);
-    ctx.fillRect(-3, -3, 6, 6);
-    ctx.restore();
-    ctx.fillStyle = `rgba(${accentColour}, ${pulse})`;
-    ctx.fillRect(cx - 1, cy - 1, 2, 2);
-    ctx.restore();
-  }
-
-  private drawDoors(): void {
-    const ctx = this.ctx;
-    const d = this.currentRoom.doors;
-    const locked = (this.currentRoom.type === 'enemy' || this.currentRoom.type === 'miniBoss' || this.currentRoom.type === 'boss') && !this.currentRoom.cleared;
-    const w = 56;
-    const pulse = 0.55 + 0.35 * Math.sin(this.timeAlive * 3);
-    const drawDoor = (x: number, y: number, horiz: boolean): void => {
-      if (locked) {
-        // closed glyph stones
-        ctx.fillStyle = PALETTE.wallDark;
-        if (horiz) ctx.fillRect(x - w / 2, y - TILE / 2, w, TILE);
-        else ctx.fillRect(x - TILE / 2, y - w / 2, TILE, w);
-        // ward sigils — three crimson studs
-        ctx.fillStyle = PALETTE.crimson;
-        if (horiz) {
-          ctx.fillRect(x - 16, y - 2, 4, 4);
-          ctx.fillRect(x -  2, y - 2, 4, 4);
-          ctx.fillRect(x + 12, y - 2, 4, 4);
-        } else {
-          ctx.fillRect(x - 2, y - 16, 4, 4);
-          ctx.fillRect(x - 2, y -  2, 4, 4);
-          ctx.fillRect(x - 2, y + 12, 4, 4);
-        }
-        ctx.fillStyle = 'rgba(226, 58, 74, 0.35)';
-        if (horiz) ctx.fillRect(x - w / 2, y - 1, w, 2);
-        else ctx.fillRect(x - 1, y - w / 2, 2, w);
-      } else {
-        // Open doorway — dark archway
-        ctx.fillStyle = '#000';
-        if (horiz) ctx.fillRect(x - w / 2, y - 6, w, 12);
-        else ctx.fillRect(x - 6, y - w / 2, 12, w);
-        // golden frame
-        ctx.fillStyle = PALETTE.gold;
-        if (horiz) {
-          ctx.fillRect(x - w / 2, y - 8, w, 2);
-          ctx.fillRect(x - w / 2, y + 6, w, 2);
-          // capital studs
-          ctx.fillStyle = PALETTE.gold2;
-          ctx.fillRect(x - w / 2, y - 8, 2, 16);
-          ctx.fillRect(x + w / 2 - 2, y - 8, 2, 16);
-        } else {
-          ctx.fillRect(x - 8, y - w / 2, 2, w);
-          ctx.fillRect(x + 6, y - w / 2, 2, w);
-          ctx.fillStyle = PALETTE.gold2;
-          ctx.fillRect(x - 8, y - w / 2, 16, 2);
-          ctx.fillRect(x - 8, y + w / 2 - 2, 16, 2);
-        }
-        // Pulsing teal threshold glow — the "you can pass" cue
-        ctx.fillStyle = `rgba(108, 246, 229, ${0.18 * pulse})`;
-        if (horiz) ctx.fillRect(x - w / 2 + 2, y - 4, w - 4, 8);
-        else ctx.fillRect(x - 4, y - w / 2 + 2, 8, w - 4);
-        // bright sliver in the centre
-        ctx.fillStyle = `rgba(255, 247, 214, ${0.6 * pulse})`;
-        if (horiz) ctx.fillRect(x - 12, y - 1, 24, 2);
-        else ctx.fillRect(x - 1, y - 12, 2, 24);
-      }
+    const state: RenderState = {
+      camera: this.camera,
+      player: this.player,
+      room: this.currentRoom,
+      floorNumber: this.floor.number,
+      currentSphere: this.currentSphere,
+      enemies: this.enemies,
+      projectiles: this.projectiles,
+      pickups: this.pickups,
+      sigils: this.sigils,
+      damageNumbers: this.damageNumbers,
+      deathFx: this.deathFx,
+      roomClearEffects: this.roomClearEffects,
+      dashTrail: this.dashTrail,
+      delayedActions: this.delayedActions,
+      particles: this.particles,
+      timeAlive: this.timeAlive,
+      timeStopUntil: this.timeStopUntil,
+      dyingT: this.dyingT,
+      dyingDuration: this.dyingDuration,
+      reducedParticles: this.reducedParticles,
+      pendingShrine: this.pendingShrine,
+      floorTransition: this.floorTransition,
+      floorBanner: this.floorBanner,
+      bossBannerTimer: this.bossBannerTimer,
+      bossSnapshot: this.bossSnapshot,
+      npcs: this.npcs,
     };
-    if (d.up)    drawDoor(ROOM_W / 2, 8, true);
-    if (d.down)  drawDoor(ROOM_W / 2, ROOM_H - 8, true);
-    if (d.left)  drawDoor(8, ROOM_H / 2, false);
-    if (d.right) drawDoor(ROOM_W - 8, ROOM_H / 2, false);
-  }
-
-  private drawShrineDecor(): void {
-    if (this.currentRoom.hasShrine) {
-      drawShrine(this.ctx, ROOM_W / 2, ROOM_H / 2 - 8, this.currentRoom.shrineUsed, this.timeAlive);
-    }
-  }
-
-  private drawChests(): void {
-    if (this.currentRoom.hasChest) {
-      drawChest(this.ctx, ROOM_W / 2 - 9, ROOM_H / 2 - 4, this.currentRoom.chestOpened, this.currentRoom.chestLocked);
-    }
-  }
-
-  private drawStairsIfExit(): void {
-    if (this.currentRoom.type === 'exit') {
-      drawStairs(this.ctx, ROOM_W / 2 - 12, ROOM_H / 2 - 12, this.timeAlive);
-    }
-  }
-
-  private drawSigils(): void {
-    const ctx = this.ctx;
-    for (const s of this.sigils) {
-      const p = Math.min(1, s.timer / s.delay);
-      const radius = s.radius ?? 18;
-      const fromPlayer = !!s.fromPlayer;
-      const stroke = fromPlayer ? '155, 108, 255' : '226, 58, 74';
-      const accent = fromPlayer ? '244, 210, 122' : '226, 58, 74';
-      ctx.save();
-      ctx.translate(s.pos.x, s.pos.y);
-      // Outer expanding ring
-      ctx.strokeStyle = `rgba(${stroke}, ${0.45 + 0.55 * p})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * p, 0, Math.PI * 2);
-      ctx.stroke();
-      // Selene tidal-pulse: render the safe shadow zone as a faint
-      // teal "stay here" ring inside the damage band.
-      if (s.safeRadius && s.safeRadius > 0) {
-        ctx.strokeStyle = `rgba(108, 246, 229, ${0.55 + 0.35 * Math.sin(this.timeAlive * 4)})`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.arc(0, 0, s.safeRadius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-      // Inner ring
-      ctx.strokeStyle = `rgba(${accent}, ${0.35 + 0.4 * p})`;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius * 0.55 * p, 0, Math.PI * 2);
-      ctx.stroke();
-      // Cross / spokes
-      const rot = this.timeAlive * (fromPlayer ? 2.2 : 1.4);
-      ctx.rotate(rot);
-      ctx.strokeStyle = `rgba(${stroke}, ${0.5 * p})`;
-      for (let i = 0; i < 4; i++) {
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(0, -radius * 0.9 * p);
-        ctx.stroke();
-        ctx.rotate(Math.PI / 2);
-      }
-      ctx.rotate(-rot);
-      // Centre rune
-      ctx.fillStyle = `rgba(${accent}, ${0.4 + 0.5 * p})`;
-      ctx.fillRect(-2, -2, 4, 4);
-      // Flash when fired
-      if (s.fired) {
-        const ft = Math.max(0, 1 - (s.timer - s.delay) / 0.4);
-        ctx.fillStyle = `rgba(${accent}, ${ft * 0.6})`;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius * (1 + (1 - ft) * 1.5), 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-  }
-
-  private drawPickups(): void {
-    const ctx = this.ctx;
-    for (const pk of this.pickups) {
-      const wobble = Math.sin(this.timeAlive * 4 + pk.id) * 1.2;
-      switch (pk.kind) {
-        case 'coin':
-          ctx.fillStyle = PALETTE.gold;
-          ctx.fillRect(pk.pos.x - 2, pk.pos.y - 2 + wobble, 4, 4);
-          ctx.fillStyle = '#ffe6a3';
-          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 1 + wobble, 2, 2);
-          break;
-        case 'essence':
-          ctx.fillStyle = PALETTE.teal;
-          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 2 + wobble, 2, 4);
-          ctx.fillRect(pk.pos.x - 2, pk.pos.y - 1 + wobble, 4, 2);
-          break;
-        case 'key':
-          ctx.fillStyle = PALETTE.gold;
-          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 3 + wobble, 2, 6);
-          ctx.fillRect(pk.pos.x - 3, pk.pos.y - 3 + wobble, 6, 2);
-          break;
-        case 'hp':
-          ctx.fillStyle = PALETTE.crimson;
-          ctx.fillRect(pk.pos.x - 3, pk.pos.y - 1 + wobble, 6, 2);
-          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 3 + wobble, 2, 6);
-          break;
-        case 'mp':
-          ctx.fillStyle = PALETTE.violet;
-          ctx.fillRect(pk.pos.x - 3, pk.pos.y - 2 + wobble, 6, 4);
-          ctx.fillStyle = '#dac8ff';
-          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 1 + wobble, 2, 2);
-          break;
-        case 'relic': {
-          // Halo
-          const g = ctx.createRadialGradient(pk.pos.x, pk.pos.y + wobble, 2, pk.pos.x, pk.pos.y + wobble, 14);
-          g.addColorStop(0, 'rgba(244, 210, 122, 0.7)');
-          g.addColorStop(1, 'rgba(244, 210, 122, 0)');
-          ctx.fillStyle = g;
-          ctx.fillRect(pk.pos.x - 14, pk.pos.y - 14 + wobble, 28, 28);
-          ctx.fillStyle = PALETTE.gold;
-          ctx.fillRect(pk.pos.x - 3, pk.pos.y - 3 + wobble, 6, 6);
-          ctx.fillStyle = '#ffe6a3';
-          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 1 + wobble, 2, 2);
-          break;
-        }
-        case 'weapon': {
-          const w = pk.weapon ? WEAPONS[pk.weapon] : null;
-          if (!w) break;
-          // golden halo + altar stone
-          const g = ctx.createRadialGradient(pk.pos.x, pk.pos.y + wobble, 2, pk.pos.x, pk.pos.y + wobble, 18);
-          g.addColorStop(0, 'rgba(244, 210, 122, 0.55)');
-          g.addColorStop(1, 'rgba(244, 210, 122, 0)');
-          ctx.fillStyle = g;
-          ctx.fillRect(pk.pos.x - 18, pk.pos.y - 18 + wobble, 36, 36);
-          // altar pedestal
-          ctx.fillStyle = '#3b265c';
-          ctx.fillRect(pk.pos.x - 6, pk.pos.y + 5 + wobble, 12, 3);
-          ctx.fillStyle = '#1a0f2c';
-          ctx.fillRect(pk.pos.x - 7, pk.pos.y + 7 + wobble, 14, 1);
-          // weapon icon, drawn rotated 45° point-up
-          ctx.save();
-          ctx.translate(pk.pos.x, pk.pos.y - 2 + wobble);
-          ctx.rotate(-Math.PI / 4);
-          this.drawWeaponSilhouette(w, 0.3);
-          ctx.restore();
-          break;
-        }
-        case 'spell': {
-          const sp = pk.spell ? SPELLS[pk.spell] : null;
-          if (!sp) break;
-          const halo = ctx.createRadialGradient(pk.pos.x, pk.pos.y + wobble, 2, pk.pos.x, pk.pos.y + wobble, 18);
-          halo.addColorStop(0, 'rgba(155, 108, 255, 0.55)');
-          halo.addColorStop(1, 'rgba(155, 108, 255, 0)');
-          ctx.fillStyle = halo;
-          ctx.fillRect(pk.pos.x - 18, pk.pos.y - 18 + wobble, 36, 36);
-          // tome/grimoire base
-          ctx.fillStyle = '#1a0f2c';
-          ctx.fillRect(pk.pos.x - 5, pk.pos.y - 4 + wobble, 10, 8);
-          ctx.fillStyle = '#3b265c';
-          ctx.fillRect(pk.pos.x - 5, pk.pos.y - 4 + wobble, 10, 1);
-          ctx.fillStyle = '#5b3a86';
-          ctx.fillRect(pk.pos.x - 4, pk.pos.y - 3 + wobble, 8, 6);
-          // sigil floating above
-          ctx.fillStyle = sp.projColour;
-          ctx.fillRect(pk.pos.x - 2, pk.pos.y - 8 + wobble, 4, 4);
-          ctx.fillStyle = '#fff';
-          ctx.fillRect(pk.pos.x - 1, pk.pos.y - 7 + wobble, 2, 2);
-          break;
-        }
-      }
-    }
-  }
-
-  private drawEnemiesAll(): void {
-    // Per-floor sphere accent — applied to non-boss enemies so each
-    // floor's roster reads visually distinct even when sharing sprites.
-    // Bosses skip the tint because their Warden palettes are already
-    // sphere-keyed and we want them to "pop" against the room.
-    const floorTint = sphereForFloor(this.floor.number).accent;
-    for (const e of this.enemies) {
-      const sz = getEnemySize(e.visualKey);
-      const scale = 2;
-      const dx = e.pos.x - (sz.w * scale) / 2;
-      const dy = e.pos.y - (sz.h * scale) + e.radius + 1;
-      const tint = e.isBoss ? undefined : floorTint;
-      drawEnemy(this.ctx, e.visualKey, dx, dy, scale, e.flash, e.facing.x < 0, tint);
-      // shadow
-      this.ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      this.ctx.fillRect(e.pos.x - e.radius, e.pos.y + e.radius - 1, e.radius * 2, 2);
-      // Per-Warden procedural motif — drawn over the base sprite so each
-      // sphere's boss has a unique silhouette even though they share the
-      // same body matrix.
-      if (e.isBoss) this.drawWardenMotif(e);
-      // boss telegraph
-      if (e.isBoss && e.cooldown < 0.5 && e.cooldown > 0) {
-        this.ctx.fillStyle = `rgba(226, 58, 74, ${0.2 + 0.4 * Math.sin(this.timeAlive * 20)})`;
-        this.ctx.fillRect(e.pos.x - e.width, e.pos.y - 16, e.width * 2, 2);
-      }
-      // non-boss telegraph — colour matches the enemy's own palette,
-      // not a uniform orange. saturnKnight glows violet, mercuryImp teal,
-      // saltGolem white-bone, etc.
-      if (!e.isBoss && e.contactDamage > 6 && e.cooldown < 0.5 && e.cooldown > 0.1) {
-        const pulse = 0.5 + 0.5 * Math.sin(this.timeAlive * 18);
-        const col = enemyTelegraphColour(e.type);
-        this.ctx.fillStyle = `rgba(${col}, ${0.18 + 0.22 * pulse})`;
-        this.ctx.fillRect(e.pos.x - e.radius - 1, e.pos.y - e.radius - 1, (e.radius + 1) * 2, (e.radius + 1) * 2);
-      }
-    }
-    // Dissolving death effects — sprite expands and fades.
-    for (const fx of this.deathFx) {
-      const sz = getEnemySize(fx.visualKey);
-      const scale = 2;
-      const tNorm = Math.min(1, fx.t / fx.duration);
-      const grow = 1 + tNorm * 0.5;
-      const alpha = 1 - tNorm;
-      const dx = fx.pos.x - (sz.w * scale) / 2;
-      const dy = fx.pos.y - (sz.h * scale) + fx.radius + 1;
-      // Centre on the sprite, scale, draw — the canvas transform handles
-      // the growth around the centre point.
-      const cx = fx.pos.x;
-      const cy = dy + (sz.h * scale) / 2;
-      this.ctx.save();
-      this.ctx.globalAlpha = alpha;
-      this.ctx.translate(cx, cy);
-      this.ctx.scale(grow, grow);
-      this.ctx.translate(-cx, -cy);
-      drawEnemy(this.ctx, fx.visualKey, dx, dy, scale, 0.6 * (1 - tNorm), fx.facing.x < 0, fx.isBoss ? undefined : floorTint);
-      this.ctx.restore();
-    }
-  }
-
-  /** Paints a soft radial gradient stop centred at (x,y) using the
-   * canvas's current composite operation. Used by drawLighting to add
-   * additive light wells over the multiplied darkness. */
-  private paintLight(x: number, y: number, r: number, rgb: string, alpha: number): void {
-    const g = this.ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(${rgb}, ${alpha})`);
-    g.addColorStop(1, `rgba(${rgb}, 0)`);
-    this.ctx.fillStyle = g;
-    this.ctx.fillRect(x - r, y - r, r * 2, r * 2);
-  }
-
-  private drawLighting(): void {
-    const ctx = this.ctx;
-    const sphere = sphereForFloor(this.floor.number);
-    const sphereRgb = hexToRgbString(sphere.accent);
-    const t = this.timeAlive;
-    const flick = (seed: number): number => 0.86 + 0.14 * Math.sin(t * 6 + seed * 1.7);
-
-    // Multiply layer — pulls the room toward shadow. Slight cool tint
-    // so the darkness reads as stone-night, not flat black.
-    ctx.save();
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = 'rgb(70, 56, 110)';
-    ctx.fillRect(0, 0, ROOM_W, ROOM_H);
-    ctx.restore();
-
-    // Additive light wells punched into the darkness.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-
-    // Wall torches — same positions as drawRoom's torch loop.
-    for (let i = 1; i <= 4; i++) {
-      const lx = (ROOM_W / 5) * i;
-      const ly = 28;
-      const f = flick(i);
-      // Warm core
-      this.paintLight(lx, ly, 78, '255, 220, 160', 0.42 * f);
-      // Sphere-accent halo — bleeds the room hue into the torchlight
-      this.paintLight(lx, ly, 110, sphereRgb, 0.14 * f);
-    }
-
-    // The player carries a small lamp — softens the void around them.
-    if (this.dyingT < 0) {
-      const p = this.player;
-      this.paintLight(p.pos.x, p.pos.y - 6, 56, '244, 210, 122', 0.38);
-    }
-
-    // Unopened chests glow gently to draw the eye.
-    const room = this.currentRoom;
-    if (room.hasChest && !room.chestOpened) {
-      this.paintLight(ROOM_W / 2, ROOM_H / 2, 36, '244, 210, 122', 0.28);
-    }
-
-    // Pickups — every coin/essence/key/hp/mp casts its own micro-glow
-    // so the floor feels populated even before you walk over them.
-    for (const pk of this.pickups) {
-      switch (pk.kind) {
-        case 'coin':    this.paintLight(pk.pos.x, pk.pos.y, 22, '244, 210, 122', 0.45); break;
-        case 'essence': this.paintLight(pk.pos.x, pk.pos.y, 24, '155, 108, 255', 0.45); break;
-        case 'hp':      this.paintLight(pk.pos.x, pk.pos.y, 26, '255, 122, 138', 0.45); break;
-        case 'mp':      this.paintLight(pk.pos.x, pk.pos.y, 26, '155, 108, 255', 0.45); break;
-        case 'key':     this.paintLight(pk.pos.x, pk.pos.y, 26, '108, 246, 229', 0.45); break;
-        case 'relic':   this.paintLight(pk.pos.x, pk.pos.y, 40, '244, 210, 122', 0.55); break;
-        case 'weapon':  this.paintLight(pk.pos.x, pk.pos.y, 36, '244, 210, 122', 0.45); break;
-        case 'spell':   this.paintLight(pk.pos.x, pk.pos.y, 36, '155, 108, 255', 0.45); break;
-      }
-    }
-
-    // Boss arena — the seven lamps light the floor in their sphere hue.
-    if (this.currentRoom.type === 'boss') {
-      const cx = ROOM_W / 2, cy = ROOM_H / 2;
-      for (let i = 0; i < 7; i++) {
-        const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
-        const lx = cx + Math.cos(a) * 110;
-        const ly = cy + Math.sin(a) * 80;
-        this.paintLight(lx, ly, 60, sphereRgb, 0.32 * flick(i * 3));
-      }
-    }
-
-    // Shrine glow — pulsing gold so the altar reads as sanctified.
-    if (this.currentRoom.hasShrine && !this.currentRoom.shrineUsed) {
-      const pulse = 0.85 + 0.15 * Math.sin(t * 3);
-      this.paintLight(ROOM_W / 2, ROOM_H / 2 + 8, 50, '244, 210, 122', 0.32 * pulse);
-    }
-
-    // Active spell projectiles cast a tiny light each — sells the
-    // "magic is luminous" feel without per-frame allocation.
-    for (const pr of this.projectiles) {
-      if (!pr.fromPlayer) continue;
-      const rgb = hexToRgbString(pr.colour);
-      this.paintLight(pr.pos.x, pr.pos.y, 22, rgb, 0.42);
-    }
-
-    ctx.restore();
-  }
-
-  private drawDashTrail(): void {
-    if (this.dashTrail.length === 0) return;
-    for (const g of this.dashTrail) {
-      const tNorm = Math.min(1, g.t / 0.28);
-      const alpha = (1 - tNorm) * 0.55;
-      if (alpha <= 0.02) continue;
-      this.ctx.save();
-      this.ctx.globalAlpha = alpha;
-      // Ghost renders fully whited-out so the trail reads as a motion
-      // echo rather than a duplicate body. flash = 1 forces drawInitiate
-      // to override every visible palette entry with white.
-      drawInitiate(this.ctx, g.x - 7, g.y - 15, 1, g.facing, g.walkPhase, 1);
-      this.ctx.restore();
-    }
-  }
-
-  private drawPlayer(): void {
-    const p = this.player;
-    // Dash afterimages — drawn first so the live sprite sits on top.
-    this.drawDashTrail();
-    // Death sequence: fade + collapse the sprite so the body
-    // "extinguishes" in place. After the final pop (~82 % through) the
-    // sprite hides entirely so the embers carry the moment.
-    if (this.dyingT >= 0) {
-      const t = Math.min(1, this.dyingT / this.dyingDuration);
-      if (t >= 0.82) return;
-      const alpha = 1 - t / 0.82;
-      this.ctx.save();
-      this.ctx.globalAlpha = alpha;
-      // shadow (faded with the body)
-      this.ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      this.ctx.fillRect(p.pos.x - 6, p.pos.y + 3, 12, 2);
-      // Sprite slumps down ~3 px and a faint white flash overlays.
-      const slump = Math.round(t * 3);
-      drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 15 + slump, 1, p.facing, 0, Math.min(0.4, t));
-      this.ctx.restore();
-      // Soft halo around the dying body
-      if (!this.reducedParticles) {
-        const r = 14 + t * 18;
-        const accent = sphereForFloor(this.floor.number).accent;
-        this.ctx.save();
-        this.ctx.globalAlpha = (1 - t) * 0.35;
-        this.ctx.strokeStyle = accent;
-        this.ctx.lineWidth = 1.4;
-        this.ctx.beginPath();
-        this.ctx.arc(p.pos.x, p.pos.y - 4, r, 0, Math.PI * 2);
-        this.ctx.stroke();
-        this.ctx.restore();
-      }
-      return;
-    }
-    // shadow
-    this.ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    this.ctx.fillRect(p.pos.x - 6, p.pos.y + 3, 12, 2);
-    drawInitiate(this.ctx, p.pos.x - 7, p.pos.y - 15, 1, p.facing, p.walkPhase, p.flash);
-    // Weapon (held in player's hand when idle, animated during attack)
-    this.drawPlayerWeapon();
-    // iframe shimmer — outline pulse
-    if (p.iframes > 0 && Math.floor(this.timeAlive * 18) % 2 === 0) {
-      this.ctx.strokeStyle = 'rgba(108,246,229,0.65)';
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(p.pos.x - 7, p.pos.y - 14, 14, 18);
-    }
-  }
-
-  private drawPlayerWeapon(): void {
-    const p = this.player;
-    const w = WEAPONS[p.weapons[p.weaponIdx]];
-    const ctx = this.ctx;
-    const fx = p.facing.x || 1, fy = p.facing.y;
-    const baseAngle = Math.atan2(fy, fx);
-    const swinging = p.attackTimer > 0;
-    const tNorm = swinging ? p.attackTimer / w.duration : 0; // 1 → 0 across swing
-    // Anchor: roughly at player's hand height
-    const ax = p.pos.x;
-    const ay = p.pos.y - 2;
-
-    ctx.save();
-    ctx.translate(ax, ay);
-
-    if (!swinging) {
-      // Idle: weapon held diagonally beside the player, pointing in facing direction
-      const idleAngle = baseAngle + 0.6;
-      ctx.rotate(idleAngle);
-      this.drawWeaponSilhouette(w, 0);
-      ctx.restore();
-      return;
-    }
-
-    // Animation by swing type
-    if (w.swingType === 'arc' || w.swingType === 'flurry') {
-      // Sweep from -arcHalf to +arcHalf
-      const progress = 1 - tNorm; // 0 → 1
-      const sweep = -w.arcHalf + progress * w.arcHalf * 2;
-      ctx.rotate(baseAngle + sweep);
-      this.drawSlashFx(w, tNorm, sweep);
-      this.drawWeaponSilhouette(w, 0.6);
-    } else if (w.swingType === 'thrust' || w.swingType === 'lunge') {
-      // Quick forward extension; weapon points along facing, length grows then retracts
-      const phase = 1 - tNorm;
-      const extend = w.swingType === 'lunge' ? 10 : 6;
-      const off = Math.sin(phase * Math.PI) * extend;
-      ctx.rotate(baseAngle);
-      ctx.translate(off, 0);
-      this.drawThrustFx(w, tNorm);
-      this.drawWeaponSilhouette(w, 0.6);
-    } else if (w.swingType === 'overhead') {
-      // Heavy chop: rotate from -130° to +60° around facing
-      const progress = 1 - tNorm;
-      // ease-in: slow at start, fast slam
-      const eased = progress * progress;
-      const sweep = -2.2 + eased * 3.3;
-      ctx.rotate(baseAngle + sweep);
-      this.drawSlashFx(w, tNorm, sweep);
-      this.drawWeaponSilhouette(w, 0.8);
-    } else {
-      ctx.rotate(baseAngle);
-      this.drawSlashFx(w, tNorm, 0);
-      this.drawWeaponSilhouette(w, 0.5);
-    }
-
-    ctx.restore();
-  }
-
-  // Draws the weapon's silhouette extending forward from the origin.
-  // `glowAlpha` adds a coloured glow during animation.
-  private drawWeaponSilhouette(w: import('./GameTypes').WeaponDef, glowAlpha: number): void {
-    const ctx = this.ctx;
-    const len = w.length;
-    const th = w.thickness;
-    // grip (1/3 of length back from origin)
-    ctx.fillStyle = w.hiltColour;
-    ctx.fillRect(-3, -1, 4, 2);
-    // crossguard
-    ctx.fillStyle = w.accentColour;
-    ctx.fillRect(0, -2, 2, 5);
-    // blade — outline + body + highlight
-    ctx.fillStyle = '#04020a';
-    ctx.fillRect(1, -Math.ceil(th / 2) - 1, len + 1, th + 2);
-    ctx.fillStyle = w.bladeColour;
-    ctx.fillRect(2, -Math.floor(th / 2), len - 1, th);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(2, -Math.floor(th / 2), len - 2, 1);
-    // accent stripe
-    ctx.fillStyle = w.accentColour;
-    ctx.fillRect(len - 3, 0, 2, 1);
-    // glow halo during animation
-    if (glowAlpha > 0) {
-      ctx.globalAlpha = glowAlpha;
-      ctx.fillStyle = w.swingColour;
-      ctx.fillRect(2, -Math.floor(th / 2) - 1, len - 1, th + 2);
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  private drawSlashFx(w: import('./GameTypes').WeaponDef, tNorm: number, sweep: number): void {
-    const ctx = this.ctx;
-    const reach = w.range;
-    // Outer wedge
-    ctx.fillStyle = `rgba(255, 247, 214, ${tNorm * 0.22})`;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, reach + 4, sweep - 0.7, sweep + 0.5);
-    ctx.closePath();
-    ctx.fill();
-    // Inner glow tinted by weapon
-    const c = w.swingColour;
-    ctx.fillStyle = c;
-    ctx.globalAlpha = tNorm * 0.55;
-    ctx.beginPath();
-    ctx.moveTo(2, 0);
-    ctx.arc(2, 0, reach - 2, sweep - 0.4, sweep + 0.25);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    // Leading-edge bright streak
-    ctx.strokeStyle = `rgba(255, 255, 255, ${tNorm})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(0, 0, reach, sweep - 0.04, sweep + 0.04);
-    ctx.stroke();
-  }
-
-  private drawThrustFx(w: import('./GameTypes').WeaponDef, tNorm: number): void {
-    const ctx = this.ctx;
-    const reach = w.range;
-    // bright line along facing
-    ctx.fillStyle = w.swingColour;
-    ctx.globalAlpha = tNorm * 0.6;
-    ctx.fillRect(0, -1, reach, 2);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = `rgba(255, 255, 255, ${tNorm})`;
-    ctx.fillRect(reach - 4, -1, 4, 2);
-  }
-
-  private drawProjectiles(): void {
-    const ctx = this.ctx;
-    for (const pr of this.projectiles) {
-      const r = pr.radius;
-      const vx = pr.vel.x, vy = pr.vel.y;
-      const speed = Math.hypot(vx, vy) || 1;
-      const visual = (pr as Projectile & { visual?: string }).visual ?? 'orb';
-      const angle = Math.atan2(vy, vx);
-
-      if (visual === 'shard') {
-        // Frost shard — diamond with leading edge
-        ctx.save();
-        ctx.translate(pr.pos.x, pr.pos.y);
-        ctx.rotate(angle);
-        ctx.fillStyle = pr.trailColour;
-        ctx.globalAlpha = 0.45;
-        ctx.fillRect(-r * 3, -r * 0.5, r * 3, r);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = pr.colour;
-        ctx.beginPath();
-        ctx.moveTo(r * 1.6, 0);
-        ctx.lineTo(0, -r);
-        ctx.lineTo(-r * 1.2, 0);
-        ctx.lineTo(0, r);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(-1, -1, r * 1.6, 1);
-        ctx.restore();
-        continue;
-      }
-
-      if (visual === 'flame') {
-        // Hellfire orb — pulsing fire core with crackling trail
-        for (let i = 1; i <= 4; i++) {
-          const tx = pr.pos.x - (vx / speed) * i * (r * 0.9);
-          const ty = pr.pos.y - (vy / speed) * i * (r * 0.9);
-          ctx.fillStyle = pr.trailColour;
-          ctx.globalAlpha = 0.32 * (5 - i) / 4;
-          ctx.beginPath();
-          ctx.arc(tx, ty, r * (1 - i * 0.12), 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-        // halo
-        const halo = ctx.createRadialGradient(pr.pos.x, pr.pos.y, 1, pr.pos.x, pr.pos.y, r * 2.4);
-        halo.addColorStop(0, 'rgba(255, 122, 58, 0.55)');
-        halo.addColorStop(1, 'rgba(255, 122, 58, 0)');
-        ctx.fillStyle = halo;
-        ctx.fillRect(pr.pos.x - r * 3, pr.pos.y - r * 3, r * 6, r * 6);
-        // body — pulse
-        const pulse = 1 + Math.sin(this.timeAlive * 18 + pr.id) * 0.15;
-        ctx.fillStyle = pr.colour;
-        ctx.beginPath();
-        ctx.arc(pr.pos.x, pr.pos.y, r * pulse, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffe6a3';
-        ctx.beginPath();
-        ctx.arc(pr.pos.x, pr.pos.y, r * 0.55, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(pr.pos.x - 1, pr.pos.y - 1, 2, 2);
-        continue;
-      }
-
-      // Default orb (spark bolt and any enemy projectiles)
-      for (let i = 1; i <= 3; i++) {
-        const tx = pr.pos.x - (vx / speed) * i * (r + 1);
-        const ty = pr.pos.y - (vy / speed) * i * (r + 1);
-        ctx.fillStyle = pr.colour;
-        ctx.globalAlpha = 0.18 * (4 - i) / 3;
-        ctx.beginPath();
-        ctx.arc(tx, ty, r * (1 - i * 0.15), 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = pr.colour;
-      ctx.globalAlpha = 0.35;
-      ctx.beginPath();
-      ctx.arc(pr.pos.x, pr.pos.y, r * 1.8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = pr.colour;
-      ctx.beginPath();
-      ctx.arc(pr.pos.x, pr.pos.y, r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(pr.pos.x, pr.pos.y, r * 0.45, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  private drawDamageNumbers(): void {
-    const ctx = this.ctx;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    for (const d of this.damageNumbers) {
-      const a = Math.max(0, Math.min(1, d.life / d.maxLife));
-      // Pop-in scale: 1.6 -> 1.0 over the first 30%, then steady
-      const tFromStart = 1 - a;
-      const scale = tFromStart < 0.3 ? 1.0 + (0.3 - tFromStart) * 2 : 1.0;
-      const text = ((d as DamageNumber & { text?: string }).text ?? `${d.value}`);
-      const big = text.startsWith('-') || /^\d+$/.test(text);
-      const baseSize = big ? 11 : 9;
-      ctx.font = `bold ${Math.round(baseSize * scale)}px "Iowan Old Style","Georgia",serif`;
-      ctx.globalAlpha = a;
-      // soft halo
-      ctx.fillStyle = 'rgba(0,0,0,0.85)';
-      ctx.fillText(text, Math.round(d.x) + 1, Math.round(d.y) + 1);
-      ctx.fillText(text, Math.round(d.x) - 1, Math.round(d.y) + 1);
-      ctx.fillText(text, Math.round(d.x) + 1, Math.round(d.y) - 1);
-      ctx.fillText(text, Math.round(d.x) - 1, Math.round(d.y) - 1);
-      ctx.fillStyle = d.colour;
-      ctx.fillText(text, Math.round(d.x), Math.round(d.y));
-    }
-    ctx.globalAlpha = 1;
-    ctx.textAlign = 'start';
-    ctx.textBaseline = 'alphabetic';
-  }
-
-  private drawRoomClearEffects(): void {
-    const ctx = this.ctx;
-    for (const e of this.roomClearEffects) {
-      const t = e.t / e.duration;
-      ctx.strokeStyle = `rgba(244, 210, 122, ${1 - t})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, 12 + t * 120, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    this.renderer.render(this.ctx, state);
   }
 
   // --- HUD emit -----------------------------------------------------------
@@ -3636,10 +2626,11 @@ export class GameEngine {
       mp: p.mp, maxMp: p.maxMp,
       coins: p.coins, keys: p.keys, essence: p.essence,
       floor: this.floor.number,
-      sphereId: sphereForFloor(this.floor.number).id,
-      sphereName: sphereForFloor(this.floor.number).name,
-      sphereGlyph: sphereForFloor(this.floor.number).glyph,
-      sphereGodName: sphereForFloor(this.floor.number).godName,
+      lampsLit: this.summary.bossesDefeated,
+      sphereId: this.currentSphere.id,
+      sphereName: this.currentSphere.name,
+      sphereGlyph: this.currentSphere.glyph,
+      sphereGodName: this.currentSphere.godName,
       roomType: room.type, roomName: room.name,
       relics: p.relics,
       weapons: p.weapons,
@@ -3676,7 +2667,8 @@ export class GameEngine {
     return undefined;
   }
 
-  // --- public test hook ---------------------------------------------------
+  // --- public hooks ---------------------------------------------------------
 
   getSummary(): RunSummary { return this.summary; }
+  isDead(): boolean { return this.dead; }
 }

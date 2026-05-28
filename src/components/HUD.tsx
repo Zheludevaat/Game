@@ -29,6 +29,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
           <span className="gold-text">✦ {hud.essence}</span> &nbsp;·&nbsp;
           <span className="gold-text">$ {hud.coins}</span> &nbsp;·&nbsp;
           <span className="gold-text">⚷ {hud.keys}</span>
+          {hud.lampsLit > 0 && <span> &nbsp;·&nbsp; <span className="violet-text">☩ {hud.lampsLit}</span></span>}
         </div>
         <LoadoutStrip hud={hud} />
       </div>
@@ -103,7 +104,20 @@ export function HUD({ hud, input }: Props): JSX.Element {
       )}
 
       {hud.pendingShrine && (
-        <ShrinePrompt name={hud.pendingShrine.name} effect={hud.pendingShrine.effect} downside={hud.pendingShrine.downside} />
+        <>
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 3,
+            background: 'rgba(0,0,0,0.3)',
+            pointerEvents: 'none',
+          }} />
+          <div style={{
+            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 4,
+            fontSize: 9, letterSpacing: '0.2em', color: 'var(--teal)', opacity: 0.7, pointerEvents: 'none',
+          }}>
+            ⏸ GAME PAUSED
+          </div>
+          <ShrinePrompt name={hud.pendingShrine.name} effect={hud.pendingShrine.effect} downside={hud.pendingShrine.downside} />
+        </>
       )}
     </div>
   );
@@ -118,12 +132,25 @@ function Minimap({ rooms }: { rooms: HudSnapshot['rooms'] }): JSX.Element {
   const cell = 10;
   const w = (maxX - minX + 1) * (cell + 1);
   const h = (maxY - minY + 1) * (cell + 1);
+  const icon = (type: HudSnapshot['rooms'][number]['type']): string => {
+    switch (type) {
+      case 'locked': return '⚷';
+      case 'treasure': return '$';
+      case 'exit': return '↓';
+      case 'boss': return '★';
+      case 'miniBoss': return '◆';
+      case 'sanctuary': return '☸';
+      case 'shrine': return '✦';
+      default: return '';
+    }
+  };
   return (
-    <div style={{ marginTop: 8, padding: 4, border: '1px solid var(--gold-3)', background: 'rgba(0,0,0,0.6)' }}>
+    <div style={{ marginTop: 8, padding: '4px 2px', border: '1px solid var(--gold-3)', background: 'rgba(0,0,0,0.6)' }}>
       <div style={{ position: 'relative', width: w, height: h }}>
         {rooms.map((r) => {
           if (!r.discovered) return null;
           const colour = colourForRoom(r.type, r.current);
+          const ic = icon(r.type);
           return (
             <div key={`${r.gx},${r.gy}`} style={{
               position: 'absolute',
@@ -132,7 +159,9 @@ function Minimap({ rooms }: { rooms: HudSnapshot['rooms'] }): JSX.Element {
               width: cell, height: cell,
               background: colour,
               border: r.current ? '1px solid #fff' : '1px solid #221636',
-            }} />
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 7, color: '#000', fontWeight: 700,
+            }}>{ic}</div>
           );
         })}
       </div>
@@ -150,6 +179,7 @@ function colourForRoom(type: HudSnapshot['rooms'][number]['type'], current: bool
     case 'exit': return '#a4faf0';
     case 'miniBoss': return '#ff7a5a';
     case 'boss': return '#ff3a4a';
+    case 'sanctuary': return '#6cf6e5';
     default: return '#3b265c';
   }
 }

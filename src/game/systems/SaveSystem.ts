@@ -39,55 +39,66 @@ export function loadSettings(): SettingsState {
   }
 }
 
+function safeSave(key: string, value: unknown): void {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {
+    console.warn('[SaveSystem] failed to save', key, e);
+  }
+}
+function safeLoad<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return JSON.parse(raw) as T;
+  } catch (e) {
+    console.warn('[SaveSystem] failed to load', key, e);
+    return fallback;
+  }
+}
+
 export function saveSettings(s: SettingsState): void {
-  try { localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(s)); } catch { /* */ }
+  safeSave(STORAGE_KEYS.settings, s);
 }
 
 export function loadBestFloor(): number {
-  try { return Number(localStorage.getItem(STORAGE_KEYS.best) ?? 0) || 0; } catch { return 0; }
+  return safeLoad(STORAGE_KEYS.best, 0);
 }
 export function saveBestFloor(n: number): void {
-  try { localStorage.setItem(STORAGE_KEYS.best, String(n)); } catch { /* */ }
+  try { localStorage.setItem(STORAGE_KEYS.best, String(n)); } catch (e) { console.warn('[SaveSystem] failed to save best floor', e); }
 }
 
 export function loadEssence(): number {
-  try { return Number(localStorage.getItem(STORAGE_KEYS.essence) ?? 0) || 0; } catch { return 0; }
+  return safeLoad(STORAGE_KEYS.essence, 0);
 }
 export function saveEssence(n: number): void {
-  try { localStorage.setItem(STORAGE_KEYS.essence, String(n)); } catch { /* */ }
+  try { localStorage.setItem(STORAGE_KEYS.essence, String(n)); } catch (e) { console.warn('[SaveSystem] failed to save essence', e); }
 }
 
 export function loadMeta(): MetaState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.meta);
-    if (!raw) return { ...DEFAULT_META };
-    const parsed = JSON.parse(raw);
-    return {
-      ...DEFAULT_META,
-      ...parsed,
-      unlockedCodex: Array.isArray(parsed.unlockedCodex) ? parsed.unlockedCodex : [],
-      bossesSeen: Array.isArray(parsed.bossesSeen) ? parsed.bossesSeen : [],
-    };
-  } catch { return { ...DEFAULT_META }; }
+  const parsed = safeLoad<Partial<MetaState>>(STORAGE_KEYS.meta, {});
+  if (Object.keys(parsed).length === 0) return { ...DEFAULT_META };
+  return {
+    ...DEFAULT_META,
+    ...parsed,
+    unlockedCodex: Array.isArray(parsed.unlockedCodex) ? parsed.unlockedCodex : [],
+    bossesSeen: Array.isArray(parsed.bossesSeen) ? parsed.bossesSeen : [],
+  };
 }
 export function saveMeta(m: MetaState): void {
-  try { localStorage.setItem(STORAGE_KEYS.meta, JSON.stringify(m)); } catch { /* */ }
+  safeSave(STORAGE_KEYS.meta, m);
 }
 
 export function loadLastArchetype(): ArchetypeId | null {
-  try {
-    const v = localStorage.getItem(STORAGE_KEYS.lastArchetype);
-    if (v === 'magus' || v === 'hermit' || v === 'star') return v;
-    return null;
-  } catch { return null; }
+  const v = safeLoad<string | null>(STORAGE_KEYS.lastArchetype, null);
+  if (v === 'magus' || v === 'hermit' || v === 'star') return v;
+  return null;
 }
 export function saveLastArchetype(a: ArchetypeId): void {
-  try { localStorage.setItem(STORAGE_KEYS.lastArchetype, a); } catch { /* */ }
+  safeSave(STORAGE_KEYS.lastArchetype, a);
 }
 
 export function resetAllSave(): void {
   for (const k of Object.values(STORAGE_KEYS)) {
-    try { localStorage.removeItem(k); } catch { /* */ }
+    try { localStorage.removeItem(k); } catch (e) { console.warn('[SaveSystem] failed to remove', k, e); }
   }
 }
 
@@ -98,17 +109,13 @@ export interface ResumeState {
 }
 
 export function loadResume(): ResumeState | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.resume);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed.archetype) return null;
-    return parsed;
-  } catch { return null; }
+  const parsed = safeLoad<ResumeState | null>(STORAGE_KEYS.resume, null);
+  if (!parsed?.archetype) return null;
+  return parsed;
 }
 export function saveResume(r: ResumeState | null): void {
   try {
     if (r) localStorage.setItem(STORAGE_KEYS.resume, JSON.stringify(r));
     else localStorage.removeItem(STORAGE_KEYS.resume);
-  } catch { /* */ }
+  } catch (e) { console.warn('[SaveSystem] failed to save resume', e); }
 }

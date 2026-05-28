@@ -13,3 +13,11 @@ export function clamp(n: number, lo: number, hi: number): number {
   return n < lo ? lo : n > hi ? hi : n;
 }
 export function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
+
+/** Convert a hex colour to an `"r, g, b"` CSS triple suitable for rgba(). */
+export function hexToRgbString(hex: string): string {
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
+  return `${(n >> 16) & 0xff}, ${(n >> 8) & 0xff}, ${n & 0xff}`;
+}

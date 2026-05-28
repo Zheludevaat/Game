@@ -129,6 +129,13 @@ export function generateFloor(opts: GenOptions): Floor {
     r.hasChest = true;
     r.chestLocked = true;
   }
+  // Sanctuary — ~8% chance, capped at 1 per floor
+  if (others.length && rng.chance(0.08)) {
+    const r = others.pop()!;
+    r.type = 'sanctuary';
+    r.name = pickRoomName('sanctuary', rng);
+    r.cleared = true;
+  }
   // MiniBoss on floor%5==0
   if (isMiniBoss && others.length) {
     const r = others.pop()!;

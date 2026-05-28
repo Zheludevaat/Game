@@ -517,6 +517,32 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       r: '#9b6cff', g: '#0a0420', y: '#c8983f', Y: '#ffe6a3',
     },
   },
+  // Salt Banshee — ghostly wailer that splits on death. 11×12.
+  saltBanshee: {
+    rows: [
+      '...oooooo...',
+      '..oOddddoo..',
+      '.oOddddddoo.',
+      'oOddddddddo.',
+      'oOdrrrrrDdo.',
+      'oOdwwrwwddo.',
+      'oOdddrrddo..',
+      '.oOddddddo..',
+      '..oddoddo...',
+      '..od..do....',
+      '..od..do....',
+      '..o....o....',
+    ],
+    palette: {
+      '.': null,
+      o: '#061020',
+      O: '#0c1f3a',
+      d: '#cdd6dc',
+      D: '#f5efd8',
+      r: '#e23a4a',
+      w: '#ffffff',
+    },
+  },
 };
 
 function parseHexRgb(hex: string): [number, number, number] | null {

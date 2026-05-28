@@ -118,7 +118,8 @@ export type RoomType =
   | 'locked'
   | 'exit'
   | 'miniBoss'
-  | 'boss';
+  | 'boss'
+  | 'sanctuary';
 
 export interface RoomGrid {
   x: number;
