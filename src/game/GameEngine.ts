@@ -43,6 +43,9 @@ import { ParticleSystem } from './rendering/Particles';
 import {
   drawChest, drawEnemy, drawFloorTile, drawInitiate, drawShrine, drawStairs, drawTorch, drawWallTile, getEnemySize,
 } from './rendering/PixelArt';
+import {
+  drawRoomTypeOverlay, drawRoomMoodNudge, TORCH_COUNT_BY_TYPE,
+} from './rendering/roomOverlay';
 import { drawProps, placeProps, propCountFor, PropPlacement } from './rendering/sphereDecor';
 import { InputManager } from './input/InputManager';
 import { audio } from './systems/AudioSystem';
@@ -4959,6 +4962,10 @@ export class GameEngine {
         drawFloorTile(ctx, x, y, TILE, t, sphere);
       }
     }
+    // Per-room-type mood overlay — bone scatter / cobwebs / scorch /
+    // brazier glow painted over the floor before the centre features
+    // so type identity is woven INTO the room, not floated on top.
+    drawRoomTypeOverlay(ctx, this.currentRoom, sphere, this.timeAlive);
     // Occult circle in arena rooms
     if (this.currentRoom.type === 'enemy' || this.currentRoom.type === 'miniBoss' || this.currentRoom.type === 'boss' || this.currentRoom.type === 'shrine') {
       this.drawOccultCircle(ROOM_W / 2, ROOM_H / 2, this.currentRoom.type === 'boss' ? 100 : 60);
@@ -4985,8 +4992,12 @@ export class GameEngine {
     drawProps(ctx, props, this.timeAlive);
     // Torches
     const torchT = this.timeAlive;
-    for (let i = 1; i <= 4; i++) {
-      const x = (ROOM_W / 5) * i;
+    // Torch count varies per room type — sanctuary / start get extra
+    // for safe-room brightness; secret / locked / trap lose torches
+    // for atmosphere.
+    const torchCount = TORCH_COUNT_BY_TYPE[this.currentRoom.type] ?? 4;
+    for (let i = 1; i <= torchCount; i++) {
+      const x = (ROOM_W / (torchCount + 1)) * i;
       drawTorch(ctx, x - 2, 18, torchT + i * 0.5, torchTint);
     }
     // Boss decoration: seven lamps ringing the arena. Sphere-tinted —
@@ -5618,6 +5629,13 @@ export class GameEngine {
     ctx.fillStyle = sphere.ambientTint;
     ctx.fillRect(0, 0, ROOM_W, ROOM_H);
     ctx.restore();
+
+    // Per-room-type mood nudge — safe rooms (sanctuary / start) get a
+    // 4% additive screen, hostile / hidden rooms (locked / secret) a
+    // small darken, trap rooms a faint warm-red wash. Layered on top
+    // of the sphere ambient so a Saturn sanctuary still reads as
+    // Saturn, just slightly brighter than a Saturn enemy room.
+    drawRoomMoodNudge(ctx, this.currentRoom);
 
     // Light pools — small + tight + low alpha. Screen-blend so overlaps
     // never clip. The goal is "this torch is lit; that pickup glows" —
