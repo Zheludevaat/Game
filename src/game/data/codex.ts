@@ -420,6 +420,87 @@ export const CODEX: CodexEntry[] = [
       'Some descend with one lamp. Some come back with none. The wise descend with two — one for the road, one for the dark room at its end. Coin for the road, initiate, coin for the road. The Lampwright keeps no records and forgets every face the moment it has paid him; this is his mercy, and the only one he offers.',
     unlock: { kind: 'npc', npcId: 'lampwright' },
   },
+  {
+    id: 'npc.reedCutter',
+    chapter: 'ascent',
+    title: 'The Reed-Cutter',
+    source: 'Patient of the Moon — overheard at the tide',
+    text:
+      'She cuts the reeds because the reeds wish to be cut. She does not ask the tide its business; she will not ask the soul its grief. Whoever sits beside her receives only what the moon herself gives — and the moon gives without remembering she gave.',
+    unlock: { kind: 'npc', npcId: 'reedCutter' },
+  },
+  {
+    id: 'npc.cartographer',
+    chapter: 'ascent',
+    title: 'The Cartographer',
+    source: 'Scribe of Hermes — marginal note in an unfinished atlas',
+    text:
+      'Every door is a sentence. Every corridor a clause. The Cartographer maps the spheres in a tongue he never speaks aloud, and trades a rumour for whatever silence the initiate is willing to surrender. His maps are accurate only to the soul that paid for them.',
+    unlock: { kind: 'npc', npcId: 'cartographer' },
+  },
+  {
+    id: 'npc.garlandkeep',
+    chapter: 'ascent',
+    title: 'The Garlandkeep',
+    source: 'Tender of Venus — saying carved on her threshold',
+    text:
+      'For the heart you have lost. For the heart you will lose. The Garlandkeep weaves a garland for every soul that passes — petals from the desires they surrendered on the third zone, thorns from the ones they could not. Whether the wearer thanks her or curses her, she opens the flower because she must.',
+    unlock: { kind: 'npc', npcId: 'garlandkeep' },
+  },
+  {
+    id: 'npc.smith',
+    chapter: 'ascent',
+    title: 'The Smith',
+    source: 'Forge-keeper of Helios — tinker\'s catechism',
+    text:
+      'Brass and bone, the Smith says. Give him coin, give him patience, and he will give you weight: a sword that knows itself, a shield that remembers the last hand to hold it. The Sun forges twice — once with fire, once with patience. The patient hand alone walks out of his forge unscorched.',
+    unlock: { kind: 'npc', npcId: 'smith' },
+  },
+  {
+    id: 'npc.veteran',
+    chapter: 'ascent',
+    title: 'The Veteran',
+    source: 'Survivor of Ares — barracks doxology',
+    text:
+      '"I died on Mars," the Veteran says. "You will not." He speaks not from prophecy but from the only kindness a soldier can offer the next soldier: a memorised lesson. Strike first. Strike twice. Run. Whatever else Ares has taken from him, the spear remembers every hand. He passes the lesson to whoever will carry the spear after him.',
+    unlock: { kind: 'npc', npcId: 'veteran' },
+  },
+  {
+    id: 'npc.diviner',
+    chapter: 'ascent',
+    title: 'The Diviner',
+    source: 'Seer of Jove — auspex marginalia',
+    text:
+      'Zeus throws five marks across the sky. The third is yours to stand upon. The other four are tests for hands that are not yet ready to receive them. The Diviner reads the long thunder before it sounds and tells the initiate only what the initiate can carry — for prophecy honoured is prophecy fulfilled, and prophecy unburdened is grace.',
+    unlock: { kind: 'npc', npcId: 'diviner' },
+  },
+  {
+    id: 'npc.chorister',
+    chapter: 'ogdoad',
+    title: 'The Chorister',
+    source: 'Singer of the Eighth — fragment of the secret hymn',
+    text:
+      'In the Eighth Sphere the soul does not arrive — she remembers. The Chorister sings what the soul knew before the spheres ringed her in: Holy is God, the Father of all things; Holy is God, whose will is accomplished by his own powers. She does not teach the hymn. She does not need to. The hymn was always the soul\'s own voice.',
+    unlock: { kind: 'npc', npcId: 'chorister' },
+  },
+  {
+    id: 'npc.mendicant',
+    chapter: 'ascent',
+    title: 'The Mendicant',
+    source: 'Beggar of the In-Between — alms-bowl inscription',
+    text:
+      'For the lamp, he says, and the bowl is held out. The Mendicant takes what is offered and returns more than was given — not because he is kind, but because the Sphere of the In-Between has no other currency. A coin spared is a coin remembered. Every alms is the soul rehearsing its eventual surrender.',
+    unlock: { kind: 'npc', npcId: 'mendicant' },
+  },
+  {
+    id: 'npc.hierophant',
+    chapter: 'awakening',
+    title: 'The Hierophant',
+    source: 'Keeper of the First Threshold',
+    text:
+      'He stands at the door between the cosmos and the descent, the lamp lit in one hand and the names of the spheres on his lips. He greets the initiate, weighs the initiate, and lets the initiate pass. He has done this since before the spheres had names, and he will do it once more after the last name is forgotten.',
+    unlock: { kind: 'npc', npcId: 'hierophant' },
+  },
 ];
 
 export const CODEX_BY_ID: Record<string, CodexEntry> =

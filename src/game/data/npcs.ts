@@ -277,6 +277,54 @@ function drawDiviner(ctx: CanvasRenderingContext2D, x: number, y: number, _r: Np
   ctx.fillRect(x - 3, y - 6, 6, 2);
 }
 
+function drawChorister(ctx: CanvasRenderingContext2D, x: number, y: number, r: NpcDrawCtx, def: NpcDef): void {
+  // Tall standing figure, arms slightly raised, surrounded by a halo
+  // of fixed-star pinpricks. The Chorister hymns the Powers — the
+  // light reads as belonging to the cosmos, not to her.
+  const accentRgb = hexToRgbString(def.colour);
+  // Halo — soft cream radial bloom encompassing the whole sprite
+  const halo = ctx.createRadialGradient(x, y - 2, 2, x, y - 2, 22);
+  halo.addColorStop(0, `rgba(${accentRgb}, 0.45)`);
+  halo.addColorStop(1, `rgba(${accentRgb}, 0)`);
+  ctx.fillStyle = halo;
+  ctx.fillRect(x - 22, y - 24, 44, 44);
+  // Robe — pale ivory
+  ctx.fillStyle = '#3b265c';
+  ctx.fillRect(x - 4, y - 2, 8, 10);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 5, y + 4, 10, 1);
+  ctx.fillRect(x - 4, y + 8, 8, 1);
+  // Raised sleeves
+  ctx.fillRect(x - 6, y - 1, 2, 4);
+  ctx.fillRect(x + 4, y - 1, 2, 4);
+  // Hood (open — the Chorister is unhooded, the cosmos sees her face)
+  ctx.fillStyle = '#231142';
+  ctx.fillRect(x - 4, y - 6, 8, 4);
+  ctx.fillStyle = def.colour;
+  ctx.fillRect(x - 4, y - 7, 8, 1);
+  // Closed-eye serenity — a pale line where the eyes would be
+  ctx.fillStyle = '#0a0420';
+  ctx.fillRect(x - 3, y - 4, 2, 1);
+  ctx.fillRect(x + 1, y - 4, 2, 1);
+  // Star pinpricks orbiting — twinkle from `r.timeAlive` so the cosmos
+  // breathes around her without animating the sprite
+  const t = r.timeAlive;
+  ctx.fillStyle = '#fff7d6';
+  const stars: [number, number, number][] = [
+    [-10, -10, 0], [ 9, -8, 1], [-11,  -1, 2], [11,  2, 3],
+    [-7, -14, 4], [ 6, -14, 5], [ -1, -16, 6],
+  ];
+  for (const [sx, sy, k] of stars) {
+    const tw = 0.55 + 0.45 * Math.sin(t * 1.6 + k * 1.3);
+    ctx.globalAlpha = tw;
+    ctx.fillRect(x + sx, y + sy, 1, 1);
+  }
+  ctx.globalAlpha = 1;
+  // Bright crown-mark at brow — the Eighth Sphere's signature
+  ctx.fillStyle = '#fff7d6';
+  ctx.fillRect(x - 1, y - 8, 2, 1);
+}
+
 export const NPCS: Record<string, NpcDef> = {
   hierophant: {
     id: 'hierophant',
@@ -437,6 +485,22 @@ export const NPCS: Record<string, NpcDef> = {
     ],
     draw: drawLampwright,
   },
+  chorister: {
+    id: 'chorister',
+    name: 'The Chorister',
+    title: 'Singer of the Eighth',
+    sphere: 'ogdoad',
+    interaction: 'ambient',
+    colour: '#fff7d6',
+    ambientLines: [
+      '"Be silent, son. Listen to the silence."',
+      '"Mind to Mind. Word to Word. Light to Light."',
+      '"What no tongue can sing, my faculty hymns."',
+    ],
+    // Generous essence — the climax sphere returns the soul's tribute.
+    passive: { kind: 'essence', amount: 3, radius: 44, every: 5.0 },
+    draw: drawChorister,
+  },
 };
 
 /** Lampwright shop catalogue — three consumables at coin prices.
@@ -480,6 +544,7 @@ export function npcForSphere(sphereId: SphereId): NpcDef | null {
   if (sphereId === 'mars')    return NPCS.veteran;
   if (sphereId === 'jupiter') return NPCS.diviner;
   if (sphereId === 'saturn')  return NPCS.mute;
+  if (sphereId === 'ogdoad')  return NPCS.chorister;
   return null;
 }
 
