@@ -2599,6 +2599,17 @@ export class GameEngine {
    *  case + one new ambient-line update in npcs.ts. */
   private tryNpcLimitedInteract(npc: NpcEntity, defId: string): void {
     const p = this.player;
+    // Helper applied at the end of every successful trade — swaps the
+    // ambient line to the NPC's post-trade acknowledgement so the next
+    // proximity re-fires a "thank you" instead of repeating the
+    // trade tease. Keeps the relationship feeling ongoing.
+    const armPostTradeLine = (): void => {
+      const def = NPCS[defId];
+      if (def?.postTradeLine) {
+        npc.spokenLine = def.postTradeLine;
+        npc.spokenAmbient = false;
+      }
+    };
     if (defId === 'smith') {
       // Forge upgrade — 30 coins for +2 permanent attack this run.
       const cost = 30;
@@ -2610,6 +2621,7 @@ export class GameEngine {
       p.coins -= cost;
       p.attack += 2;
       npc.interactionUsed = true;
+      armPostTradeLine();
       // Surface the new total so the player sees the persistent gain,
       // not just the delta — "+2 → 14 ATK" reads as a meaningful
       // milestone, "+2 ATTACK" alone reads as a tiny pop.
@@ -2637,6 +2649,7 @@ export class GameEngine {
       }
       p.essence -= cost;
       npc.interactionUsed = true;
+      armPostTradeLine();
       // Reveal every room on the current floor on the minimap.
       for (const r of this.floor.rooms) r.discovered = true;
       this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, 'FLOOR REVEALED', DAMAGE_COLOURS.spell);
@@ -4691,6 +4704,15 @@ export class GameEngine {
             ?? def.ambientLines![npc.ambientIdx % def.ambientLines!.length];
           npc.spokenAmbient = true;
           this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, line, def.colour);
+          // Soft sparkle burst tinted to the NPC's colour — adds visual
+          // weight to the first-line moment so it reads as an event,
+          // not just a floating word. 6-8 particles is intentionally
+          // subtle; the line itself is the headline.
+          if (!this.reducedParticles) {
+            this.particles.burst(npc.pos.x, npc.pos.y - 6, 7, {
+              colour: def.colour, life: 0.55, maxLife: 0.55, drag: 0.88,
+            });
+          }
         }
       }
       // Codex unlock on first close-proximity contact. Independent of

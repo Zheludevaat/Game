@@ -34,6 +34,12 @@ export interface NpcDef {
   /** Ambient lines surfaced as floating text over the NPC the first
    *  time the player walks within range. */
   ambientLines?: string[];
+  /** Replacement ambient line surfaced AFTER a 'limited' interaction
+   *  fires successfully — the next time the player walks within
+   *  ambient range, this line floats instead of the trade tease.
+   *  Lets the NPC acknowledge the exchange so the relationship feels
+   *  ongoing rather than transactional-then-silent. */
+  postTradeLine?: string;
   /** Passive proximity gift — fires while the player stands within
    *  radius for at least `every` seconds. Reed-Cutter style. */
   passive?: {
@@ -401,6 +407,7 @@ export const NPCS: Record<string, NpcDef> = {
       '"Trade me silence for a rumour."',
       '"Five tears of essence, and the floor unrolls."',
     ],
+    postTradeLine: '"The floor unfolds. Walk it lightly."',
     passive: { kind: 'mp', amount: 8, radius: 40, every: 5.0 },
     draw: drawCartographer,
   },
@@ -420,6 +427,7 @@ export const NPCS: Record<string, NpcDef> = {
       '"Give me coin and I\'ll give you weight."',
       '"Thirty coins for the edge that lasts."',
     ],
+    postTradeLine: '"Brass and bone in your blade now. May it sing."',
     passive: { kind: 'coin', amount: 5, radius: 42, every: 4.0 },
     draw: drawSmith,
   },
