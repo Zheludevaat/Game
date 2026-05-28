@@ -1423,6 +1423,12 @@ export class GameEngine {
     if (n === 1) {
       this.unlockCodex('awaken.pimander');
       this.unlockCodex('awaken.light');
+      // The Hierophant is the menu greeter — never spawned in-game, so
+      // the npc.hierophant entry's `kind: 'npc'` trigger would never
+      // fire. Unlock it here at first-floor entry instead, matching
+      // the cadence of awaken.pimander which also fires for the same
+      // moment of arrival.
+      this.unlockCodex('npc.hierophant');
     }
     // Reaching the Eighth Sphere is the climactic moment.
     if (isOgdoadFloor(n)) {
@@ -2570,8 +2576,10 @@ export class GameEngine {
     // the press was registered. Useful both for diagnosing the
     // "interact doesn't work" report (it DID fire, just nothing was
     // close enough) and as general UX feedback.
-    const hasLimitedNpc = room.type === 'sanctuary'
-      && this.npcs.some((n) => NPCS[n.defId]?.interaction === 'limited');
+    // Limited NPCs always sit in sanctuary rooms by data convention,
+    // but checking the def directly keeps this honest if that changes
+    // (e.g. a future Penitent-variant with a limited interaction).
+    const hasLimitedNpc = this.npcs.some((n) => NPCS[n.defId]?.interaction === 'limited');
     if (
       (room.hasChest && !room.chestOpened) ||
       (room.hasShrine && !room.shrineUsed) ||

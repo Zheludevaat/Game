@@ -499,7 +499,11 @@ export const CODEX: CodexEntry[] = [
     source: 'Keeper of the First Threshold',
     text:
       'He stands at the door between the cosmos and the descent, the lamp lit in one hand and the names of the spheres on his lips. He greets the initiate, weighs the initiate, and lets the initiate pass. He has done this since before the spheres had names, and he will do it once more after the last name is forgotten.',
-    unlock: { kind: 'npc', npcId: 'hierophant' },
+    // The Hierophant is the menu greeter — never spawned as an in-game
+    // NpcEntity. Unlock fires from GameEngine.goToFloor when the player
+    // first descends to floor 1, the moment that is, narratively, the
+    // Hierophant letting them through.
+    unlock: { kind: 'firstFloor' },
   },
 ];
 

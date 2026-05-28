@@ -57,7 +57,10 @@ function drawStartOverlay(ctx: Ctx, sphere: SphereDef, t: number): void {
   const cx = ROOM_W / 2, cy = ROOM_H / 2;
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
-  drawHearthGlow(ctx, cx, cy, 80, `rgba(244, 210, 122, ${0.18 + 0.04 * Math.sin(t * 1.5)})`);
+  // 0.32 base alpha so the warm-gold patch survives the sphere
+  // multiply pass that paints later — at 0.18 the hearth was almost
+  // invisible on Saturn / Moon floors.
+  drawHearthGlow(ctx, cx, cy, 80, `rgba(244, 210, 122, ${0.32 + 0.06 * Math.sin(t * 1.5)})`);
   ctx.restore();
   // "I" sigil inlay — bone colour, low alpha
   ctx.fillStyle = 'rgba(245, 239, 216, 0.32)';
@@ -145,7 +148,10 @@ function drawSanctuaryOverlay(ctx: Ctx, sphere: SphereDef, t: number): void {
   // Brazier glow — warm pulse at the centre
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
-  drawHearthGlow(ctx, cx, cy, 70, `rgba(244, 210, 122, ${0.16 + 0.04 * Math.sin(t * 2)})`);
+  // 0.30 base — the brazier needs to register as "this is sanctuary"
+  // through the sphere multiply that paints after. 0.16 was getting
+  // crushed to invisible on Saturn / Moon.
+  drawHearthGlow(ctx, cx, cy, 70, `rgba(244, 210, 122, ${0.30 + 0.06 * Math.sin(t * 2)})`);
   ctx.restore();
   // Sphere-accent diamond inlay around the brazier — four short bars
   ctx.fillStyle = sphere.accent;
@@ -179,7 +185,12 @@ function drawSecretOverlay(ctx: Ctx, sphere: SphereDef): void {
   ctx.save();
   ctx.globalAlpha = 0.15;
   ctx.fillStyle = sphere.accent;
-  ctx.font = '64px serif';
+  // Canvas2D doesn't pull from CSS @font-face by font-family alone —
+  // the font NAME must appear in ctx.font for the browser to consult
+  // the registered AbyssGlyphs subset. Without it, iOS Safari falls
+  // back to system serif → colour-emojifies ☾ ♀ ☉ and breaks the
+  // pixel-monochrome aesthetic M3 went to ship.
+  ctx.font = '64px AbyssGlyphs, serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(sphere.glyph, cx, cy);
@@ -233,7 +244,8 @@ function drawTreasureOverlay(ctx: Ctx, sphere: SphereDef, t: number): void {
   const cx = ROOM_W / 2, cy = ROOM_H / 2 + 4;
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
-  drawHearthGlow(ctx, cx, cy, 56, `rgba(244, 210, 122, ${0.20 + 0.05 * Math.sin(t * 1.8)})`);
+  // 0.34 base — same crush-survival reasoning as the other glows.
+  drawHearthGlow(ctx, cx, cy, 56, `rgba(244, 210, 122, ${0.34 + 0.06 * Math.sin(t * 1.8)})`);
   ctx.restore();
   // Stray coin glints — three small accent dots near the chest
   ctx.fillStyle = sphere.accent;
