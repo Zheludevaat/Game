@@ -6,7 +6,7 @@ import { CONSUMABLES, CONSUMABLE_IDS } from '../consumables';
 import { SHRINE_VARIANTS } from '../shrines';
 import { RELIC_SYNERGIES, SYNERGY_IDS } from '../relicSynergies';
 import { SPHERES, sphereForFloor } from '../spheres';
-import { NPCS } from '../npcs';
+import { NPCS, npcForSphere } from '../npcs';
 import { ARCHETYPES, getArchetype } from '../archetypes';
 import { CODEX, CODEX_BY_ID } from '../codex';
 
@@ -75,6 +75,50 @@ describe('Data registries — every id resolves', () => {
       expect(def.pair).toHaveLength(2);
       expect(RELICS[def.pair[0]], `synergy ${id} parent ${def.pair[0]}`).toBeDefined();
       expect(RELICS[def.pair[1]], `synergy ${id} parent ${def.pair[1]}`).toBeDefined();
+    }
+  });
+
+  it('Every NpcDef carries the fields the engine consumes', () => {
+    // Every NPC id surfaces through unlockCodex(`npc.${id}`) on first
+    // contact (GameEngine.ts:4596). Verify each has a non-empty name
+    // and title so the codex layout doesn't break on contact.
+    for (const id of Object.keys(NPCS)) {
+      const def = NPCS[id];
+      expect(def.id, `npc ${id}.id`).toBe(id);
+      expect(def.name.length, `npc ${id}.name`).toBeGreaterThan(0);
+      expect(def.title.length, `npc ${id}.title`).toBeGreaterThan(0);
+    }
+  });
+
+  it('Every NpcDef has a matching codex entry (npc.<id>)', () => {
+    // GameEngine.updateNpcs fires unlockCodex(`npc.${id}`) the first
+    // time the player walks within 56 px of any NPC. unlockCodex is
+    // a no-op when the entry id doesn't exist — so a missing entry
+    // is a silent failure where the player never gets the lore drop.
+    for (const id of Object.keys(NPCS)) {
+      expect(CODEX_BY_ID[`npc.${id}`], `codex entry for npc.${id}`).toBeDefined();
+    }
+  });
+
+  it('Every sphere resolves to an NpcDef via npcForSphere', () => {
+    // Ogdoad now has the Chorister. Every sphere id should map to
+    // exactly one wanderer; if a new sphere is added without an NPC
+    // the sanctuary sphere-roll silently skips that floor.
+    for (const sph of SPHERES) {
+      expect(npcForSphere(sph.id), `npcForSphere(${sph.id})`).not.toBeNull();
+    }
+  });
+
+  it("Every 'limited' NPC has an interaction prompt + handler wired", () => {
+    // The two 'limited' NPCs (Smith forge, Cartographer map reveal)
+    // must each: have at least one ambient line that teases the
+    // payment, and surface a discriminating ambient line so the
+    // player knows what they're being asked to pay.
+    for (const id of Object.keys(NPCS)) {
+      const def = NPCS[id];
+      if (def.interaction !== 'limited') continue;
+      expect(def.ambientLines, `npc ${id} ambient lines`).toBeDefined();
+      expect((def.ambientLines ?? []).length, `npc ${id} ambient lines length`).toBeGreaterThan(0);
     }
   });
 

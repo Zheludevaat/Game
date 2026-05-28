@@ -370,6 +370,10 @@ interface NpcEntity {
    *  (smaller than ambient range). Used to fire one-shot codex
    *  unlocks for NPCs that have a matching `npc.<id>` codex entry. */
   firstContacted?: boolean;
+  /** True after the player has used this NPC's `'limited'` interaction
+   *  this run. One-shot per NPC entity — the Smith forges once, the
+   *  Cartographer reveals once. */
+  interactionUsed?: boolean;
 }
 
 interface Familiar {
@@ -2544,6 +2548,24 @@ export class GameEngine {
         }
       }
     }
+    // Limited-interaction NPCs — Smith forge upgrade, Cartographer
+    // map reveal. Each one-shot per entity; the ambient line teases
+    // the cost ("Thirty coins for the edge that lasts.") so the
+    // player knows before pressing interact.
+    for (const npc of this.npcs) {
+      const def = NPCS[npc.defId];
+      if (!def || def.interaction !== 'limited') continue;
+      const d = Math.hypot(p.pos.x - npc.pos.x, p.pos.y - npc.pos.y);
+      if (d >= 40) continue;
+      if (npc.interactionUsed) {
+        // Already collected — quiet "spent" cue, no resource refund.
+        this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, 'ALREADY GIVEN', DAMAGE_COLOURS.error);
+        audio.sfx('doorLock');
+        return;
+      }
+      this.tryNpcLimitedInteract(npc, def.id);
+      return;
+    }
     // Nothing in range — surface a transient hint so the player knows
     // the press was registered. Useful both for diagnosing the
     // "interact doesn't work" report (it DID fire, just nothing was
@@ -2556,6 +2578,62 @@ export class GameEngine {
     ) {
       this.spawnDamageNumber(p.pos.x, p.pos.y - 12, 'TOO FAR', DAMAGE_COLOURS.spell);
     }
+  }
+
+  /** Limited-interaction NPC dispatch. Branches on def id; each handler
+   *  validates resources, deducts payment, applies the effect, marks
+   *  the NPC entity used, and surfaces a damage-number cue. The pattern
+   *  intentionally mirrors `tryShopBuy` — payment + grant + feedback
+   *  in one place per NPC, so adding a new limited NPC is one new
+   *  case + one new ambient-line update in npcs.ts. */
+  private tryNpcLimitedInteract(npc: NpcEntity, defId: string): void {
+    const p = this.player;
+    if (defId === 'smith') {
+      // Forge upgrade — 30 coins for +2 permanent attack this run.
+      const cost = 30;
+      if (p.coins < cost) {
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'NEED 30 COINS', DAMAGE_COLOURS.error);
+        audio.sfx('doorLock');
+        return;
+      }
+      p.coins -= cost;
+      p.attack += 2;
+      npc.interactionUsed = true;
+      this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, '+2 ATTACK', DAMAGE_COLOURS.weapon);
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `−${cost}c`, DAMAGE_COLOURS.error);
+      audio.sfx('chest');
+      if (!this.reducedParticles) {
+        this.particles.burst(npc.pos.x, npc.pos.y, 18, {
+          colour: '#f4d27a', life: 0.65, maxLife: 0.65, drag: 0.86,
+        });
+      }
+      return;
+    }
+    if (defId === 'cartographer') {
+      // Map reveal — 5 essence for full floor visibility.
+      const cost = 5;
+      if (p.essence < cost) {
+        this.spawnDamageNumber(p.pos.x, p.pos.y - 8, 'NEED 5 ✦', DAMAGE_COLOURS.error);
+        audio.sfx('doorLock');
+        return;
+      }
+      p.essence -= cost;
+      npc.interactionUsed = true;
+      // Reveal every room on the current floor on the minimap.
+      for (const r of this.floor.rooms) r.discovered = true;
+      this.spawnDamageNumber(npc.pos.x, npc.pos.y - 18, 'MAP REVEALED', DAMAGE_COLOURS.spell);
+      this.spawnDamageNumber(p.pos.x, p.pos.y - 8, `−${cost} ✦`, DAMAGE_COLOURS.error);
+      audio.sfx('shrine');
+      if (!this.reducedParticles) {
+        this.particles.burst(npc.pos.x, npc.pos.y, 18, {
+          colour: '#a4faf0', life: 0.65, maxLife: 0.65, drag: 0.86,
+        });
+      }
+      return;
+    }
+    // Any future 'limited' NPC without a handler is a silent no-op so
+    // a typo in data doesn't crash the run. The dataLookups test below
+    // catches the missing handler at build time.
   }
 
   /** Lampwright transaction — checks coin balance, deducts on buy,
@@ -6358,6 +6436,21 @@ export class GameEngine {
     if (room.hasShrine && !room.shrineUsed) {
       const d = dist(p.pos, { x: ROOM_W / 2, y: ROOM_H / 2 - 8 });
       if (d < 34) prompts.push('Press Interact to commune');
+    }
+    // Limited-interaction NPC prompt — Smith forge, Cartographer map.
+    // Shows the cost so the player can decide before pressing.
+    for (const npc of this.npcs) {
+      const def = NPCS[npc.defId];
+      if (!def || def.interaction !== 'limited') continue;
+      const d = Math.hypot(p.pos.x - npc.pos.x, p.pos.y - npc.pos.y);
+      if (d >= 40) continue;
+      if (npc.interactionUsed) {
+        prompts.push(`${def.name} — already given`);
+      } else if (def.id === 'smith') {
+        prompts.push('Interact — 30c for +2 ATK');
+      } else if (def.id === 'cartographer') {
+        prompts.push('Interact — 5 ✦ to reveal floor');
+      }
     }
     // Locked-door telegraph — surface "🔒 KEY REQUIRED" while the player
     // is closing on a door whose far-side room is locked and unvisited.

@@ -384,12 +384,15 @@ export const NPCS: Record<string, NpcDef> = {
     name: 'The Cartographer',
     title: 'Scribe of Hermes',
     sphere: 'mercury',
-    interaction: 'ambient',
+    // 'limited' surfaces an interact prompt in the engine — one-shot
+    // payment for a map reveal. Ambient gifts still flow while the
+    // player stands close; the interact unlocks an additional reward.
+    interaction: 'limited',
     colour: '#a4faf0',
     ambientLines: [
       '"Every door is a sentence."',
-      '"You are four chambers from the stair."',
       '"Trade me silence for a rumour."',
+      '"Five tears of essence, and the floor unrolls."',
     ],
     passive: { kind: 'mp', amount: 8, radius: 40, every: 5.0 },
     draw: drawCartographer,
@@ -399,12 +402,16 @@ export const NPCS: Record<string, NpcDef> = {
     name: 'The Smith',
     title: 'Forge-keeper of Helios',
     sphere: 'sun',
-    interaction: 'ambient',
+    // 'limited' — interact pays the Smith 30 coins for a permanent
+    // +2 attack the rest of the run. The "give me coin and I'll give
+    // you weight" line was a tease for an interaction that didn't
+    // exist before; now it does.
+    interaction: 'limited',
     colour: '#f4d27a',
     ambientLines: [
       '"Brass and bone."',
       '"Give me coin and I\'ll give you weight."',
-      '"The Sun forges twice — once with fire, once with patience."',
+      '"Thirty coins for the edge that lasts."',
     ],
     passive: { kind: 'coin', amount: 5, radius: 42, every: 4.0 },
     draw: drawSmith,
