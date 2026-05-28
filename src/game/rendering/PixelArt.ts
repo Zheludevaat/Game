@@ -1060,67 +1060,267 @@ export function drawChest(
   }
 }
 
+/** ShrineKind drives the column-top decoration. The base platform +
+ *  column are shared; each kind ships a 30-40-line custom top so the
+ *  alchemical operation reads from across the room before the player
+ *  opens the modal. */
+type ShrineKindArg =
+  | 'calcination' | 'dissolution' | 'separation' | 'conjunction'
+  | 'fermentation' | 'distillation' | 'coagulation'
+  | 'cursed' | 'library' | 'puzzle';
+
 export function drawShrine(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, used: boolean, t: number,
+  kind: ShrineKindArg = 'calcination',
 ): void {
+  // Cursed shrines get a darker stone — the rot has eaten the column.
+  const cursed = kind === 'cursed';
+  const stoneBase = cursed ? '#100818' : '#1a0f2c';
+  const stoneMid  = cursed ? '#1a1428' : '#2a1b3a';
+  const stoneTop  = cursed ? '#2a1a36' : '#3b265c';
+  const colShade  = cursed ? '#3a2050' : '#5b3a86';
+  const colLite   = cursed ? '#54306a' : '#7a559e';
+
   // base platform (two-tier)
-  ctx.fillStyle = '#1a0f2c';
+  ctx.fillStyle = stoneBase;
   ctx.fillRect(x - 12, y + 8, 24, 2);
-  ctx.fillStyle = '#2a1b3a';
+  ctx.fillStyle = stoneMid;
   ctx.fillRect(x - 10, y + 6, 20, 4);
-  ctx.fillStyle = '#3b265c';
+  ctx.fillStyle = stoneTop;
   ctx.fillRect(x - 8, y + 4, 16, 3);
 
   // column
-  ctx.fillStyle = '#1a0f2c';
+  ctx.fillStyle = stoneBase;
   ctx.fillRect(x - 5, y - 9, 14, 14);
-  ctx.fillStyle = '#5b3a86';
+  ctx.fillStyle = colShade;
   ctx.fillRect(x - 4, y - 8, 12, 13);
-  ctx.fillStyle = '#7a559e';
+  ctx.fillStyle = colLite;
   ctx.fillRect(x - 4, y - 8, 1, 13);
   ctx.fillStyle = '#221636';
   ctx.fillRect(x + 7, y - 8, 1, 13);
 
-  // gold filigree band
-  ctx.fillStyle = PALETTE.gold3;
+  // gold filigree band — blood-red on cursed
+  ctx.fillStyle = cursed ? '#7a1020' : PALETTE.gold3;
   ctx.fillRect(x - 4, y - 4, 12, 1);
-  ctx.fillStyle = PALETTE.gold;
+  ctx.fillStyle = cursed ? PALETTE.crimson : PALETTE.gold;
   ctx.fillRect(x - 3, y - 4, 1, 1);
   ctx.fillRect(x + 1, y - 4, 1, 1);
   ctx.fillRect(x + 5, y - 4, 1, 1);
 
   // bowl/cap
-  ctx.fillStyle = '#1a0f2c';
+  ctx.fillStyle = stoneBase;
   ctx.fillRect(x - 6, y - 10, 16, 2);
-  ctx.fillStyle = '#3b265c';
+  ctx.fillStyle = stoneTop;
   ctx.fillRect(x - 5, y - 11, 14, 2);
 
-  // flame / orb on top
-  if (!used) {
-    // halo
-    const halo = ctx.createRadialGradient(x + 2, y - 16, 1, x + 2, y - 16, 14);
-    halo.addColorStop(0, 'rgba(108, 246, 229, 0.55)');
-    halo.addColorStop(1, 'rgba(108, 246, 229, 0)');
-    ctx.fillStyle = halo;
-    ctx.fillRect(x - 12, y - 30, 28, 28);
-    // flame
-    const flicker = Math.sin(t * 5) * 1.4;
-    ctx.fillStyle = 'rgba(108,246,229,0.75)';
-    ctx.beginPath();
-    ctx.ellipse(x + 2, y - 15, 4.5 + Math.abs(flicker) * 0.4, 6 + flicker * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#a4faf0';
-    ctx.beginPath();
-    ctx.ellipse(x + 2, y - 15, 2.5, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(x + 1, y - 16, 2, 2);
-  } else {
+  if (used) {
+    // Spent — a dead bowl regardless of kind
     ctx.fillStyle = '#0a0420';
     ctx.fillRect(x - 3, y - 14, 10, 4);
     ctx.fillStyle = '#1a0f2c';
     ctx.fillRect(x - 2, y - 13, 8, 2);
+    return;
+  }
+
+  // Per-kind crown — what sits on top of the column.
+  drawShrineCrown(ctx, x, y, t, kind);
+}
+
+/** Column-top decoration for an unused shrine. Branches on kind so
+ *  every alchemical operation has its own silhouette. */
+function drawShrineCrown(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, t: number,
+  kind: ShrineKindArg,
+): void {
+  switch (kind) {
+    case 'calcination': {
+      // Furnace bowl + orange flame plume
+      const halo = ctx.createRadialGradient(x + 2, y - 16, 1, x + 2, y - 16, 16);
+      halo.addColorStop(0, 'rgba(255, 122, 58, 0.65)');
+      halo.addColorStop(1, 'rgba(255, 122, 58, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 14, y - 32, 32, 32);
+      ctx.fillStyle = '#3a1d10';
+      ctx.fillRect(x - 4, y - 13, 12, 2);
+      const flick = Math.sin(t * 6) * 1.6;
+      ctx.fillStyle = '#ff7a3a';
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y - 17, 4 + Math.abs(flick) * 0.5, 7 + flick * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffe6a3';
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y - 17, 2, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff7d6';
+      ctx.fillRect(x + 1, y - 19, 2, 3);
+      break;
+    }
+    case 'dissolution': {
+      // Water bowl with ripple ring + soft cyan halo
+      const halo = ctx.createRadialGradient(x + 2, y - 14, 1, x + 2, y - 14, 14);
+      halo.addColorStop(0, 'rgba(108, 246, 229, 0.55)');
+      halo.addColorStop(1, 'rgba(108, 246, 229, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 12, y - 28, 28, 28);
+      // Bowl rim
+      ctx.fillStyle = '#1f8a86';
+      ctx.fillRect(x - 6, y - 14, 16, 2);
+      // Water surface
+      ctx.fillStyle = '#6cf6e5';
+      ctx.fillRect(x - 5, y - 13, 14, 2);
+      // Ripple ring (animated)
+      const r = ((t * 6) % 5);
+      ctx.strokeStyle = `rgba(164, 250, 240, ${0.6 - r * 0.1})`;
+      ctx.beginPath(); ctx.arc(x + 2, y - 13, 2 + r, 0, Math.PI * 2); ctx.stroke();
+      break;
+    }
+    case 'separation': {
+      // Balance scale — yoke + two pans
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x + 1, y - 16, 2, 4);          // post
+      ctx.fillRect(x - 6, y - 17, 16, 1);         // yoke
+      // Chains
+      ctx.fillRect(x - 5, y - 16, 1, 3);
+      ctx.fillRect(x + 8, y - 16, 1, 3);
+      // Left pan
+      ctx.fillStyle = '#f4d27a';
+      ctx.fillRect(x - 7, y - 13, 5, 1);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x - 7, y - 12, 5, 1);
+      // Right pan
+      ctx.fillStyle = '#f4d27a';
+      ctx.fillRect(x + 6, y - 13, 5, 1);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x + 6, y - 12, 5, 1);
+      break;
+    }
+    case 'conjunction': {
+      // Two interlocked rings — gold + silver
+      ctx.strokeStyle = '#f4d27a';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x - 1, y - 15, 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#cdd6dc';
+      ctx.beginPath(); ctx.arc(x + 5, y - 15, 4, 0, Math.PI * 2); ctx.stroke();
+      // Intersection sparkle
+      const sparkle = 0.6 + 0.4 * Math.sin(t * 3);
+      ctx.fillStyle = `rgba(255, 247, 214, ${sparkle})`;
+      ctx.fillRect(x + 1, y - 16, 2, 2);
+      break;
+    }
+    case 'fermentation': {
+      // Squat vat with 3 rising bubbles + greenish glow
+      const halo = ctx.createRadialGradient(x + 2, y - 14, 1, x + 2, y - 14, 12);
+      halo.addColorStop(0, 'rgba(127, 208, 112, 0.55)');
+      halo.addColorStop(1, 'rgba(127, 208, 112, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 10, y - 26, 24, 24);
+      ctx.fillStyle = '#3a5a30';
+      ctx.fillRect(x - 6, y - 14, 16, 4);          // vat body
+      ctx.fillStyle = '#5a8b50';
+      ctx.fillRect(x - 5, y - 13, 14, 1);          // vat surface
+      // Three bubbles at hashed y
+      for (let i = 0; i < 3; i++) {
+        const bx = x - 3 + i * 4;
+        const by = y - 16 - ((t * 8 + i * 7) % 6);
+        ctx.fillStyle = 'rgba(127, 208, 112, 0.75)';
+        ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case 'distillation': {
+      // Retort flask + drip
+      ctx.fillStyle = '#1a0f2c';
+      ctx.fillRect(x - 3, y - 17, 8, 5);           // flask body (dark glass)
+      ctx.fillStyle = 'rgba(244, 210, 122, 0.55)';
+      ctx.fillRect(x - 2, y - 16, 6, 3);           // liquid
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x - 3, y - 18, 8, 1);           // rim
+      // Spout angled right
+      ctx.fillRect(x + 5, y - 16, 4, 1);
+      ctx.fillRect(x + 9, y - 16, 1, 2);
+      // Animated drip
+      const dripY = (t * 14) % 6;
+      ctx.fillStyle = '#ffe6a3';
+      ctx.fillRect(x + 9, y - 14 + dripY, 1, 1);
+      break;
+    }
+    case 'coagulation': {
+      // Crucible + single crystal sticking up
+      ctx.fillStyle = '#3b265c';
+      ctx.fillRect(x - 5, y - 14, 14, 3);           // crucible body
+      ctx.fillStyle = '#5b3a86';
+      ctx.fillRect(x - 4, y - 13, 12, 1);
+      // Crystal
+      const sparkle = 0.7 + 0.3 * Math.sin(t * 2);
+      ctx.fillStyle = '#9b6cff';
+      ctx.fillRect(x + 1, y - 18, 2, 5);
+      ctx.fillRect(x,     y - 17, 4, 1);
+      ctx.fillRect(x + 2, y - 19, 1, 1);
+      ctx.fillStyle = `rgba(220, 200, 255, ${sparkle})`;
+      ctx.fillRect(x + 1, y - 18, 1, 2);
+      break;
+    }
+    case 'cursed': {
+      // Black flame + blood streak (already darkened above)
+      const halo = ctx.createRadialGradient(x + 2, y - 16, 1, x + 2, y - 16, 14);
+      halo.addColorStop(0, 'rgba(226, 58, 74, 0.55)');
+      halo.addColorStop(1, 'rgba(226, 58, 74, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 12, y - 30, 28, 28);
+      const flick = Math.sin(t * 5) * 1.4;
+      ctx.fillStyle = '#0a0210';
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y - 16, 4 + Math.abs(flick) * 0.5, 7 + flick * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#7a1020';
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y - 16, 2, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PALETTE.crimson;
+      ctx.fillRect(x + 1, y - 18, 2, 2);
+      // Blood streak down column
+      ctx.fillStyle = 'rgba(122, 16, 32, 0.65)';
+      ctx.fillRect(x + 2, y - 4, 1, 10);
+      break;
+    }
+    case 'library': {
+      // Book lectern + glyph cloud
+      ctx.fillStyle = '#3a2410';
+      ctx.fillRect(x - 6, y - 13, 16, 2);           // lectern base
+      ctx.fillStyle = '#5a3a18';
+      ctx.fillRect(x - 5, y - 14, 14, 1);
+      // Book V-shape
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x - 5, y - 16, 7, 3);
+      ctx.fillRect(x + 2, y - 16, 7, 3);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x + 1, y - 16, 2, 3);            // spine
+      // Floating glyphs
+      const off = Math.sin(t * 1.5) * 1;
+      ctx.fillStyle = 'rgba(244, 210, 122, 0.75)';
+      ctx.fillRect(x - 4, y - 21 + off, 1, 1);
+      ctx.fillRect(x + 2, y - 23 + off, 1, 1);
+      ctx.fillRect(x + 6, y - 20 + off, 1, 1);
+      break;
+    }
+    case 'puzzle': {
+      // Tetragram (4-point star) carved into column face + 4 dim lamps
+      ctx.fillStyle = '#c8983f';
+      // Star (4 triangles)
+      ctx.fillRect(x + 1, y - 17, 2, 6);          // vertical bar
+      ctx.fillRect(x - 1, y - 14, 6, 2);          // horizontal bar
+      ctx.fillRect(x,     y - 15, 4, 4);          // centre
+      // Four dim corner lamps
+      const pulse = 0.4 + 0.3 * Math.sin(t * 2);
+      ctx.fillStyle = `rgba(108, 246, 229, ${pulse})`;
+      ctx.fillRect(x - 5, y - 16, 1, 1);
+      ctx.fillRect(x + 7, y - 16, 1, 1);
+      ctx.fillRect(x - 5, y - 10, 1, 1);
+      ctx.fillRect(x + 7, y - 10, 1, 1);
+      break;
+    }
   }
 }
 

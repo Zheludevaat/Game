@@ -47,6 +47,27 @@ describe('Data registries — every id resolves', () => {
     }
   });
 
+  it('drawShrine renders every kind without throwing', async () => {
+    const { drawShrine } = await import('../../rendering/PixelArt');
+    // Minimal CanvasRenderingContext2D stub — every method the
+    // pixel-art primitives call becomes a no-op. drawShrine internals
+    // hit fillRect / fillStyle / beginPath / arc / fill / ellipse /
+    // stroke / strokeStyle / lineWidth / createRadialGradient, so we
+    // proxy every accessed property to a sensible default.
+    const ctx = new Proxy({}, {
+      get: (_t, prop) => {
+        if (prop === 'createRadialGradient') return () => ({ addColorStop: () => undefined });
+        return () => undefined;
+      },
+      set: () => true,
+    }) as unknown as CanvasRenderingContext2D;
+    const kinds = Object.keys(SHRINE_VARIANTS) as (keyof typeof SHRINE_VARIANTS)[];
+    for (const k of kinds) {
+      expect(() => drawShrine(ctx, 0, 0, false, 0, k), `shrine ${k} unused`).not.toThrow();
+      expect(() => drawShrine(ctx, 0, 0, true, 0, k), `shrine ${k} used`).not.toThrow();
+    }
+  });
+
   it('SYNERGY_IDS all resolve to a SynergyDef with a relic pair', () => {
     for (const id of SYNERGY_IDS) {
       const def = RELIC_SYNERGIES[id];

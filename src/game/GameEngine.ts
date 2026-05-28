@@ -5189,7 +5189,16 @@ export class GameEngine {
 
   private drawShrineDecor(): void {
     if (this.currentRoom.hasShrine) {
-      drawShrine(this.ctx, ROOM_W / 2, ROOM_H / 2 - 8, this.currentRoom.shrineUsed, this.timeAlive);
+      // Pass the shrine kind so the column-top decoration dispatches
+      // per-alchemical-operation. Mechanically distinct shrines now
+      // have visually distinct silhouettes from across the room.
+      drawShrine(
+        this.ctx,
+        ROOM_W / 2, ROOM_H / 2 - 8,
+        this.currentRoom.shrineUsed,
+        this.timeAlive,
+        this.currentRoom.shrineKind ?? 'calcination',
+      );
     }
   }
 
