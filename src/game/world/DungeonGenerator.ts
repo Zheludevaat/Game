@@ -1,6 +1,29 @@
 import { RNG, hashSeed } from '../math/rng';
 import { Floor, Room, RoomType } from '../GameTypes';
 import { pickRoomName } from '../data/roomNames';
+import { sphereForFloor, SphereId } from '../data/spheres';
+import { npcForSphere } from '../data/npcs';
+import { ROOM_SPAWN_CHANCE } from '../data/balance';
+
+/** Per-sphere modifier to the base room count. Mercury sprawls,
+ *  Sun keeps it tight, Saturn fragments. */
+const SPHERE_ROOM_MUL: Partial<Record<SphereId, number>> = {
+  moon: 1.0,
+  mercury: 1.35,
+  venus: 1.05,
+  sun: 0.85,
+  mars: 1.0,
+  jupiter: 1.15,
+  saturn: 1.20,
+};
+
+/** Per-sphere "branch acceptance" — Mercury accepts more branching,
+ *  Sun rejects branching for arena-feeling rooms. */
+const SPHERE_BRANCH_BIAS: Partial<Record<SphereId, number>> = {
+  mercury: 0.85, // accept more side passages
+  sun: 0.30,     // reject most branches — long arena halls
+  saturn: 0.75,
+};
 
 interface GenOptions {
   floor: number;
@@ -23,8 +46,16 @@ export function generateFloor(opts: GenOptions): Floor {
     return buildBossFloor(floor, seed);
   }
 
-  // Otherwise: random-walk dungeon
-  const target = Math.min(7 + Math.floor(floor * 1.5), 16);
+  // Otherwise: random-walk dungeon. Per-sphere room-count + branch
+  // bias shape the floor's silhouette so Mercury sprawls and Sun
+  // stays tight even on the same base size.
+  const sphere = sphereForFloor(floor).id;
+  const baseTarget = 7 + Math.floor(floor * 1.5);
+  const target = Math.min(
+    Math.max(5, Math.round(baseTarget * (SPHERE_ROOM_MUL[sphere] ?? 1.0))),
+    20,
+  );
+  const branchBias = SPHERE_BRANCH_BIAS[sphere] ?? 0.6;
   const grid = new Map<string, Room>();
   let nextId = 1;
 
@@ -66,9 +97,10 @@ export function generateFloor(opts: GenOptions): Floor {
       const nx = base.x + d.x;
       const ny = base.y + d.y;
       if (grid.has(keyOf(nx, ny))) continue;
-      // Limit branching to keep map readable
+      // Limit branching to keep map readable. Sphere-bias decides how
+      // aggressively to refuse new branches at busy intersections.
       const neighbours = countNeighbours(grid, nx, ny);
-      if (neighbours > 1 && rng.chance(0.6)) continue;
+      if (neighbours > 1 && rng.chance(branchBias)) continue;
       addRoom(nx, ny, 'enemy', pickRoomName('enemy', rng));
       frontier.push({ x: nx, y: ny });
       placed = true;
@@ -110,7 +142,7 @@ export function generateFloor(opts: GenOptions): Floor {
     r.name = pickRoomName('treasure', rng);
     r.cleared = true;
     r.hasChest = true;
-    r.chestLocked = rng.chance(0.35);
+    r.chestLocked = rng.chance(ROOM_SPAWN_CHANCE.chestLock);
   }
   // Shrine room — 1 always
   if (others.length) {
@@ -122,12 +154,63 @@ export function generateFloor(opts: GenOptions): Floor {
     r.shrineKind = pickShrineKind(rng);
   }
   // Locked room — sometimes
-  if (others.length && rng.chance(0.6)) {
+  if (others.length && rng.chance(ROOM_SPAWN_CHANCE.locked)) {
     const r = others.pop()!;
     r.type = 'locked';
     r.name = pickRoomName('locked', rng);
     r.hasChest = true;
     r.chestLocked = true;
+  }
+  // Trap room — ~12 % per floor in spheres that own hazards (i.e.
+  // every sphere except Moon / Ogdoad). Pre-cleared so the player can
+  // see the hazards turn on the moment they step in. One per floor max.
+  const sphereForTrap = sphereForFloor(floor).id;
+  const sphereHasHazards =
+    sphereForTrap !== 'moon' && sphereForTrap !== 'ogdoad';
+  if (others.length && sphereHasHazards && rng.chance(ROOM_SPAWN_CHANCE.trap)) {
+    const r = others.pop()!;
+    r.type = 'trap';
+    r.name = pickRoomName('trap', rng);
+    r.cleared = true;       // no enemy combat — only the hazard grid
+    r.enemiesSpawned = true;
+  }
+  // Sanctuary — non-hostile chamber hosting the sphere's wandering NPC.
+  // ~25 % per floor in spheres that authored a wanderer, capped to 1.
+  // Pre-cleared so combat doors never close.
+  const sphereId = sphereForFloor(floor).id;
+  let sanctuarySpawned = false;
+  if (others.length && npcForSphere(sphereId) && rng.chance(ROOM_SPAWN_CHANCE.sphereSanctuary)) {
+    const r = others.pop()!;
+    r.type = 'sanctuary';
+    r.name = pickRoomName('sanctuary', rng);
+    r.cleared = true;
+    r.enemiesSpawned = true;
+    sanctuarySpawned = true;
+  }
+  // Lampwright marketplace — 5 % per floor at floors 5+, mutually
+  // exclusive with the sphere wanderer slot. Rarer than the Mendicant,
+  // pricier per visit, but the only reliable source of consumables
+  // outside chest drops.
+  if (others.length && !sanctuarySpawned && floor >= 5 && rng.chance(ROOM_SPAWN_CHANCE.lampwright)) {
+    const r = others.pop()!;
+    r.type = 'sanctuary';
+    r.name = pickRoomName('sanctuary', rng);
+    r.cleared = true;
+    r.enemiesSpawned = true;
+    r.sanctuaryNpcId = 'lampwright';
+    sanctuarySpawned = true;
+  }
+  // Mendicant sanctuary — a rare independent roll on top. 7 % per
+  // floor, and only when no other sanctuary landed (so a floor can't
+  // double up). The engine reads sanctuaryNpcId to know which NPC to
+  // populate.
+  if (others.length && !sanctuarySpawned && rng.chance(ROOM_SPAWN_CHANCE.mendicant)) {
+    const r = others.pop()!;
+    r.type = 'sanctuary';
+    r.name = pickRoomName('sanctuary', rng);
+    r.cleared = true;
+    r.enemiesSpawned = true;
+    r.sanctuaryNpcId = 'mendicant';
   }
   // MiniBoss on floor%5==0
   if (isMiniBoss && others.length) {
@@ -139,9 +222,45 @@ export function generateFloor(opts: GenOptions): Floor {
   }
   // Some enemy rooms also have chests
   for (const r of others) {
-    if (rng.chance(0.25)) {
+    if (rng.chance(ROOM_SPAWN_CHANCE.enemyRoomChest)) {
       r.hasChest = true;
-      r.chestLocked = rng.chance(0.2);
+      r.chestLocked = rng.chance(ROOM_SPAWN_CHANCE.enemyRoomChestLock);
+    }
+  }
+
+  // Secret rooms — one per floor at 70 % probability, placed adjacent
+  // to a regular enemy room. The secret room itself stays off the
+  // minimap until the player physically enters it (markNeighbours-
+  // Discovered in the engine skips secret rooms), so the player
+  // discovers it by trying an unexpected door. Brass Ear still reveals
+  // every cell since it's a meta-knowledge relic.
+  if (rng.chance(ROOM_SPAWN_CHANCE.secret)) {
+    const enemyRooms = [...grid.values()].filter((r) => r.type === 'enemy');
+    shuffleInPlace(enemyRooms, rng);
+    for (const candidate of enemyRooms) {
+      const { x, y } = candidate.grid;
+      const dirs = shuffle([
+        { dx: 1, dy: 0, side: 'right' as const, opp: 'left' as const },
+        { dx: -1, dy: 0, side: 'left' as const, opp: 'right' as const },
+        { dx: 0, dy: 1, side: 'down' as const, opp: 'up' as const },
+        { dx: 0, dy: -1, side: 'up' as const, opp: 'down' as const },
+      ], rng);
+      let placed = false;
+      for (const d of dirs) {
+        const nx = x + d.dx, ny = y + d.dy;
+        if (grid.has(keyOf(nx, ny))) continue;
+        // Free cell — drop the secret room and stitch one door.
+        const secret = addRoom(nx, ny, 'secret', pickRoomName('secret', rng));
+        secret.cleared = true;
+        secret.enemiesSpawned = true;
+        secret.hasChest = true;
+        secret.chestLocked = false;
+        candidate.doors[d.side] = true;
+        secret.doors[d.opp] = true;
+        placed = true;
+        break;
+      }
+      if (placed) break;
     }
   }
 
@@ -258,5 +377,11 @@ function pickShrineKind(rng: RNG): import('../GameTypes').ShrineKind {
     'calcination', 'dissolution', 'separation', 'conjunction',
     'fermentation', 'distillation', 'coagulation',
   ];
+  // 10 % each for the special altars — kept rare so the canonical
+  // seven Operations stay the dominant flavour.
+  const roll = rng.next();
+  if (roll < 0.10) return 'cursed';
+  if (roll < 0.20) return 'library';
+  if (roll < 0.30) return 'puzzle';
   return kinds[rng.int(0, kinds.length)];
 }

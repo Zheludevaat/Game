@@ -1,3 +1,32 @@
+/* Bundled subset of Noto Sans Symbols 2 (OFL) covering only the
+ * alchemical / astrological / weapon glyphs the game uses. Without
+ * this, several SMP alchemy characters (U+1F702 etc.) fall back to
+ * Color Emoji on iOS or `.notdef` on browsers with thin symbol
+ * font coverage, blowing the monochrome pixel aesthetic. See
+ * public/fonts/CREDITS.md. */
+@font-face {
+  font-family: 'AbyssGlyphs';
+  src: url('/fonts/abyss-glyphs.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+2604, U+2609, U+2620, U+263D-263F, U+2640, U+2642-2644, U+2646,
+    U+2665, U+2692-2696, U+269B, U+26A1, U+26B7,
+    U+271A, U+2726, U+2734, U+2744-2746, U+29D6,
+    U+1F525, U+1F5E1, U+1F6E1, U+1F702, U+1F70D, U+1F714,
+    U+1F738, U+1F73A, U+1FA93;
+}
+
+/* Apply to any glyph span — keeps emoji-presentation off (text style)
+ * so iOS doesn't colourize ☿ or ♀, and prefers AbyssGlyphs before any
+ * system fallback. Use as <span className="glyph">{glyph}</span>. */
+.glyph {
+  font-family: 'AbyssGlyphs', 'Segoe UI Symbol', 'Noto Sans Symbols 2', system-ui, sans-serif;
+  font-variant-emoji: text;
+  text-rendering: geometricPrecision;
+}
+
 .pixel-panel {
   position: relative;
   background:
@@ -10,6 +39,12 @@
     0 0 60px rgba(0, 0, 0, 0.75);
   padding: 18px 22px;
   border-radius: 2px;
+}
+
+/* Short landscape — tighten panel padding so archetype + meta panels
+ * stop pushing content past the viewport. */
+@media (max-height: 500px) {
+  .pixel-panel { padding: 10px 12px; }
 }
 
 .pixel-panel::before,
@@ -97,6 +132,19 @@
   font-size: 10px;
   color: var(--teal);
   letter-spacing: 0.3em;
+  /* Cap the width so a long ETA badge ("23h 59m") can't blow past
+   * the right edge of the button on the smallest phones. */
+  max-width: 88px;
+  /* Floor the width too so "F30" / "NEW" / "12:45" sit in a column
+   * of consistent visual weight — no badge looks like a different
+   * size of widget when scanning the menu vertically. */
+  min-width: 60px;
+  text-align: center;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .pixel-divider {
@@ -147,6 +195,15 @@
            calc(20px + var(--safe-bottom)) calc(28px + var(--safe-left));
   animation: fade-in 0.4s ease;
   z-index: 5;
+  /* If content exceeds the viewport — common on iPhone landscape where
+   * the height is ~375 px — allow vertical scroll inside the menu so
+   * the bottom buttons never get cut off. main.tsx's touchmove guard
+   * already lets scrollable panes pass through. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .menu-screen.no-bg { background: transparent; }
@@ -156,6 +213,59 @@
     radial-gradient(ellipse at 50% 30%, rgba(80, 30, 140, 0.35), transparent 65%),
     radial-gradient(ellipse at 80% 80%, rgba(20, 90, 100, 0.25), transparent 70%),
     linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.75));
+}
+
+/* Short viewport — typical iPhone landscape (≤ 500 px tall) and most
+ * Android phones in landscape. Compress titles, buttons, and gaps so
+ * the entire menu reads within reach without scrolling far. */
+@media (max-height: 500px) {
+  .menu-screen {
+    justify-content: flex-start;
+    padding-top: calc(10px + var(--safe-top));
+    padding-bottom: calc(10px + var(--safe-bottom));
+  }
+  .pixel-title {
+    font-size: clamp(20px, 6vh, 28px) !important;
+    line-height: 1.05 !important;
+    letter-spacing: 0.14em !important;
+  }
+  .pixel-subtitle {
+    font-size: 9px;
+    letter-spacing: 0.22em;
+  }
+  .pixel-btn {
+    min-width: clamp(130px, 26vw, 180px);
+    padding: 6px 14px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+  }
+  .pixel-divider { margin: 6px 0; }
+}
+
+/* Main menu — single column by default, two columns on short
+ * landscape so the eight buttons fit without scrolling. */
+.main-menu-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.main-menu-footer {
+  margin-top: 14px;
+  opacity: 0.7;
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .main-menu .main-menu-title { margin-bottom: 8px !important; }
+  .main-menu-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 10px;
+    max-width: 560px;
+    width: 100%;
+  }
+  .main-menu-stats { margin-top: 8px !important; font-size: 10px !important; }
+  .main-menu-footer { margin-top: 6px; font-size: 9px; }
 }
 
 .hud-root {
@@ -171,14 +281,38 @@
 .hud-bottom-right {
   position: absolute;
   padding: 8px 12px;
-  font-size: 12px;
+  /* Apple HIG floor at 11px keeps the HUD readable on iPhone SE while
+   * the upper clamp lets larger phones / desktop still use the
+   * authored 12px size. Scales smoothly between 320 and 480 px. */
+  font-size: clamp(11px, 1.6vw, 12px);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--bone);
   text-shadow: 0 0 6px rgba(0,0,0,0.85);
 }
 
-.hud-top-left   { top: calc(12px + var(--safe-top)); left: calc(12px + var(--safe-left)); }
+.hud-top-left   {
+  top: calc(12px + var(--safe-top)); left: calc(12px + var(--safe-left));
+  /* Cap the top-left strip's vertical reach so the consumable +
+     ultimate + synergy + status pills don't bleed off-screen on a
+     short landscape phone. The strip scrolls if needed; on touch
+     devices a thin teal border-right cues the player that there's
+     more below the fold (scrollbars are hidden globally). */
+  max-height: calc(100vh - 24px - var(--safe-top) - var(--safe-bottom));
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.hud-top-left::-webkit-scrollbar { display: none; }
+/* Touch / coarse-pointer devices get a subtle right-edge tick so the
+ * scrollable strip is discoverable — desktop / mouse keeps the hidden
+ * scrollbar since the scroll-wheel makes it obvious. */
+@media (pointer: coarse) {
+  .hud-top-left {
+    border-right: 1px solid rgba(108, 246, 229, 0.25);
+    padding-right: 4px;
+  }
+}
+.hud-top-left::-webkit-scrollbar { display: none; }
 .hud-top-right  { top: calc(12px + var(--safe-top)); right: calc(12px + var(--safe-right)); text-align: right; }
 .hud-bottom-left  { bottom: calc(12px + var(--safe-bottom)); left: calc(12px + var(--safe-left)); }
 .hud-bottom-right { bottom: calc(12px + var(--safe-bottom)); right: calc(12px + var(--safe-right)); text-align: right; }
@@ -315,6 +449,9 @@
   border: 2px solid rgba(244, 210, 122, 0.6);
   pointer-events: auto;
   touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .touch-joystick .stick {
@@ -334,8 +471,11 @@
   right: calc(20px + var(--safe-right));
   bottom: calc(20px + var(--safe-bottom));
   display: grid;
-  grid-template-columns: repeat(2, clamp(60px, 11vh, 88px));
-  grid-template-rows: repeat(2, clamp(60px, 11vh, 88px));
+  /* 64-px floor keeps us above the 44 × 44 Apple HIG minimum even on
+   * the smallest iPhone (SE 1st-gen) in landscape; older floor of 60
+   * was a hair under once border + shadow took bites. */
+  grid-template-columns: repeat(2, clamp(64px, 11vh, 88px));
+  grid-template-rows: repeat(2, clamp(64px, 11vh, 88px));
   gap: clamp(8px, 1.5vh, 12px);
   pointer-events: auto;
 }
@@ -353,6 +493,16 @@
   text-transform: uppercase;
   text-shadow: 0 0 6px rgba(0,0,0,0.6);
   touch-action: none;
+  /* Pin the iOS focus + selection chrome so a long-press doesn't pop
+   * the copy / share menu over the button. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.touch-buttons button:active,
+.touch-buttons button.active {
+  transform: scale(0.96);
+  transition: transform 0.04s ease-out;
 }
 
 .touch-buttons button.active {
@@ -365,14 +515,23 @@
   right: calc(20px + var(--safe-right));
   bottom: calc(220px + var(--safe-bottom));
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  /* Cap horizontal reach so a 6-button row (cycleWeapon / cycleSpell /
+   * cycleConsumable / useConsumable / ultimate / map) can wrap onto a
+   * second row on narrow phones instead of pushing off-screen. The
+   * flex-wrap + right-justify keeps the right edge anchored. */
+  max-width: clamp(220px, 60vw, 380px);
   gap: 8px;
   pointer-events: auto;
 }
 
 .touch-cycle button {
   border-radius: 50%;
-  width: clamp(42px, 7.5vh, 60px);
-  height: clamp(42px, 7.5vh, 60px);
+  /* 44 px minimum lifts the cycle buttons up to Apple's tap-target
+   * floor; the prior 42 px clipped under it on iPhone SE landscape. */
+  width: clamp(44px, 7.5vh, 60px);
+  height: clamp(44px, 7.5vh, 60px);
   border: 2px solid var(--gold-3);
   background:
     radial-gradient(circle, rgba(40, 20, 70, 0.85), rgba(10, 4, 24, 0.95));
@@ -382,6 +541,9 @@
   text-transform: uppercase;
   text-shadow: 0 0 4px rgba(0,0,0,0.6);
   touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .touch-cycle button.active {
@@ -391,20 +553,23 @@
 
 .touch-pause {
   position: absolute;
-  left: calc(50% - 22px);
-  top: calc(12px + var(--safe-top));
+  left: calc(50% - 24px);
+  top: calc(10px + var(--safe-top));
   pointer-events: auto;
 }
 .touch-pause button {
-  width: 44px;
-  height: 32px;
+  /* 48 × 44 — at or above Apple's 44 × 44 minimum tap-target guideline,
+   * which the previous 44 × 32 fell below on the short axis. */
+  width: 48px;
+  height: 44px;
   border: 1px solid var(--gold-3);
   background: rgba(10, 4, 22, 0.7);
   color: var(--gold-1);
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
   letter-spacing: 0;
   text-transform: none;
+  touch-action: none;
 }
 .touch-pause button.active {
   box-shadow: 0 0 10px rgba(244, 210, 122, 0.45);
@@ -412,17 +577,19 @@
 }
 
 .hud-pause-btn {
-  width: 32px;
-  height: 26px;
+  /* Keyboard / controller users see this; touch users get the dedicated
+   * top-centre pause inside TouchControls instead, so this can stay
+   * compact for desktop polish. Touch-action manipulation kills the iOS
+   * 300ms tap delay if a touch user ever falls back to this button. */
+  width: 36px;
+  height: 30px;
   border: 1px solid var(--gold-3);
   background: rgba(10, 4, 22, 0.8);
   color: var(--gold-1);
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
   pointer-events: auto;
-  /* Document-level touchmove guard ignores this because the button is
-   * not a scroll container and we stopPropagation on touchstart. */
   touch-action: manipulation;
 }
 .hud-pause-btn:hover, .hud-pause-btn:focus {
@@ -580,7 +747,8 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 24px;
+  padding: calc(24px + var(--safe-top)) calc(24px + var(--safe-right))
+           calc(24px + var(--safe-bottom)) calc(24px + var(--safe-left));
   animation: fade-in 0.3s ease;
 }
 
@@ -588,6 +756,16 @@
   font-size: 64px;
   animation: glow-pulse 1.6s ease-in-out infinite;
   margin-bottom: 12px;
+}
+
+.rotate-overlay .pixel-title {
+  font-size: 22px;
+}
+
+.rotate-overlay .help-text {
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 320px;
 }
 
 .archetype-grid {
@@ -614,6 +792,42 @@
   .archetype-portrait {
     height: 80px;
   }
+}
+/* iPhone landscape — three cards must share a ~390 px viewport height.
+ * Drop the portrait, shrink stat font, tighten dividers so a card +
+ * "Begin" button fits inside ~310 px of usable height. The starting-
+ * relic block stays because it's the only thing differentiating the
+ * three archetypes once the stats compress. */
+@media (max-height: 500px) {
+  .archetype-header { margin-bottom: 6px !important; }
+  .archetype-grid {
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .archetype-card {
+    min-height: 0;
+    gap: 3px;
+  }
+  .archetype-card h3 {
+    font-size: 13px;
+    margin: 0 0 2px;
+    letter-spacing: 0.12em;
+  }
+  .archetype-card .stat-line {
+    font-size: 9px;
+    letter-spacing: 0.10em;
+  }
+  .archetype-card .pixel-tag {
+    font-size: 8px;
+    padding: 2px 6px;
+  }
+  .archetype-card .help-text {
+    font-size: 9px;
+    line-height: 1.35;
+    margin: 2px 0 !important;
+  }
+  .archetype-portrait { height: 56px; }
+  .archetype-card .pixel-divider { margin: 4px 0; }
 }
 
 .archetype-card {
@@ -752,6 +966,7 @@
   line-height: 1.6;
   letter-spacing: 0.06em;
   color: rgba(231, 227, 215, 0.85);
+  word-break: break-word;
 }
 
 .gameover-grid {
@@ -987,7 +1202,7 @@
   font-style: italic;
   color: rgba(231, 227, 215, 0.5);
 }
-.codex-entry-title { font-weight: 600; }
+.codex-entry-title { font-weight: 600; word-break: break-word; max-width: calc(100% - 12px); }
 .codex-entry-meta { display: flex; gap: 8px; align-items: center; }
 .codex-entry-source {
   font-size: 9px;
@@ -1015,6 +1230,7 @@
   line-height: 1.65;
   color: var(--bone);
   margin: 0;
+  word-break: break-word;
 }
 .codex-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
 

@@ -1,4 +1,5 @@
 import { MetaState } from '../game/GameTypes';
+import { ACHIEVEMENTS, ACHIEVEMENT_IDS } from '../game/data/achievements';
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
 import { useMenuNav } from './useMenuNav';
@@ -7,6 +8,7 @@ interface Props {
   essence: number;
   meta: MetaState;
   onSpend: (key: keyof MetaState, cost: number, apply: (m: MetaState) => MetaState) => void;
+  onSetAscension: (level: number) => void;
   onBack: () => void;
 }
 
@@ -54,7 +56,7 @@ const UPGRADES: Upgrade[] = [
   },
 ];
 
-export function MetaProgression({ essence, meta, onSpend, onBack }: Props): JSX.Element {
+export function MetaProgression({ essence, meta, onSpend, onSetAscension, onBack }: Props): JSX.Element {
   const items = UPGRADES.map((u) => ({
     onActivate: () => {
       if (u.maxed(meta)) return;
@@ -65,6 +67,10 @@ export function MetaProgression({ essence, meta, onSpend, onBack }: Props): JSX.
     disabled: u.maxed(meta) || essence < u.cost(meta),
   }));
   const focus = useMenuNav([...items, { onActivate: onBack }], { onCancel: onBack });
+  const ascensionMax = Math.min(5, meta.ogdoadReached ?? 0);
+  const ascensionLevel = meta.ascensionLevel ?? 0;
+  const achievementsOwned = new Set(meta.achievements ?? []);
+  const runHistory = (meta.runHistory ?? []).slice(0, 6);
 
   return (
     <div className="menu-screen with-bg">
@@ -99,6 +105,119 @@ export function MetaProgression({ essence, meta, onSpend, onBack }: Props): JSX.
             );
           })}
         </div>
+        <div className="pixel-divider" />
+        <div style={{ marginBottom: 8 }}>
+          <div className="glow-text" style={{ fontSize: 12, letterSpacing: '0.2em', marginBottom: 4 }}>ASCENSION</div>
+          <div className="help-text" style={{ fontSize: 10, marginBottom: 6 }}>
+            Each tier raises enemy HP +30 % and damage +20 %. Unlocks one tier per Ogdoad clear.
+          </div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+            {[0, 1, 2, 3, 4, 5].map((lvl) => {
+              const enemyHpMul = 1 + lvl * 0.30;
+              const enemyDmgMul = 1 + lvl * 0.20;
+              const tip = lvl === 0
+                ? 'Standard difficulty.'
+                : `A${lvl} — enemy HP ×${enemyHpMul.toFixed(2)}, enemy damage ×${enemyDmgMul.toFixed(2)}.`;
+              return (
+                <button
+                  key={lvl}
+                  type="button"
+                  title={tip}
+                  onClick={() => { if (lvl <= ascensionMax) onSetAscension(lvl); }}
+                  disabled={lvl > ascensionMax}
+                  className={lvl === ascensionLevel ? 'pixel-tag selected' : 'pixel-tag'}
+                  style={{
+                    background: lvl === ascensionLevel ? 'var(--gold-1)' : 'transparent',
+                    color: lvl === ascensionLevel ? '#0d0717' : (lvl > ascensionMax ? 'rgba(255,255,255,0.25)' : 'var(--bone)'),
+                    border: '1px solid var(--gold-3)',
+                    padding: '3px 8px',
+                    cursor: lvl > ascensionMax ? 'not-allowed' : 'pointer',
+                    fontSize: 10,
+                    letterSpacing: '0.2em',
+                  }}
+                >
+                  {lvl === 0 ? 'OFF' : `A${lvl}`}
+                </button>
+              );
+            })}
+          </div>
+          <div className="help-text" style={{ fontSize: 9, textAlign: 'center', marginTop: 6, opacity: 0.85 }}>
+            {(() => {
+              if (ascensionLevel === 0) return 'Standard difficulty.';
+              const enemyHpMul = 1 + ascensionLevel * 0.30;
+              const enemyDmgMul = 1 + ascensionLevel * 0.20;
+              return `A${ascensionLevel} active — enemy HP ×${enemyHpMul.toFixed(2)}, enemy damage ×${enemyDmgMul.toFixed(2)}.`;
+            })()}
+          </div>
+        </div>
+        <div className="pixel-divider" />
+        <div style={{ marginBottom: 8 }}>
+          <div className="glow-text" style={{ fontSize: 12, letterSpacing: '0.2em', marginBottom: 6 }}>ACHIEVEMENTS</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {ACHIEVEMENT_IDS.map((id) => {
+              const a = ACHIEVEMENTS[id];
+              const got = achievementsOwned.has(id);
+              return (
+                <div
+                  key={id}
+                  title={a.description}
+                  style={{
+                    padding: 6,
+                    border: '1px solid var(--gold-3)',
+                    background: got ? 'rgba(244,210,122,0.15)' : 'rgba(0,0,0,0.35)',
+                    opacity: got ? 1 : 0.55,
+                    fontSize: 10,
+                    lineHeight: 1.25,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span className={got ? 'gold-text' : ''}>{a.glyph} {a.name}</span>
+                    <span style={{ opacity: 0.5 }}>T{a.tier}</span>
+                  </div>
+                  <div className="help-text" style={{ fontSize: 9, marginTop: 2 }}>{a.description}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {runHistory.length > 0 && (
+          <>
+            <div className="pixel-divider" />
+            <div style={{ marginBottom: 8 }}>
+              <div className="glow-text" style={{ fontSize: 12, letterSpacing: '0.2em', marginBottom: 6 }}>RECENT RUNS</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10 }}>
+                {runHistory.map((r) => (
+                  <div key={r.date} style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.85 }}>
+                    <span>{r.archetype.padEnd(7)}</span>
+                    <span>Fl {r.floorReached}</span>
+                    <span>{r.bossesDefeated} ✦</span>
+                    <span>{r.essenceCollected} essence</span>
+                    {r.ascensionLevel > 0 && <span className="gold-text">A{r.ascensionLevel}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+        {(meta.dailyHistory ?? []).length > 0 && (
+          <>
+            <div className="pixel-divider" />
+            <div style={{ marginBottom: 8 }}>
+              <div className="glow-text" style={{ fontSize: 12, letterSpacing: '0.2em', marginBottom: 6 }}>DAILY RUN RECORD</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10 }}>
+                {(meta.dailyHistory ?? []).slice(0, 8).map((r) => (
+                  <div key={r.date} style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.85 }}>
+                    <span>{new Date(r.date).toISOString().slice(0, 10)}</span>
+                    <span>{r.archetype.padEnd(7)}</span>
+                    <span>Fl {r.floorReached}</span>
+                    <span className="gold-text">{r.score}</span>
+                    {r.ogdoadReached && <span className="gold-text">✦CLEAR</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         <div className="pixel-divider" />
         <div style={{ textAlign: 'center' }}>
           <PixelButton onClick={onBack} focused={focus === UPGRADES.length}>Back</PixelButton>

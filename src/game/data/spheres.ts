@@ -17,6 +17,10 @@ export type SphereId =
   | 'moon' | 'mercury' | 'venus' | 'sun'
   | 'mars' | 'jupiter' | 'saturn' | 'ogdoad';
 
+export type SphereMotif =
+  | 'lunar-tide' | 'mercury-rivet' | 'venus-petal' | 'sun-spiral'
+  | 'mars-scar' | 'jupiter-cog' | 'saturn-crack' | 'ogdoad-star';
+
 export interface SphereDef {
   id: SphereId;
   /** Roman ordinal — "I", "II", ... "VIII" */
@@ -35,6 +39,21 @@ export interface SphereDef {
   colour: string;
   /** Secondary palette colour */
   accent: string;
+  /** Multiply-pass ambient tint applied over the full room. Per-sphere
+   *  values give Sun a warm gold cast, Saturn a cold violet, Moon a
+   *  cool silver — without this every floor reads as the same
+   *  cool-lavender room with a swapped accent. */
+  ambientTint: string;
+  /** Mortar + crack colour for `drawFloorTile`. Subtle but ties the
+   *  floor decoration into the per-sphere palette. */
+  floorMortar: string;
+  /** Ornament motif dispatched in `drawFloorTile` — replaces the
+   *  hardcoded teal rune mark with a sphere-themed micro-decal. */
+  floorMotif: SphereMotif;
+  /** Wall-carved sigil colour rendered in `drawWallTile`. */
+  wallSigil: string;
+  /** Wall motif dispatched in `drawWallTile`. */
+  wallMotif: SphereMotif;
 }
 
 export const SPHERES: SphereDef[] = [
@@ -48,6 +67,11 @@ export const SPHERES: SphereDef[] = [
     inscription: 'I — Selene. Where the body remembers the tide.',
     colour: '#cdd6dc',
     accent: '#6c8cff',
+    ambientTint: 'rgb(205, 215, 230)',
+    floorMortar: '#1c1530',
+    floorMotif: 'lunar-tide',
+    wallSigil: '#a8c0e8',
+    wallMotif: 'lunar-tide',
   },
   {
     id: 'mercury',
@@ -59,6 +83,11 @@ export const SPHERES: SphereDef[] = [
     inscription: 'II — Hermes. The quicksilver tongue, sundered.',
     colour: '#6cf6e5',
     accent: '#1f8a86',
+    ambientTint: 'rgb(200, 230, 235)',
+    floorMortar: '#0e2230',
+    floorMotif: 'mercury-rivet',
+    wallSigil: '#6cf6e5',
+    wallMotif: 'mercury-rivet',
   },
   {
     id: 'venus',
@@ -70,6 +99,11 @@ export const SPHERES: SphereDef[] = [
     inscription: 'III — Aphrodite. Many loves, one Beloved unknown.',
     colour: '#ff9bc1',
     accent: '#9b6cff',
+    ambientTint: 'rgb(235, 210, 220)',
+    floorMortar: '#2a1430',
+    floorMotif: 'venus-petal',
+    wallSigil: '#ff9bc1',
+    wallMotif: 'venus-petal',
   },
   {
     id: 'sun',
@@ -81,6 +115,11 @@ export const SPHERES: SphereDef[] = [
     inscription: 'IV — Helios. Mistake not the lamp for the Light.',
     colour: '#f4d27a',
     accent: '#ffe6a3',
+    ambientTint: 'rgb(240, 230, 200)',
+    floorMortar: '#3a2010',
+    floorMotif: 'sun-spiral',
+    wallSigil: '#ffe6a3',
+    wallMotif: 'sun-spiral',
   },
   {
     id: 'mars',
@@ -92,6 +131,11 @@ export const SPHERES: SphereDef[] = [
     inscription: 'V — Ares. The sword that severs is not the sword that knows.',
     colour: '#e23a4a',
     accent: '#ff7a5a',
+    ambientTint: 'rgb(235, 195, 195)',
+    floorMortar: '#3a0e16',
+    floorMotif: 'mars-scar',
+    wallSigil: '#7a1020',
+    wallMotif: 'mars-scar',
   },
   {
     id: 'jupiter',
@@ -103,6 +147,11 @@ export const SPHERES: SphereDef[] = [
     inscription: 'VI — Zeus. The vessel too wide to hold its light.',
     colour: '#c8983f',
     accent: '#f4d27a',
+    ambientTint: 'rgb(235, 220, 195)',
+    floorMortar: '#2a1c10',
+    floorMotif: 'jupiter-cog',
+    wallSigil: '#c8983f',
+    wallMotif: 'jupiter-cog',
   },
   {
     id: 'saturn',
@@ -114,6 +163,11 @@ export const SPHERES: SphereDef[] = [
     inscription: 'VII — Kronos. Beyond is no clock, and no need of one.',
     colour: '#3b265c',
     accent: '#5b3a86',
+    ambientTint: 'rgb(195, 185, 220)',
+    floorMortar: '#0e0a18',
+    floorMotif: 'saturn-crack',
+    wallSigil: '#5a8b50',
+    wallMotif: 'saturn-crack',
   },
   {
     id: 'ogdoad',
@@ -125,6 +179,11 @@ export const SPHERES: SphereDef[] = [
     inscription: 'VIII — The Eighth. Hymn with the Powers to the Father.',
     colour: '#ffe6a3',
     accent: '#fff7d6',
+    ambientTint: 'rgb(230, 225, 235)',
+    floorMortar: '#0a0820',
+    floorMotif: 'ogdoad-star',
+    wallSigil: '#fff7d6',
+    wallMotif: 'ogdoad-star',
   },
 ];
 

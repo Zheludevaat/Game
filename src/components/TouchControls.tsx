@@ -3,14 +3,22 @@ import { InputManager } from '../game/input/InputManager';
 
 interface Props { input: InputManager; }
 
+// Pointer-event-only implementation. Earlier versions wired both touch
+// and pointer handlers, which on iOS Safari double-fired every press
+// (touchstart fires the touch handler, then pointerdown fires the pointer
+// handler independently — they're not synthetic on iOS). Using Pointer
+// Events exclusively gives one unified path across iOS, Android, mouse,
+// stylus, and avoids ghost-click race conditions entirely.
+
 export function TouchControls({ input }: Props): JSX.Element {
   const joyRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef<HTMLDivElement | null>(null);
-  const activeTouchId = useRef<number | null>(null);
+  const activePointerId = useRef<number | null>(null);
 
   useEffect(() => {
-    const el = joyRef.current!;
-    const stick = stickRef.current!;
+    const el = joyRef.current;
+    const stick = stickRef.current;
+    if (!el || !stick) return;
     const getRadius = (): number => el.getBoundingClientRect().width / 2;
     const setStick = (dx: number, dy: number): void => {
       const radius = getRadius();
@@ -27,61 +35,66 @@ export function TouchControls({ input }: Props): JSX.Element {
       input.setTouchAxes(0, 0);
       stick.style.transform = `translate(-50%, -50%)`;
     };
-    const onStart = (e: TouchEvent | PointerEvent): void => {
+    const onDown = (e: PointerEvent): void => {
+      e.preventDefault();
+      // Capture the pointer so dragging outside the joystick still steers.
+      if (activePointerId.current != null) return; // ignore additional fingers on the stick
+      activePointerId.current = e.pointerId;
+      try { el.setPointerCapture(e.pointerId); } catch { /* */ }
+      const rect = el.getBoundingClientRect();
+      setStick(e.clientX - (rect.left + rect.width / 2), e.clientY - (rect.top + rect.height / 2));
+    };
+    const onMove = (e: PointerEvent): void => {
+      if (activePointerId.current !== e.pointerId) return;
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      const t = 'touches' in e ? e.touches[0] : (e as PointerEvent);
-      if (!t) return;
-      if ('identifier' in t) activeTouchId.current = t.identifier;
-      setStick(t.clientX - (rect.left + rect.width / 2), t.clientY - (rect.top + rect.height / 2));
+      setStick(e.clientX - (rect.left + rect.width / 2), e.clientY - (rect.top + rect.height / 2));
     };
-    const onMove = (e: TouchEvent | PointerEvent): void => {
-      const rect = el.getBoundingClientRect();
-      let cx: number | null = null, cy: number | null = null;
-      if ('touches' in e) {
-        for (let i = 0; i < e.touches.length; i++) {
-          const t = e.touches[i];
-          if (activeTouchId.current == null || t.identifier === activeTouchId.current) {
-            cx = t.clientX; cy = t.clientY;
-            break;
-          }
-        }
-      } else { cx = e.clientX; cy = e.clientY; }
-      if (cx == null || cy == null) return;
-      setStick(cx - (rect.left + rect.width / 2), cy - (rect.top + rect.height / 2));
+    const onUp = (e: PointerEvent): void => {
+      if (activePointerId.current !== e.pointerId) return;
+      activePointerId.current = null;
+      try { el.releasePointerCapture(e.pointerId); } catch { /* */ }
+      reset();
     };
-    const onEnd = (): void => { activeTouchId.current = null; reset(); };
 
-    el.addEventListener('touchstart', onStart, { passive: false });
-    el.addEventListener('touchmove', onMove, { passive: false });
-    el.addEventListener('touchend', onEnd);
-    el.addEventListener('touchcancel', onEnd);
-    el.addEventListener('pointerdown', onStart);
+    el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onEnd);
-    el.addEventListener('pointercancel', onEnd);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
     return () => {
-      el.removeEventListener('touchstart', onStart);
-      el.removeEventListener('touchmove', onMove);
-      el.removeEventListener('touchend', onEnd);
-      el.removeEventListener('touchcancel', onEnd);
-      el.removeEventListener('pointerdown', onStart);
+      el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerup', onEnd);
-      el.removeEventListener('pointercancel', onEnd);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
     };
   }, [input]);
 
+  // Per-button: pointer down → "pressed", pointer up / cancel → "released".
+  // setPointerCapture so a finger dragged off the button still releases
+  // correctly when lifted. Stop click from firing so iOS doesn't synthesise
+  // a delayed mouse event after we've already handled the press.
   const button = (name: string, label: string): JSX.Element => {
     const setBtn = (down: boolean): void => input.setTouchButton(name, down);
     return (
       <button
-        onTouchStart={(e) => { e.preventDefault(); setBtn(true); e.currentTarget.classList.add('active'); }}
-        onTouchEnd={(e) => { setBtn(false); e.currentTarget.classList.remove('active'); }}
-        onTouchCancel={(e) => { setBtn(false); e.currentTarget.classList.remove('active'); }}
-        onPointerDown={(e) => { setBtn(true); e.currentTarget.classList.add('active'); }}
-        onPointerUp={(e) => { setBtn(false); e.currentTarget.classList.remove('active'); }}
-        onPointerCancel={(e) => { setBtn(false); e.currentTarget.classList.remove('active'); }}
+        type="button"
+        aria-label={label}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          setBtn(true);
+          e.currentTarget.classList.add('active');
+          try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* */ }
+        }}
+        onPointerUp={(e) => {
+          setBtn(false);
+          e.currentTarget.classList.remove('active');
+          try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* */ }
+        }}
+        onPointerCancel={(e) => {
+          setBtn(false);
+          e.currentTarget.classList.remove('active');
+        }}
+        onContextMenu={(e) => e.preventDefault()}
       >
         {label}
       </button>
@@ -102,6 +115,10 @@ export function TouchControls({ input }: Props): JSX.Element {
       <div className="touch-cycle">
         {button('cycleWeapon', '↻W')}
         {button('cycleSpell', '↻S')}
+        {button('cycleConsumable', '↻I')}
+        {button('useConsumable', 'USE I')}
+        {button('ultimate', 'ULT')}
+        {button('map', 'MAP')}
       </div>
       <div className="touch-pause">
         {button('pause', '☰')}

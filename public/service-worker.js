@@ -13,7 +13,7 @@
  *   - The page can post `NUKE_AND_UNREGISTER` to force a clean recovery.
  */
 
-const CACHE_NAME = 'abyss-seven-lamps-v3';
+const CACHE_NAME = 'abyss-seven-lamps-v4';
 const APP_SHELL = [
   './',
   './index.html',
@@ -21,6 +21,13 @@ const APP_SHELL = [
   './icon-192.png',
   './icon-512.png',
   './icon-180.png',
+  // iOS PWA splash images — cache so subsequent launches don't hit the
+  // network for the launch graphic.
+  './splash-1290x2796.png',
+  './splash-1179x2556.png',
+  './splash-1125x2436.png',
+  './splash-828x1792.png',
+  './splash-750x1334.png',
 ];
 
 self.addEventListener('install', (event) => {

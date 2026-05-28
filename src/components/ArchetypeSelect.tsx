@@ -24,10 +24,10 @@ export function ArchetypeSelect({ onSelect, onBack, lastArchetype }: Props): JSX
   }, [lastArchetype]);
 
   return (
-    <div className="menu-screen with-bg" style={{ overflow: 'auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+    <div className="menu-screen with-bg">
+      <div className="archetype-header" style={{ textAlign: 'center', marginBottom: 16 }}>
         <div className="pixel-subtitle">Choose Your Vessel</div>
-        <h2 className="pixel-title" style={{ fontSize: 28, margin: 4 }}>Initiation</h2>
+        <h2 className="pixel-title" style={{ fontSize: 'clamp(18px, 5vh, 28px)', margin: 4 }}>Initiation</h2>
       </div>
       <div className="archetype-grid">
         {ARCHETYPES.map((a, i) => (
@@ -52,6 +52,15 @@ export function ArchetypeSelect({ onSelect, onBack, lastArchetype }: Props): JSX
                   {RELICS[a.startingRelic].glyph} {RELICS[a.startingRelic].name}
                 </div>
                 <div className="help-text" style={{ fontSize: 10 }}>{RELICS[a.startingRelic].description}</div>
+              </div>
+              <div className="pixel-divider" />
+              <div style={{ fontSize: 11, letterSpacing: '0.12em' }}>
+                <span className="violet-text">Signature Ability</span>
+                <div style={{ fontSize: 12, color: a.ultimate.colour }}>
+                  {a.ultimate.glyph} {a.ultimate.name}
+                </div>
+                <div className="help-text" style={{ fontSize: 10 }}>{a.ultimate.description}</div>
+                <div className="help-text" style={{ fontSize: 9, opacity: 0.7 }}>Cooldown {a.ultimate.cooldown}s</div>
               </div>
               <div style={{ marginTop: 'auto' }}>
                 <PixelButton onClick={() => onSelect(a.id)} focused={focus === i}>Begin</PixelButton>

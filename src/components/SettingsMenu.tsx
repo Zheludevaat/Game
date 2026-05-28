@@ -4,6 +4,7 @@ import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
 import { DEFAULT_GAMEPAD_MAP, GAMEPAD_BUTTON_NAMES } from '../game/input/controlMappings';
 import { useGamepadButtons } from './useGamepadButtons';
+import { audio } from '../game/systems/AudioSystem';
 
 interface Props {
   settings: SettingsState;
@@ -29,6 +30,26 @@ interface RowDef {
 
 const PIXEL_SCALE_OPTIONS = ['auto', '1', '2', '3', '4'];
 
+// Human-readable labels for each pad binding row. Source of truth lives
+// in controlMappings.ts — keep these in sync if you add a new action.
+const PAD_LABELS: Record<GamepadAction, string> = {
+  attack: 'Attack',
+  dash: 'Dash',
+  spell: 'Spell',
+  interact: 'Interact / Use',
+  pause: 'Pause',
+  map: 'Map',
+  cycleWeapon: 'Cycle Weapon',
+  cycleSpell: 'Cycle Spell',
+  cycleConsumable: 'Cycle Item',
+  useConsumable: 'Use Item',
+  ultimate: 'Ultimate',
+  dpadUp: 'D-pad Up',
+  dpadDown: 'D-pad Down',
+  dpadLeft: 'D-pad Left',
+  dpadRight: 'D-pad Right',
+};
+
 export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBack }: Props): JSX.Element {
   const [confirm, setConfirm] = useState(false);
   const [remapping, setRemapping] = useState<GamepadAction | null>(null);
@@ -41,10 +62,14 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     { id: 'sfxVolume',   label: 'SFX Volume',   kind: 'slider', min: 0, max: 1, step: 0.05 },
     { id: 'touchControls', label: 'Touch Controls', kind: 'toggle' },
     { id: 'reducedParticles', label: 'Reduce Particles', kind: 'toggle' },
+    { id: 'skipTutorial', label: 'Skip Tutorial', kind: 'toggle' },
     { id: 'pixelScale', label: 'Pixel Scale', kind: 'dropdown', options: PIXEL_SCALE_OPTIONS },
     ...(Object.keys(DEFAULT_GAMEPAD_MAP) as GamepadAction[]).map((action) => ({
       id: `remap.${action}`,
-      label: `Pad: ${action}`,
+      // Friendlier labels — the raw key names ("cycleWeapon") read as
+      // identifiers, not button assignments. Whatever a binding
+      // ACTUALLY does in-game must match what the row says.
+      label: `Pad: ${PAD_LABELS[action] ?? action}`,
       kind: 'remap' as const,
       action,
     })),
@@ -64,17 +89,38 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
   const remapAction = (action: GamepadAction): void => {
     setRemapping(action);
     const start = performance.now();
+    // Snapshot any buttons that are ALREADY held when remap begins —
+    // these don't count as "the player's chosen button." Only a NEW
+    // press (rising edge) is recorded. This stops the click that
+    // entered remap from immediately being assigned (e.g. mouse-click
+    // bleeding into the next-frame poll, or a held controller button
+    // from the navigation that opened this menu).
+    const heldAtStart = new Set<number>();
+    const pads0 = navigator.getGamepads?.() ?? [];
+    for (const pad of pads0) {
+      if (!pad) continue;
+      for (let i = 0; i < pad.buttons.length; i++) {
+        if (pad.buttons[i]?.pressed) heldAtStart.add(i);
+      }
+      break;
+    }
     const tick = (): void => {
       if (performance.now() - start > 6000) { setRemapping(null); return; }
       const pads = navigator.getGamepads?.() ?? [];
       for (const pad of pads) {
         if (!pad) continue;
         for (let i = 0; i < pad.buttons.length; i++) {
-          if (pad.buttons[i]?.pressed) {
-            onChange({ ...settings, gamepadMap: { ...settings.gamepadMap, [action]: i } });
-            setRemapping(null);
-            return;
+          if (!pad.buttons[i]?.pressed) {
+            // Button released — it's now eligible for a fresh press.
+            heldAtStart.delete(i);
+            continue;
           }
+          if (heldAtStart.has(i)) continue; // still held from before remap
+          // Fresh rising edge — record this binding.
+          onChange({ ...settings, gamepadMap: { ...settings.gamepadMap, [action]: i } });
+          audio.sfx('uiUnlock');
+          setRemapping(null);
+          return;
         }
       }
       requestAnimationFrame(tick);
@@ -87,7 +133,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     const row = rows[focus];
     if (!row) return;
     if (row.kind === 'toggle') {
-      const key = row.id as 'touchControls' | 'reducedParticles';
+      const key = row.id as 'touchControls' | 'reducedParticles' | 'skipTutorial';
       set(key, !settings[key] as never);
     } else if (row.kind === 'dropdown') {
       const opts = row.options!;
@@ -120,7 +166,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
       const next = Math.max(row.min!, Math.min(row.max!, +(cur + dir * (row.step ?? 0.05)).toFixed(2)));
       set(key, next as never);
     } else if (row.kind === 'toggle') {
-      const key = row.id as 'touchControls' | 'reducedParticles';
+      const key = row.id as 'touchControls' | 'reducedParticles' | 'skipTutorial';
       set(key, !settings[key] as never);
     } else if (row.kind === 'dropdown') {
       const opts = row.options!;
@@ -138,6 +184,11 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     onDown: () => { if (!remapping) setFocus((f) => (f + 1) % rows.length); },
     onLeft:  () => adjust(-1),
     onRight: () => adjust(1),
+    // Disable the whole hook while a remap is active. The remapAction
+    // loop is the only thing that should observe pad input until the
+    // player has assigned a button — otherwise pressing B to bind
+    // would ALSO trigger the menu's cancel handler.
+    enabled: !remapping,
   });
 
   const Row = ({ row, i }: { row: RowDef; i: number }): JSX.Element => {
@@ -165,7 +216,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
       );
     }
     if (row.kind === 'toggle') {
-      const key = row.id as 'touchControls' | 'reducedParticles';
+      const key = row.id as 'touchControls' | 'reducedParticles' | 'skipTutorial';
       const on = settings[key];
       return (
         <div className={'settings-row' + focusedClass} onMouseEnter={() => setFocus(i)}>
@@ -193,13 +244,13 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
       const isWaiting = remapping === action;
       return (
         <div className={'settings-row' + focusedClass} onMouseEnter={() => setFocus(i)}>
-          <span className="settings-pad-label">{action}</span>
+          <span className="settings-pad-label">{PAD_LABELS[action] ?? action}</span>
           <button
             type="button"
             className="settings-remap-btn"
             onClick={() => remapAction(action)}
           >
-            {isWaiting ? 'PRESS A BUTTON…' : (GAMEPAD_BUTTON_NAMES[settings.gamepadMap[action]] ?? `Btn ${settings.gamepadMap[action]}`)}
+            {isWaiting ? 'PRESS A BUTTON…' : (GAMEPAD_BUTTON_NAMES[settings.gamepadMap[action]] ?? `Button ${settings.gamepadMap[action]}`)}
           </button>
         </div>
       );

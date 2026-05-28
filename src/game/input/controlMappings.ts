@@ -5,8 +5,11 @@ export type ActionName =
   | 'interact'
   | 'pause'
   | 'map'
-  | 'useItem'
-  | 'cycleRelic';
+  | 'cycleWeapon'
+  | 'cycleSpell'
+  | 'cycleConsumable'
+  | 'useConsumable'
+  | 'ultimate';
 
 export interface GamepadMap {
   attack: number;
@@ -15,8 +18,13 @@ export interface GamepadMap {
   interact: number;
   pause: number;
   map: number;
-  useItem: number;
-  cycleRelic: number;
+  cycleWeapon: number;
+  cycleSpell: number;
+  /** Trigger pads — LT cycles the selected consumable, RT uses it. */
+  cycleConsumable: number;
+  useConsumable: number;
+  /** Stick click — fires the archetype's signature ultimate. */
+  ultimate: number;
   // D-pad
   dpadUp: number;
   dpadDown: number;
@@ -41,14 +49,17 @@ export interface GamepadMap {
 // pad.id and apply a swapped preset so the action a Switch player
 // presses by NAME ("press A to attack") does what they expect.
 export const DEFAULT_GAMEPAD_MAP: GamepadMap = {
-  attack: 0,      // A / Cross  (Xbox A, bottom)
-  dash: 1,        // B / Circle (Xbox B, right)
-  spell: 2,       // X / Square (Xbox X, left)
-  interact: 3,    // Y / Triangle (Xbox Y, top)
-  useItem: 4,     // LB / L1
-  cycleRelic: 5,  // RB / R1
-  pause: 9,       // Start / Menu / +
-  map: 8,         // Select / Share / −
+  attack: 0,        // A / Cross  (Xbox A, bottom)
+  dash: 1,          // B / Circle (Xbox B, right)
+  spell: 2,         // X / Square (Xbox X, left)
+  interact: 3,      // Y / Triangle (Xbox Y, top)
+  cycleSpell: 4,    // LB / L1 — cycles between known spells
+  cycleWeapon: 5,   // RB / R1 — cycles between known weapons
+  cycleConsumable: 6, // LT / L2 — cycles between carried consumables
+  useConsumable: 7,   // RT / R2 — uses the selected consumable
+  ultimate: 10,     // L Stick Click — archetype ultimate
+  pause: 9,         // Start / Menu / +
+  map: 8,           // Select / Share / −
   dpadUp: 12,
   dpadDown: 13,
   dpadLeft: 14,
@@ -59,14 +70,17 @@ export const DEFAULT_GAMEPAD_MAP: GamepadMap = {
 // index 1) is the primary action and labelled "B" (bottom, index 0) is
 // the secondary, matching Nintendo's house style.
 export const SWITCH_GAMEPAD_MAP: GamepadMap = {
-  attack: 1,      // A button (Nintendo right)
-  dash: 0,        // B button (Nintendo bottom)
-  spell: 3,       // X button (Nintendo top)
-  interact: 2,    // Y button (Nintendo left)
-  useItem: 4,     // L
-  cycleRelic: 5,  // R
-  pause: 9,       // + (Plus)
-  map: 8,         // − (Minus)
+  attack: 1,        // A button (Nintendo right)
+  dash: 0,          // B button (Nintendo bottom)
+  spell: 3,         // X button (Nintendo top)
+  interact: 2,      // Y button (Nintendo left)
+  cycleSpell: 4,    // L
+  cycleWeapon: 5,   // R
+  cycleConsumable: 6, // ZL
+  useConsumable: 7,   // ZR
+  ultimate: 10,     // L Stick Click
+  pause: 9,         // + (Plus)
+  map: 8,           // − (Minus)
   dpadUp: 12,
   dpadDown: 13,
   dpadLeft: 14,
@@ -92,6 +106,15 @@ export function detectLayoutFromPadId(id: string | undefined | null): Controller
   if (lower.includes('joy-con') || lower.includes('joycon')) return 'switch';
   if (lower.includes('pro controller')) return 'switch';
   if (lower.includes('057e')) return 'switch';
+  // Third-party Switch-compatible controllers that don't carry a
+  // Nintendo vendor id. Verified examples:
+  //   - "Intertronic SD-16" (also reports as "ITR NSW Controller SD-16")
+  //     — sold by Interdiscount (Switzerland) as a Switch / PC pad.
+  //   - Bluetooth pads whose marketing string includes "NSW" (Nintendo
+  //     Switch) — a common Asian-OEM convention.
+  if (lower.includes('sd-16') || lower.includes('sd16')) return 'switch';
+  if (lower.includes('intertronic')) return 'switch';
+  if (lower.includes(' nsw ') || lower.includes('nsw controller')) return 'switch';
   return 'xbox';
 }
 

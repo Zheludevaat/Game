@@ -1,4 +1,10 @@
 import { PALETTE } from '../constants';
+import type { SphereDef } from '../data/spheres';
+import type { ShrineKind } from '../GameTypes';
+import {
+  drawCrack, drawRivet, drawMicroRune, drawMossPatch, drawSpiral,
+  drawTideRipple, drawPetalCluster, drawSlash, drawCog, drawStarburst,
+} from './PixelArtUtils';
 
 export type PixelMatrix = string[]; // each string is a row, characters reference palette key
 
@@ -517,6 +523,166 @@ export const ENEMY_VISUALS: Record<string, EnemyVisual> = {
       r: '#9b6cff', g: '#0a0420', y: '#c8983f', Y: '#ffe6a3',
     },
   },
+  // Martyr Beacon — gilded armoured spirit. Saturn Knight silhouette,
+  // sun palette. Heals other enemies, doesn't attack on contact much.
+  martyrBeacon: {
+    rows: [
+      '...ooooo.....',
+      '..okkkkkoo...',
+      '.okKKKKKKko..',
+      'okKKyyyKKKko.',
+      'okKyy.yyKKko.',
+      'okKKyyyKKKko.',
+      'okKKKKKKKKko.',
+      'okKkkkkkKkko.',
+      'okKkKKKKkKko.',
+      'okKkkyykkKko.',
+      'okKkk..kkKko.',
+      '.okkk..kkko..',
+      '.ooo....ooo..',
+      '..oo....oo...',
+    ],
+    palette: {
+      '.': null,
+      o: '#1a0a04',
+      k: '#3a1a04',
+      K: '#c8983f',
+      y: '#ffe6a3',
+    },
+  },
+  // Umbral Stalker — Lesser Shade silhouette but rendered at half-alpha
+  // (the engine's status-based draw applies the fade). Saturn palette.
+  umbralStalker: {
+    rows: [
+      '....oooo....',
+      '...oDDDDo...',
+      '..oDDDDDDo..',
+      '.oDdddddDo..',
+      'oDdvddddvDo.',
+      'oDdvwddwvDo.',
+      'oDddddddDo..',
+      '.oDdddddDo..',
+      '..oDddddo...',
+      '..oDdddDo...',
+      '...odDdo....',
+      '....of.o....',
+    ],
+    palette: {
+      '.': null,
+      o: '#04020c',
+      d: '#0d041a',
+      D: '#1a0824',
+      v: '#9b6cff',
+      w: '#cdd6dc',
+      f: '#0a0420',
+    },
+  },
+  // Mirror Twin — Lunar Wisp silhouette, venus palette. Spawns a copy
+  // on first damage taken.
+  mirrorTwin: {
+    rows: [
+      '...ovvvo...',
+      '..ovWWWvo..',
+      '.ovWwwwbvo.',
+      'ovWwwwbbvo.',
+      'ovWwwwbbvo.',
+      'ovWWwwbbvo.',
+      'ovWwwwbbvo.',
+      'ovWwwwbvo..',
+      '.ovWwwbvo..',
+      '..ovWvvo...',
+      '...o.oo....',
+    ],
+    palette: {
+      '.': null,
+      o: '#1a0b1a',
+      v: '#ff6caf',
+      b: '#ffd0d6',
+      W: '#ffffff',
+      w: '#ffe6a3',
+    },
+  },
+  // Kronosian Herald — Salt Golem silhouette, saturn palette. Contact
+  // applies slow.
+  kronosianHerald: {
+    rows: [
+      '.ooooooooooo.',
+      'oggGGGGGGGggo',
+      'ogGGddvvddGgo',
+      'ogGvGvvvvGvGo',
+      'ogGGvGvvGvGgo',
+      'ogGGGGGGGGGgo',
+      'oggGGvvvvGggo',
+      'oggGGvvvvGggo',
+      'oggggggggggo.',
+      '.ogGgg.gggo..',
+      '.ogGgg.gggo..',
+      '.oggg...ggo..',
+      '..oo.....oo..',
+    ],
+    palette: {
+      '.': null,
+      o: '#0a0420',
+      g: '#1a0f2c',
+      G: '#3b265c',
+      v: '#9b6cff',
+      d: '#08030f',
+    },
+  },
+  // Heliokrator — Serpent of Brass silhouette, sun palette. Mid-tier
+  // miniboss for Sun → Mars.
+  heliokrator: {
+    rows: [
+      '..oooo............',
+      '.oYYYYo...........',
+      'oYYyyYYo..oooo....',
+      'oYwyYyYo.obYYbo...',
+      'oYyfyfYo.obYyybo..',
+      '.oYyyYo.obYyyyybo.',
+      '..oYYo.obYyyyyyybo',
+      '...oo.obYyyyyyyybo',
+      '......obYyyyyyybo.',
+      '.......obYyyyybo..',
+      '........obYYybo...',
+      '.........oooo.....',
+    ],
+    palette: {
+      '.': null,
+      o: '#1a0a04',
+      Y: '#ffe6a3',
+      y: '#ff7a3a',
+      w: '#ffffff',
+      f: '#3a1a04',
+      b: '#c8983f',
+    },
+  },
+  // Nikethron — Serpent of Brass silhouette, jupiter palette. Late
+  // miniboss for Jupiter → Saturn.
+  nikethron: {
+    rows: [
+      '..oooo............',
+      '.oYYYYo...........',
+      'oYYyyYYo..oooo....',
+      'oYwyYyYo.obYYbo...',
+      'oYyfyfYo.obYyybo..',
+      '.oYyyYo.obYyyyybo.',
+      '..oYYo.obYyyyyyybo',
+      '...oo.obYyyyyyyybo',
+      '......obYyyyyyybo.',
+      '.......obYyyyybo..',
+      '........obYYybo...',
+      '.........oooo.....',
+    ],
+    palette: {
+      '.': null,
+      o: '#04081a',
+      Y: '#cdd6dc',
+      y: '#6cf6e5',
+      w: '#ffe6a3',
+      f: '#04081a',
+      b: '#3b265c',
+    },
+  },
 };
 
 function parseHexRgb(hex: string): [number, number, number] | null {
@@ -587,6 +753,10 @@ export function drawFloorTile(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, size: number,
   seed: number,
+  /** Optional per-sphere visual data. When omitted the tile renders
+   *  with the global PALETTE defaults — used by menu / cinematic
+   *  contexts that don't carry a sphere. */
+  sphere?: SphereDef,
 ): void {
   const h = tileHash(x, y, seed);
   // Base tile — alternating large slabs with subtle banding
@@ -603,37 +773,77 @@ export function drawFloorTile(
   ctx.fillRect(x, y + size - 1, size, 1);
   ctx.fillRect(x + size - 1, y, 1, size);
 
-  // Mortar / grout
-  ctx.fillStyle = PALETTE.floorCrack;
+  // Mortar / grout — per-sphere when available
+  const mortar = sphere?.floorMortar ?? PALETTE.floorCrack;
+  ctx.fillStyle = mortar;
   ctx.fillRect(x, y, size, 1);
   ctx.fillRect(x, y, 1, size);
 
-  // Occasional cracks
+  // Occasional cracks — Saturn doubles density, Moon halves
+  const motif = sphere?.floorMotif ?? null;
   const detail = (h >>> 8) & 0xff;
-  if (detail < 10) {
-    ctx.fillStyle = PALETTE.floorCrack;
-    ctx.fillRect(x + 3, y + 5, 5, 1);
-    ctx.fillRect(x + 7, y + 6, 3, 1);
-    ctx.fillRect(x + 9, y + 7, 2, 1);
-  } else if (detail < 16) {
-    ctx.fillStyle = PALETTE.floorCrack;
-    ctx.fillRect(x + 4, y + size - 5, 6, 1);
-    ctx.fillRect(x + 6, y + size - 6, 1, 2);
+  const crackGate = motif === 'saturn-crack' ? 22
+                  : motif === 'lunar-tide'   ? 6
+                  : 16;
+  if (detail < crackGate) {
+    drawCrack(ctx, x + 3, y + 5, h >>> 4, mortar);
   }
 
-  // Rare gold inlay / mosaic star
+  // Per-sphere ornament — replaces the hardcoded teal rune + gold inlay
+  // with sphere-themed micro-decals. Gated rare (6-12 % of tiles) so
+  // the floor reads as textured-but-not-cluttered.
   const ornament = (h >>> 16) & 0xff;
-  if (ornament < 6) {
-    const cx = x + size / 2, cy = y + size / 2;
-    ctx.fillStyle = PALETTE.gold3;
-    ctx.fillRect(cx - 2, cy - 1, 4, 2);
-    ctx.fillRect(cx - 1, cy - 2, 2, 4);
-    ctx.fillStyle = PALETTE.gold;
-    ctx.fillRect(cx - 1, cy - 1, 2, 2);
-  } else if (ornament < 12) {
-    // tiny rune mark
-    ctx.fillStyle = 'rgba(108, 246, 229, 0.18)';
-    ctx.fillRect(x + size / 2 - 1, y + size / 2 - 1, 2, 2);
+  const cx = x + size / 2, cy = y + size / 2;
+  if (!motif) {
+    // Legacy fallback — keep the original behaviour for menu / cinematic
+    // surfaces that don't pass a sphere through.
+    if (ornament < 6) {
+      ctx.fillStyle = PALETTE.gold3;
+      ctx.fillRect(cx - 2, cy - 1, 4, 2);
+      ctx.fillRect(cx - 1, cy - 2, 2, 4);
+      ctx.fillStyle = PALETTE.gold;
+      ctx.fillRect(cx - 1, cy - 1, 2, 2);
+    } else if (ornament < 12) {
+      ctx.fillStyle = 'rgba(108, 246, 229, 0.18)';
+      ctx.fillRect(x + size / 2 - 1, y + size / 2 - 1, 2, 2);
+    }
+    return;
+  }
+
+  if (ornament >= 14) return; // most tiles stay clean
+
+  // Sphere-specific motif. Each motif keeps the rare-gate, just with
+  // a different glyph so the floor identity reads at room scale.
+  switch (motif) {
+    case 'lunar-tide':
+      drawTideRipple(ctx, x + 3, cy, 'rgba(168, 192, 232, 0.35)');
+      break;
+    case 'mercury-rivet':
+      drawRivet(ctx, x + 2, y + 2, '#c8983f');
+      drawRivet(ctx, x + size - 5, y + size - 5, '#c8983f');
+      break;
+    case 'venus-petal':
+      drawPetalCluster(ctx, cx - 1, cy - 1, 'rgba(255, 155, 193, 0.45)');
+      break;
+    case 'sun-spiral':
+      if (ornament < 6) drawSpiral(ctx, cx, cy, '#c8983f');
+      else              drawMicroRune(ctx, cx - 1, cy - 1, h, 'rgba(244, 210, 122, 0.35)');
+      break;
+    case 'mars-scar':
+      drawSlash(ctx, x + 4, y + 4, h, 'rgba(122, 16, 32, 0.55)');
+      break;
+    case 'jupiter-cog':
+      if (ornament < 6) drawCog(ctx, cx - 2, cy - 2, 'rgba(200, 152, 63, 0.65)');
+      else              drawMicroRune(ctx, cx - 1, cy - 1, h, 'rgba(200, 152, 63, 0.45)');
+      break;
+    case 'saturn-crack':
+      // Crack already amplified above; add the moss patch in the rare
+      // ornament slot so the decay reads as living, not just broken.
+      drawMossPatch(ctx, x + 3, y + size - 4, h, 'rgba(90, 139, 80, 0.55)');
+      break;
+    case 'ogdoad-star':
+      drawStarburst(ctx, cx, cy, 'rgba(255, 247, 214, 0.65)');
+      break;
   }
 }
 
@@ -641,9 +851,10 @@ export function drawWallTile(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, size: number,
   topEdge: boolean,
-  /** Sphere accent colour. When supplied, the cap-stone strip is tinted
-   * toward this hue so each floor reads as its own sphere at a glance. */
-  tint?: string | null,
+  /** Optional sphere — when supplied, cap-stone strip tints toward
+   *  `sphere.accent` and the rare carved sigil pulls from
+   *  `sphere.wallSigil` + `sphere.wallMotif`. */
+  sphere?: SphereDef,
 ): void {
   // Base stone
   ctx.fillStyle = PALETTE.wallDark;
@@ -653,7 +864,7 @@ export function drawWallTile(
 
   // Highlight ridge on top (cap stones) — tinted by sphere when provided
   if (topEdge) {
-    ctx.fillStyle = tint ?? PALETTE.wallTop;
+    ctx.fillStyle = sphere?.accent ?? PALETTE.wallTop;
     ctx.fillRect(x, y, size, 3);
     ctx.fillStyle = '#7a559e';
     ctx.fillRect(x + 1, y + 1, size - 2, 1);
@@ -675,9 +886,55 @@ export function drawWallTile(
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(x + 4 + (h & 3), y + 3, 2, 1);
   } else if (h < 48) {
-    // tiny carved sigil — soft gold dot
-    ctx.fillStyle = 'rgba(244, 210, 122, 0.18)';
-    ctx.fillRect(x + size / 2 - 1, y + size / 2 + 3, 2, 1);
+    // Carved sigil — per-sphere motif when the floor passes a sphere
+    // through, otherwise the legacy gold dot. Kept rare (h < 48) so
+    // walls read as occasionally-carved stone, not a tapestry.
+    const sx = x + size / 2 - 1;
+    const sy = y + size / 2 + 1;
+    const motif = sphere?.wallMotif ?? null;
+    const colour = sphere?.wallSigil ?? '#f4d27a';
+    const alpha = 'rgba(244, 210, 122, 0.22)'; // fallback
+    if (!motif) {
+      ctx.fillStyle = alpha;
+      ctx.fillRect(sx, sy + 2, 2, 1);
+    } else {
+      switch (motif) {
+        case 'lunar-tide':
+          ctx.fillStyle = colour;
+          ctx.fillRect(sx,     sy, 1, 1);
+          ctx.fillRect(sx + 1, sy + 1, 1, 1);
+          ctx.fillRect(sx,     sy + 2, 1, 1);
+          break;
+        case 'mercury-rivet':
+          drawRivet(ctx, sx - 1, sy - 1, colour);
+          break;
+        case 'venus-petal':
+          drawPetalCluster(ctx, sx, sy, colour);
+          break;
+        case 'sun-spiral':
+          ctx.fillStyle = colour;
+          ctx.fillRect(sx,     sy,     1, 1);
+          ctx.fillRect(sx + 1, sy,     1, 1);
+          ctx.fillRect(sx + 1, sy + 1, 1, 1);
+          ctx.fillRect(sx,     sy + 1, 1, 1);
+          break;
+        case 'mars-scar':
+          drawSlash(ctx, sx - 1, sy - 1, h, colour);
+          break;
+        case 'jupiter-cog':
+          ctx.fillStyle = colour;
+          ctx.fillRect(sx,     sy,     2, 1);
+          ctx.fillRect(sx - 1, sy,     1, 1);
+          ctx.fillRect(sx + 2, sy,     1, 1);
+          break;
+        case 'saturn-crack':
+          drawMossPatch(ctx, sx - 1, sy, h, colour);
+          break;
+        case 'ogdoad-star':
+          drawStarburst(ctx, sx, sy + 1, colour);
+          break;
+      }
+    }
   }
 
   // Bottom shadow line to ground the wall
@@ -804,67 +1061,265 @@ export function drawChest(
   }
 }
 
+/** Kind drives the column-top decoration. The base platform + column
+ *  are shared; each kind ships a 30-40-line custom top so the
+ *  alchemical operation reads from across the room before the player
+ *  opens the modal. The kind type is the canonical ShrineKind union
+ *  from GameTypes — keeps the rendering surface in lockstep with the
+ *  gameplay union, so adding a new kind there fails the type check
+ *  here until a matching crown branch lands. */
 export function drawShrine(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, used: boolean, t: number,
+  kind: ShrineKind = 'calcination',
 ): void {
+  // Cursed shrines get a darker stone — the rot has eaten the column.
+  const cursed = kind === 'cursed';
+  const stoneBase = cursed ? '#100818' : '#1a0f2c';
+  const stoneMid  = cursed ? '#1a1428' : '#2a1b3a';
+  const stoneTop  = cursed ? '#2a1a36' : '#3b265c';
+  const colShade  = cursed ? '#3a2050' : '#5b3a86';
+  const colLite   = cursed ? '#54306a' : '#7a559e';
+
   // base platform (two-tier)
-  ctx.fillStyle = '#1a0f2c';
+  ctx.fillStyle = stoneBase;
   ctx.fillRect(x - 12, y + 8, 24, 2);
-  ctx.fillStyle = '#2a1b3a';
+  ctx.fillStyle = stoneMid;
   ctx.fillRect(x - 10, y + 6, 20, 4);
-  ctx.fillStyle = '#3b265c';
+  ctx.fillStyle = stoneTop;
   ctx.fillRect(x - 8, y + 4, 16, 3);
 
   // column
-  ctx.fillStyle = '#1a0f2c';
+  ctx.fillStyle = stoneBase;
   ctx.fillRect(x - 5, y - 9, 14, 14);
-  ctx.fillStyle = '#5b3a86';
+  ctx.fillStyle = colShade;
   ctx.fillRect(x - 4, y - 8, 12, 13);
-  ctx.fillStyle = '#7a559e';
+  ctx.fillStyle = colLite;
   ctx.fillRect(x - 4, y - 8, 1, 13);
   ctx.fillStyle = '#221636';
   ctx.fillRect(x + 7, y - 8, 1, 13);
 
-  // gold filigree band
-  ctx.fillStyle = PALETTE.gold3;
+  // gold filigree band — blood-red on cursed
+  ctx.fillStyle = cursed ? '#7a1020' : PALETTE.gold3;
   ctx.fillRect(x - 4, y - 4, 12, 1);
-  ctx.fillStyle = PALETTE.gold;
+  ctx.fillStyle = cursed ? PALETTE.crimson : PALETTE.gold;
   ctx.fillRect(x - 3, y - 4, 1, 1);
   ctx.fillRect(x + 1, y - 4, 1, 1);
   ctx.fillRect(x + 5, y - 4, 1, 1);
 
   // bowl/cap
-  ctx.fillStyle = '#1a0f2c';
+  ctx.fillStyle = stoneBase;
   ctx.fillRect(x - 6, y - 10, 16, 2);
-  ctx.fillStyle = '#3b265c';
+  ctx.fillStyle = stoneTop;
   ctx.fillRect(x - 5, y - 11, 14, 2);
 
-  // flame / orb on top
-  if (!used) {
-    // halo
-    const halo = ctx.createRadialGradient(x + 2, y - 16, 1, x + 2, y - 16, 14);
-    halo.addColorStop(0, 'rgba(108, 246, 229, 0.55)');
-    halo.addColorStop(1, 'rgba(108, 246, 229, 0)');
-    ctx.fillStyle = halo;
-    ctx.fillRect(x - 12, y - 30, 28, 28);
-    // flame
-    const flicker = Math.sin(t * 5) * 1.4;
-    ctx.fillStyle = 'rgba(108,246,229,0.75)';
-    ctx.beginPath();
-    ctx.ellipse(x + 2, y - 15, 4.5 + Math.abs(flicker) * 0.4, 6 + flicker * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#a4faf0';
-    ctx.beginPath();
-    ctx.ellipse(x + 2, y - 15, 2.5, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(x + 1, y - 16, 2, 2);
-  } else {
+  if (used) {
+    // Spent — a dead bowl regardless of kind
     ctx.fillStyle = '#0a0420';
     ctx.fillRect(x - 3, y - 14, 10, 4);
     ctx.fillStyle = '#1a0f2c';
     ctx.fillRect(x - 2, y - 13, 8, 2);
+    return;
+  }
+
+  // Per-kind crown — what sits on top of the column.
+  drawShrineCrown(ctx, x, y, t, kind);
+}
+
+/** Column-top decoration for an unused shrine. Branches on kind so
+ *  every alchemical operation has its own silhouette. */
+function drawShrineCrown(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, t: number,
+  kind: ShrineKind,
+): void {
+  switch (kind) {
+    case 'calcination': {
+      // Furnace bowl + orange flame plume
+      const halo = ctx.createRadialGradient(x + 2, y - 16, 1, x + 2, y - 16, 16);
+      halo.addColorStop(0, 'rgba(255, 122, 58, 0.65)');
+      halo.addColorStop(1, 'rgba(255, 122, 58, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 14, y - 32, 32, 32);
+      ctx.fillStyle = '#3a1d10';
+      ctx.fillRect(x - 4, y - 13, 12, 2);
+      const flick = Math.sin(t * 6) * 1.6;
+      ctx.fillStyle = '#ff7a3a';
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y - 17, 4 + Math.abs(flick) * 0.5, 7 + flick * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffe6a3';
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y - 17, 2, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff7d6';
+      ctx.fillRect(x + 1, y - 19, 2, 3);
+      break;
+    }
+    case 'dissolution': {
+      // Water bowl with ripple ring + soft cyan halo
+      const halo = ctx.createRadialGradient(x + 2, y - 14, 1, x + 2, y - 14, 14);
+      halo.addColorStop(0, 'rgba(108, 246, 229, 0.55)');
+      halo.addColorStop(1, 'rgba(108, 246, 229, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 12, y - 28, 28, 28);
+      // Bowl rim
+      ctx.fillStyle = '#1f8a86';
+      ctx.fillRect(x - 6, y - 14, 16, 2);
+      // Water surface
+      ctx.fillStyle = '#6cf6e5';
+      ctx.fillRect(x - 5, y - 13, 14, 2);
+      // Ripple ring (animated)
+      const r = ((t * 6) % 5);
+      ctx.strokeStyle = `rgba(164, 250, 240, ${0.6 - r * 0.1})`;
+      ctx.beginPath(); ctx.arc(x + 2, y - 13, 2 + r, 0, Math.PI * 2); ctx.stroke();
+      break;
+    }
+    case 'separation': {
+      // Balance scale — yoke + two pans
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x + 1, y - 16, 2, 4);          // post
+      ctx.fillRect(x - 6, y - 17, 16, 1);         // yoke
+      // Chains
+      ctx.fillRect(x - 5, y - 16, 1, 3);
+      ctx.fillRect(x + 8, y - 16, 1, 3);
+      // Left pan
+      ctx.fillStyle = '#f4d27a';
+      ctx.fillRect(x - 7, y - 13, 5, 1);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x - 7, y - 12, 5, 1);
+      // Right pan
+      ctx.fillStyle = '#f4d27a';
+      ctx.fillRect(x + 6, y - 13, 5, 1);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x + 6, y - 12, 5, 1);
+      break;
+    }
+    case 'conjunction': {
+      // Two interlocked rings — gold + silver
+      ctx.strokeStyle = '#f4d27a';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x - 1, y - 15, 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#cdd6dc';
+      ctx.beginPath(); ctx.arc(x + 5, y - 15, 4, 0, Math.PI * 2); ctx.stroke();
+      // Intersection sparkle
+      const sparkle = 0.6 + 0.4 * Math.sin(t * 3);
+      ctx.fillStyle = `rgba(255, 247, 214, ${sparkle})`;
+      ctx.fillRect(x + 1, y - 16, 2, 2);
+      break;
+    }
+    case 'fermentation': {
+      // Squat vat with 3 rising bubbles + greenish glow
+      const halo = ctx.createRadialGradient(x + 2, y - 14, 1, x + 2, y - 14, 12);
+      halo.addColorStop(0, 'rgba(127, 208, 112, 0.55)');
+      halo.addColorStop(1, 'rgba(127, 208, 112, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 10, y - 26, 24, 24);
+      ctx.fillStyle = '#3a5a30';
+      ctx.fillRect(x - 6, y - 14, 16, 4);          // vat body
+      ctx.fillStyle = '#5a8b50';
+      ctx.fillRect(x - 5, y - 13, 14, 1);          // vat surface
+      // Three bubbles at hashed y
+      for (let i = 0; i < 3; i++) {
+        const bx = x - 3 + i * 4;
+        const by = y - 16 - ((t * 8 + i * 7) % 6);
+        ctx.fillStyle = 'rgba(127, 208, 112, 0.75)';
+        ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case 'distillation': {
+      // Retort flask + drip
+      ctx.fillStyle = '#1a0f2c';
+      ctx.fillRect(x - 3, y - 17, 8, 5);           // flask body (dark glass)
+      ctx.fillStyle = 'rgba(244, 210, 122, 0.55)';
+      ctx.fillRect(x - 2, y - 16, 6, 3);           // liquid
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x - 3, y - 18, 8, 1);           // rim
+      // Spout angled right
+      ctx.fillRect(x + 5, y - 16, 4, 1);
+      ctx.fillRect(x + 9, y - 16, 1, 2);
+      // Animated drip
+      const dripY = (t * 14) % 6;
+      ctx.fillStyle = '#ffe6a3';
+      ctx.fillRect(x + 9, y - 14 + dripY, 1, 1);
+      break;
+    }
+    case 'coagulation': {
+      // Crucible + single crystal sticking up
+      ctx.fillStyle = '#3b265c';
+      ctx.fillRect(x - 5, y - 14, 14, 3);           // crucible body
+      ctx.fillStyle = '#5b3a86';
+      ctx.fillRect(x - 4, y - 13, 12, 1);
+      // Crystal
+      const sparkle = 0.7 + 0.3 * Math.sin(t * 2);
+      ctx.fillStyle = '#9b6cff';
+      ctx.fillRect(x + 1, y - 18, 2, 5);
+      ctx.fillRect(x,     y - 17, 4, 1);
+      ctx.fillRect(x + 2, y - 19, 1, 1);
+      ctx.fillStyle = `rgba(220, 200, 255, ${sparkle})`;
+      ctx.fillRect(x + 1, y - 18, 1, 2);
+      break;
+    }
+    case 'cursed': {
+      // Black flame + blood streak (already darkened above)
+      const halo = ctx.createRadialGradient(x + 2, y - 16, 1, x + 2, y - 16, 14);
+      halo.addColorStop(0, 'rgba(226, 58, 74, 0.55)');
+      halo.addColorStop(1, 'rgba(226, 58, 74, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(x - 12, y - 30, 28, 28);
+      const flick = Math.sin(t * 5) * 1.4;
+      ctx.fillStyle = '#0a0210';
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y - 16, 4 + Math.abs(flick) * 0.5, 7 + flick * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#7a1020';
+      ctx.beginPath();
+      ctx.ellipse(x + 2, y - 16, 2, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PALETTE.crimson;
+      ctx.fillRect(x + 1, y - 18, 2, 2);
+      // Blood streak down column
+      ctx.fillStyle = 'rgba(122, 16, 32, 0.65)';
+      ctx.fillRect(x + 2, y - 4, 1, 10);
+      break;
+    }
+    case 'library': {
+      // Book lectern + glyph cloud
+      ctx.fillStyle = '#3a2410';
+      ctx.fillRect(x - 6, y - 13, 16, 2);           // lectern base
+      ctx.fillStyle = '#5a3a18';
+      ctx.fillRect(x - 5, y - 14, 14, 1);
+      // Book V-shape
+      ctx.fillStyle = '#c8983f';
+      ctx.fillRect(x - 5, y - 16, 7, 3);
+      ctx.fillRect(x + 2, y - 16, 7, 3);
+      ctx.fillStyle = '#7a5a1a';
+      ctx.fillRect(x + 1, y - 16, 2, 3);            // spine
+      // Floating glyphs
+      const off = Math.sin(t * 1.5) * 1;
+      ctx.fillStyle = 'rgba(244, 210, 122, 0.75)';
+      ctx.fillRect(x - 4, y - 21 + off, 1, 1);
+      ctx.fillRect(x + 2, y - 23 + off, 1, 1);
+      ctx.fillRect(x + 6, y - 20 + off, 1, 1);
+      break;
+    }
+    case 'puzzle': {
+      // Tetragram (4-point star) carved into column face + 4 dim lamps
+      ctx.fillStyle = '#c8983f';
+      // Star (4 triangles)
+      ctx.fillRect(x + 1, y - 17, 2, 6);          // vertical bar
+      ctx.fillRect(x - 1, y - 14, 6, 2);          // horizontal bar
+      ctx.fillRect(x,     y - 15, 4, 4);          // centre
+      // Four dim corner lamps
+      const pulse = 0.4 + 0.3 * Math.sin(t * 2);
+      ctx.fillStyle = `rgba(108, 246, 229, ${pulse})`;
+      ctx.fillRect(x - 5, y - 16, 1, 1);
+      ctx.fillRect(x + 7, y - 16, 1, 1);
+      ctx.fillRect(x - 5, y - 10, 1, 1);
+      ctx.fillRect(x + 7, y - 10, 1, 1);
+      break;
+    }
   }
 }
 

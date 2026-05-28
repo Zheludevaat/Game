@@ -56,7 +56,29 @@ export function useGamepadButtons(handlers: GamepadButtonHandlers & { enabled?: 
     const prevAxis = { up: false, down: false, left: false, right: false };
     let firstTick = true;
     const tick = (): void => {
-      if (ref.current.enabled === false) { raf = requestAnimationFrame(tick); return; }
+      if (ref.current.enabled === false) {
+        // While the hook is disabled (e.g. a SettingsMenu remap is in
+        // progress), still ADVANCE the previous-button snapshot so
+        // any press / release that happens during the disabled window
+        // doesn't create a phantom rising-edge on the very first
+        // frame after we re-enable. Without this, a B press that
+        // completed a remap fires onB the moment the hook wakes back
+        // up — and onB is "exit menu" — kicking the player out.
+        const pads = navigator.getGamepads?.() ?? [];
+        let pad: Gamepad | null = null;
+        for (const p of pads) if (p) { pad = p; break; }
+        if (pad) {
+          for (let i = 0; i < pad.buttons.length; i++) prev[i] = !!pad.buttons[i]?.pressed;
+          prevAxis.up    = (pad.axes[1] ?? 0) < -0.5;
+          prevAxis.down  = (pad.axes[1] ?? 0) >  0.5;
+          prevAxis.left  = (pad.axes[0] ?? 0) < -0.5;
+          prevAxis.right = (pad.axes[0] ?? 0) >  0.5;
+        } else {
+          firstTick = true;
+        }
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       const pads = navigator.getGamepads?.() ?? [];
       let pad: Gamepad | null = null;
       for (const p of pads) if (p) { pad = p; break; }

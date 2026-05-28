@@ -18,7 +18,9 @@ import { GameOverScreen } from './components/GameOver';
 import { MetaProgression } from './components/MetaProgression';
 import { TouchControls } from './components/TouchControls';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
-import { ArchetypeId, MetaState, SettingsState } from './game/GameTypes';
+import { ArchetypeId, DailyHistoryEntry, MetaState, RunHistoryEntry, RunMode, SettingsState } from './game/GameTypes';
+import { evaluateAchievements } from './game/data/achievements';
+import { ARCHETYPES } from './game/data/archetypes';
 import { MapOverlay } from './components/MapOverlay';
 import { CodexScreen } from './components/CodexScreen';
 import { CinematicsScreen } from './components/CinematicsScreen';
@@ -73,6 +75,17 @@ export function App(): JSX.Element {
   const [pendingBossIntro, setPendingBossIntro] = useState<string | null>(null);
   // Archetype + run options stashed when a new-run cinematic is queued.
   const [pendingRunStart, setPendingRunStart] = useState<{ id: ArchetypeId; floor?: number; runSeed?: number } | null>(null);
+  /** When set, archetype-select fires startRun with timeAttack=true
+   *  on confirmation. Cleared on return-to-menu. */
+  const [pendingTimeAttack, setPendingTimeAttack] = useState(false);
+  /** Current run mode — drives every game-over branch + the gate on
+   *  resume / mode-specific persistence. Single source of truth that
+   *  replaces the three boolean refs (dailyMode / bossRushMode /
+   *  timeAttackMode) that used to track this in parallel. */
+  const runModeRef = useRef<RunMode>('standard');
+  /** Mirror of pendingTimeAttack for the Boss Rush flow — when set,
+   *  archetype-select fires startRun with bossRush=true on confirmation. */
+  const [pendingBossRush, setPendingBossRush] = useState(false);
 
   // --- Loading screen timer ---
   // First-load goes through the Tabula opening film instead of straight to
@@ -136,6 +149,37 @@ export function App(): JSX.Element {
     };
   }, []);
 
+  // --- iOS audio context recovery + auto-pause on background ---
+  // iOS Safari and standalone PWAs suspend the AudioContext on app
+  // switch / lock; the drone + SFX fall silent on return. Re-resuming
+  // on visibilitychange + pageshow restores audio without the user
+  // having to tap something first. We also auto-pause the live run
+  // when the tab goes hidden — the player coming back to a dead
+  // character from a phone call is a felony-level frustration.
+  useEffect(() => {
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') audio.resume();
+    };
+    const onHidden = (): void => {
+      // Only pause if a run is actually live.
+      if (document.visibilityState === 'hidden' && engineRef.current && screen === 'game') {
+        setScreen('pause');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    document.addEventListener('visibilitychange', onHidden);
+    window.addEventListener('pageshow', onVisible);
+    window.addEventListener('focus', onVisible);
+    window.addEventListener('blur', onHidden);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('visibilitychange', onHidden);
+      window.removeEventListener('pageshow', onVisible);
+      window.removeEventListener('focus', onVisible);
+      window.removeEventListener('blur', onHidden);
+    };
+  }, [screen]);
+
   // --- Canvas DPR resize ---
   useEffect(() => {
     const onResize = (): void => {
@@ -150,40 +194,60 @@ export function App(): JSX.Element {
         canvas.height = h;
       }
     };
+    // iOS Safari sometimes reports stale viewport rects during the
+    // orientationchange event itself; the real layout settles a few
+    // frames later. Double-rAF after the event catches the new size.
+    const onRotate = (): void => {
+      onResize();
+      requestAnimationFrame(() => {
+        onResize();
+        requestAnimationFrame(onResize);
+      });
+    };
     onResize();
     window.addEventListener('resize', onResize);
-    window.addEventListener('orientationchange', onResize);
+    window.addEventListener('orientationchange', onRotate);
     // iOS Safari fires this when the URL bar slides — without it the
     // canvas keeps its old dimensions and the game shrinks/clips.
     window.visualViewport?.addEventListener('resize', onResize);
     window.visualViewport?.addEventListener('scroll', onResize);
     return () => {
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
+      window.removeEventListener('orientationchange', onRotate);
       window.visualViewport?.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('scroll', onResize);
     };
   }, [screen]);
 
-  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number }) => {
+  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; mode?: RunMode }) => {
     saveLastArchetype(archetypeId);
     setLastArchetype(archetypeId);
     setSummary(null);
+    const mode: RunMode = opts?.mode ?? 'standard';
+    runModeRef.current = mode;
     // First time ever: gate through "The Gate Opens" cinematic, then
     // resume into the actual run on its onDone. Resume flow (opts.floor
     // > 1) skips the cinematic — that's a continuation, not a new run.
-    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1;
+    // Non-standard modes skip the cinematic to keep the timed attempt clean.
+    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1 && mode === 'standard';
     if (isFirstRun) {
       setPendingRunStart({ id: archetypeId, floor: opts?.floor, runSeed: opts?.runSeed });
       setScreen('newRunIntro');
       return;
     }
     setScreen('game');
-    // Persist a resume entry — used by Continue button next time
+    // Persist a resume entry — used by Continue button next time. Daily
+    // Runs don't write resume state, since each day's seed must be
+    // attempted fresh and can't be picked up mid-run from Continue.
     const runSeed = opts?.runSeed ?? Math.floor(Math.random() * 0xffffffff);
     const startingFloor = opts?.floor ?? 1;
-    saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
-    setResumeAvailable(true);
+    if (mode === 'standard') {
+      saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
+      setResumeAvailable(true);
+    } else {
+      saveResume(null);
+      setResumeAvailable(false);
+    }
     setTimeout(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -212,13 +276,107 @@ export function App(): JSX.Element {
             return nb;
           });
           setEssence((e) => { const ne = e + s.essenceCollected; saveEssence(ne); return ne; });
+          // Append the run to history, update per-archetype best, evaluate
+          // achievements. setMeta then auto-persists via the existing useEffect.
+          const isDaily = runModeRef.current === 'daily';
+          setMeta((m) => {
+            const entry: RunHistoryEntry = {
+              date: Date.now(),
+              archetype: archetypeId,
+              floorReached: s.floorReached,
+              bossesDefeated: s.bossesDefeated,
+              essenceCollected: s.essenceCollected,
+              ascensionLevel: m.ascensionLevel ?? 0,
+              deathCause: s.ogdoadReached ? 'descend' : s.deathCause,
+            };
+            // Daily Runs don't pollute the normal history rail — they
+            // get their own dailyHistory list. Achievements still
+            // evaluate so a daily that achieves something counts.
+            const history = isDaily
+              ? (m.runHistory ?? [])
+              : [entry, ...(m.runHistory ?? [])].slice(0, 20);
+            let dailyHistory = m.dailyHistory ?? [];
+            let lastDailyDate = m.lastDailyDate;
+            if (isDaily) {
+              const score = s.floorReached * 1000 + s.essenceCollected + s.bossesDefeated * 500;
+              const dayIndex = Math.floor(Date.now() / 86_400_000);
+              const dailyEntry: DailyHistoryEntry = {
+                dayIndex,
+                date: Date.now(),
+                archetype: archetypeId,
+                floorReached: s.floorReached,
+                bossesDefeated: s.bossesDefeated,
+                essenceCollected: s.essenceCollected,
+                ogdoadReached: !!s.ogdoadReached,
+                score,
+              };
+              dailyHistory = [dailyEntry, ...dailyHistory].slice(0, 30);
+              lastDailyDate = dayIndex;
+            }
+            const pab = { ...(m.perArchetypeBest ?? {}) };
+            pab[archetypeId] = Math.max(pab[archetypeId] ?? 0, s.floorReached);
+            const newAchievements = evaluateAchievements(s, { ...m, perArchetypeBest: pab }, m.ascensionLevel ?? 0);
+            const achievements = [...(m.achievements ?? []), ...newAchievements];
+            // Boss Rush: record a best-time if the run cleared. Skip
+            // writes for incomplete runs so a failed attempt doesn't
+            // shadow a real victory.
+            let bossRushBestSeconds = m.bossRushBestSeconds;
+            let bossRushBestFloor = m.bossRushBestFloor;
+            if (s.bossRush && s.bossRushCleared && (s.runTimerSeconds ?? Infinity) > 0) {
+              const t = Math.floor(s.runTimerSeconds ?? 0);
+              if (bossRushBestSeconds == null || t < bossRushBestSeconds) {
+                bossRushBestSeconds = t;
+              }
+            }
+            // Partial-credit: any Boss Rush attempt (failed or cleared)
+            // updates bossRushBestFloor so the menu shows F30 instead
+            // of NEW after a floor-30 death.
+            if (s.bossRush) {
+              if (bossRushBestFloor == null || s.floorReached > bossRushBestFloor) {
+                bossRushBestFloor = s.floorReached;
+              }
+            }
+            // Time Attack: composite score = floor × 1000 + bosses × 500
+            // − floor(seconds / 10). Saves the higher score regardless of
+            // whether the run cleared (a tall + slow Magus run can still
+            // top a fast + shallow Star run).
+            let timeAttackBestScore = m.timeAttackBestScore;
+            let timeAttackBestFloor = m.timeAttackBestFloor;
+            if (runModeRef.current === 'timeAttack') {
+              const seconds = Math.floor(s.runTimerSeconds ?? 0);
+              const score = s.floorReached * 1000
+                + s.bossesDefeated * 500
+                - Math.floor(seconds / 10);
+              if (timeAttackBestScore == null || score > timeAttackBestScore) {
+                timeAttackBestScore = score;
+                timeAttackBestFloor = s.floorReached;
+              }
+            }
+            return {
+              ...m,
+              runHistory: history,
+              perArchetypeBest: pab,
+              achievements,
+              dailyHistory,
+              lastDailyDate,
+              bossRushBestSeconds,
+              bossRushBestFloor,
+              timeAttackBestScore,
+              timeAttackBestFloor,
+            };
+          });
+          runModeRef.current = 'standard';
           saveResume(null);
           setResumeAvailable(false);
           setScreen('gameOver');
         },
         onFloorChange: (n) => {
-          // Update resume floor checkpoint
-          saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
+          // Update resume floor checkpoint — skipped for Daily Runs,
+          // Boss Rush, and Time Attack so a player can't reload mid-run
+          // to retry the same seed / shave time off their best score.
+          if (runModeRef.current === 'standard') {
+            saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
+          }
         },
         onCodexUnlock: (id) => {
           setMeta((m) => {
@@ -241,6 +399,9 @@ export function App(): JSX.Element {
           setPreviousScreen('game');
           setScreen('bossIntro');
         },
+        onTutorialComplete: () => {
+          setMeta((m) => ({ ...m, seenTutorial: true }));
+        },
       });
       engineRef.current = engine;
       audio.unlock();
@@ -251,6 +412,9 @@ export function App(): JSX.Element {
         reducedParticles: settings.reducedParticles,
         startingFloor,
         runSeed,
+        bossRushMode: mode === 'bossRush',
+        mode,
+        skipTutorial: settings.skipTutorial,
       });
     }, 30);
   }, [meta, settings.reducedParticles]);
@@ -263,18 +427,21 @@ export function App(): JSX.Element {
     setHud(null);
   }, []);
 
-  // Pause behaviour
+  // Pause behaviour. Includes the rotate-device overlay — if the player
+  // tilts back to portrait mid-fight, freeze the world so they don't
+  // come back to a dead character.
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
     engine.setPaused(
-      screen === 'pause' || screen === 'settings' || screen === 'controllerTest'
+      isPortrait
+      || screen === 'pause' || screen === 'settings' || screen === 'controllerTest'
       || screen === 'map' || screen === 'gameOver'
       || screen === 'codex' || screen === 'epilogue' || screen === 'cinematics'
       || screen === 'tabula' || screen === 'newRunIntro' || screen === 'bossIntro'
       || screen === 'ending'
     );
-  }, [screen]);
+  }, [screen, isPortrait]);
 
   // Reduced particles toggle should propagate live
   useEffect(() => {
@@ -329,9 +496,40 @@ export function App(): JSX.Element {
           resumeAvailable={resumeAvailable}
           codexUnlocked={meta.unlockedCodex.length}
           codexTotal={CODEX.length}
+          meta={meta}
+          lastArchetype={lastArchetype}
+          dailyAttemptedToday={(meta.lastDailyDate ?? -1) >= Math.floor(Date.now() / 86_400_000)}
+          dailyArchetypeName={(() => {
+            const day = Math.floor(Date.now() / 86_400_000);
+            return ARCHETYPES[day % ARCHETYPES.length].name;
+          })()}
+          bossRushUnlocked={(meta.ogdoadReached ?? 0) >= 1}
+          bossRushBestSeconds={meta.bossRushBestSeconds}
+          bossRushBestFloor={meta.bossRushBestFloor}
+          timeAttackBestScore={meta.timeAttackBestScore}
           onCodex={() => { setPreviousScreen('menu'); setScreen('codex'); }}
           onCinematics={() => setScreen('cinematics')}
           onNewRun={() => setScreen('archetype')}
+          onDailyRun={() => {
+            const day = Math.floor(Date.now() / 86_400_000);
+            const arch = ARCHETYPES[day % ARCHETYPES.length].id;
+            startRun(arch, { runSeed: day, mode: 'daily' });
+          }}
+          onBossRush={() => {
+            // Boss Rush routes through archetype select so the player
+            // can pick the kit they want to speed-clear with. The
+            // archetype's signature ultimate is what makes a Boss Rush
+            // attempt feel different — surface that choice instead of
+            // forcing the last-played pick.
+            setPendingBossRush(true);
+            setScreen('archetype');
+          }}
+          onTimeAttack={() => {
+            // Time Attack routes through archetype select so the player
+            // can pick the kit they want to speed-run with.
+            setPendingTimeAttack(true);
+            setScreen('archetype');
+          }}
           onContinue={() => {
             const r = loadResume();
             if (!r) { setScreen('archetype'); return; }
@@ -347,16 +545,46 @@ export function App(): JSX.Element {
       {screen === 'archetype' && (
         <ArchetypeSelect
           lastArchetype={lastArchetype}
-          onSelect={(id) => startRun(id)}
-          onBack={() => setScreen('menu')}
+          onSelect={(id) => {
+            if (pendingBossRush) {
+              setPendingBossRush(false);
+              startRun(id, { mode: 'bossRush' });
+            } else if (pendingTimeAttack) {
+              setPendingTimeAttack(false);
+              startRun(id, { mode: 'timeAttack' });
+            } else {
+              startRun(id);
+            }
+          }}
+          onBack={() => {
+            setPendingBossRush(false);
+            setPendingTimeAttack(false);
+            setScreen('menu');
+          }}
         />
       )}
 
       {showCanvas && hud && (
-        <HUD hud={hud} input={inputRef.current} />
+        <HUD
+          hud={hud}
+          input={inputRef.current}
+          onShopBuy={(idx) => engineRef.current?.shopBuyAt(idx)}
+          onShopClose={() => engineRef.current?.shopClose()}
+        />
       )}
 
+      {/* Touch overlay rule:
+        * - Always honour the user's settings.touchControls toggle.
+        * - Hide when a controller has produced ANY input this session
+        *   (controllerActive). This was the iPad pain point — touch
+        *   buttons stayed onscreen even after pairing a controller
+        *   because inputMethod didn't flip until first button press.
+        * - Otherwise, render on touch devices unless the current input
+        *   method is explicitly "controller" (keyboard users still see
+        *   touch on a hybrid laptop in case they tap the screen).
+        */}
       {screen === 'game' && settings.touchControls && inputRef.current && hud &&
+        !hud.controllerActive &&
         (hud.inputMethod === 'touch' || (isTouchDevice && hud.inputMethod !== 'controller')) && (
         <TouchControls input={inputRef.current} />
       )}
@@ -405,6 +633,10 @@ export function App(): JSX.Element {
           summary={summary}
           bestFloor={bestFloor}
           essenceTotal={essence}
+          mode={runModeRef.current}
+          bossRushBestSeconds={meta.bossRushBestSeconds}
+          bossRushBestFloor={meta.bossRushBestFloor}
+          timeAttackBestScore={meta.timeAttackBestScore}
           onNewRun={() => {
             stopRun();
             setScreen('archetype');
@@ -422,6 +654,7 @@ export function App(): JSX.Element {
           essence={essence}
           meta={meta}
           onSpend={onSpendMeta}
+          onSetAscension={(level) => setMeta((m) => ({ ...m, ascensionLevel: level }))}
           onBack={() => setScreen('menu')}
         />
       )}

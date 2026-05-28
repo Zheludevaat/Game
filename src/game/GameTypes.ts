@@ -1,6 +1,14 @@
 import { GamepadMap } from './input/controlMappings';
+import { AppliesStatus } from './data/statusEffects';
 
 export type ArchetypeId = 'magus' | 'hermit' | 'star';
+
+/** Run mode — picks the persistence + scoring + resume branch.
+ *  'standard'   — normal run, writes to runHistory + resume.
+ *  'daily'      — seeded by UTC day; writes to dailyHistory.
+ *  'bossRush'   — boss-floor gauntlet; writes bestSeconds + bestFloor.
+ *  'timeAttack' — normal run with composite score; writes timeAttackBest. */
+export type RunMode = 'standard' | 'daily' | 'bossRush' | 'timeAttack';
 
 export interface ArchetypeDef {
   id: ArchetypeId;
@@ -23,6 +31,22 @@ export interface ArchetypeDef {
     dashCooldown: number;
     manaRegen: number; // per second
   };
+  /** Signature ability — one per archetype, fires on the ultimate input. */
+  ultimate: UltimateDef;
+}
+
+export type UltimateId = 'wordOfPower' | 'lanternFlare' | 'astralStep';
+
+export interface UltimateDef {
+  id: UltimateId;
+  name: string;
+  glyph: string;
+  /** Seconds between casts. Tracked on PlayerState.ultimateCd. */
+  cooldown: number;
+  /** Short tooltip surfacing the effect — shown on the HUD ring + select screens. */
+  description: string;
+  /** Accent colour for the ring + particles. */
+  colour: string;
 }
 
 export type RelicId =
@@ -37,7 +61,13 @@ export type RelicId =
   | 'roseCross'
   | 'sulfurHeart'
   | 'chaliceOfLuna'
-  | 'keyOfTheGate';
+  | 'keyOfTheGate'
+  | 'wormwoodVial'
+  | 'saturnRing'
+  | 'pulseHeart'
+  | 'brassEar'
+  | 'echoChalice'
+  | 'midasInverse';
 
 export interface RelicDef {
   id: RelicId;
@@ -51,7 +81,12 @@ export type WeaponId =
   | 'boneCleaver'
   | 'ironHalberd'
   | 'twinSickles'
-  | 'ashenGreatsword';
+  | 'ashenGreatsword'
+  | 'ironHook'
+  | 'tridentOfBrass'
+  | 'crystallizedTear'
+  | 'serpentCoil'
+  | 'sunDisc';
 
 export type WeaponSwingType = 'thrust' | 'arc' | 'lunge' | 'flurry' | 'overhead';
 
@@ -68,6 +103,14 @@ export interface WeaponDef {
   arcHalf: number;
   knockback: number;
   hits: number;
+  /** Optional status effect applied on melee hit. */
+  appliesStatus?: AppliesStatus;
+  /** If true, the weapon's "knockback" pulls the enemy toward the player
+   *  instead of away. Reads as a chain/hook. */
+  pullsToward?: boolean;
+  /** Heal player by this many HP for each enemy killed by this weapon
+   *  (capped at maxHp). Sacred-flame / sun-disc style. */
+  healOnKill?: number;
   // visual
   swingColour: string;
   hiltColour: string;
@@ -81,9 +124,16 @@ export type SpellId =
   | 'sparkBolt'
   | 'frostLance'
   | 'hellfireOrb'
-  | 'thunderSigil';
+  | 'thunderSigil'
+  | 'frostbiteRay'
+  | 'sacredFlame'
+  | 'eclipseOrb'
+  | 'wrathSplinter'
+  | 'mirrorSigil'
+  | 'hermesWake'
+  | 'boneFamiliar';
 
-export type SpellKind = 'singleProjectile' | 'spread' | 'sigil';
+export type SpellKind = 'singleProjectile' | 'spread' | 'sigil' | 'reflectBuff' | 'aura' | 'summon';
 export type SpellVisual = 'orb' | 'shard' | 'flame' | 'sigil';
 
 export interface SpellDef {
@@ -105,6 +155,23 @@ export interface SpellDef {
   explodeRadius: number;
   sigilDelay?: number;
   sigilRange?: number;
+  /** Optional status effect applied on projectile / sigil hit. */
+  appliesStatus?: AppliesStatus;
+  /** Heal player by this many HP for each enemy killed by this spell. */
+  healOnKill?: number;
+  /** Charges granted by a reflectBuff spell — N enemy projectiles will
+   *  bounce back to the source while the buff is up. Ignored for other
+   *  kinds. */
+  reflectCharges?: number;
+  /** Duration of a self / buff-style cast (e.g. Mirror Sigil's window). */
+  buffDuration?: number;
+  /** Aura tick interval — how often a 'aura' spell applies damage to
+   *  enemies in radius. Smaller = faster ticks. */
+  auraTickEvery?: number;
+  /** Summoned familiar: orbit distance from the player. */
+  familiarOrbitRadius?: number;
+  /** Summoned familiar: seconds between its homing bolt attacks. */
+  familiarAttackEvery?: number;
   projColour: string;
   trailColour: string;
   projVisual: SpellVisual;
@@ -118,7 +185,10 @@ export type RoomType =
   | 'locked'
   | 'exit'
   | 'miniBoss'
-  | 'boss';
+  | 'boss'
+  | 'trap'
+  | 'sanctuary'
+  | 'secret';
 
 export interface RoomGrid {
   x: number;
@@ -147,6 +217,10 @@ export interface Room {
   hasShrine: boolean;
   shrineUsed: boolean;
   shrineKind?: ShrineKind;
+  /** For sanctuary rooms — id of the NpcDef the engine should spawn.
+   *  Empty / undefined means "pick by sphere via npcForSphere"; a
+   *  specific id (e.g. 'mendicant') overrides the sphere wanderer. */
+  sanctuaryNpcId?: string;
   name: string;
   // procedural decor seed
   seed: number;
@@ -159,7 +233,10 @@ export type ShrineKind =
   | 'conjunction'
   | 'fermentation'
   | 'distillation'
-  | 'coagulation';
+  | 'coagulation'
+  | 'cursed'
+  | 'library'
+  | 'puzzle';
 
 export interface Floor {
   number: number;
@@ -178,6 +255,10 @@ export interface SettingsState {
   touchControls: boolean;
   pixelScale: 'auto' | '1' | '2' | '3' | '4';
   reducedParticles: boolean;
+  /** Skip the input-aware first-run tutorial prompts on every new run.
+   *  Returning players who reset their save can opt out instead of
+   *  sitting through "Hold WASD to move" again. */
+  skipTutorial: boolean;
   gamepadMap: GamepadMap;
 }
 
@@ -193,6 +274,58 @@ export interface MetaState {
   bossesSeen: string[];           // sphere ids whose Warden intro film has played
   seenEnding: boolean;            // "has seen the Eighth Sphere film"
   ogdoadReached: number; // count of times the player has reached the Eighth Sphere
+  /** First-run gameplay tutorial — ghost prompts on floor 1 room 1. */
+  seenTutorial?: boolean;
+  /** Per-run history (most recent first, cap 20). */
+  runHistory?: RunHistoryEntry[];
+  /** Best floor reached by each archetype id. */
+  perArchetypeBest?: Partial<Record<ArchetypeId, number>>;
+  /** Achievements unlocked over the lifetime of the save. */
+  achievements?: string[];
+  /** Current ascension level (0 = standard, 1..5 unlocks after each Ogdoad). */
+  ascensionLevel?: number;
+  /** Last UTC day-index (Date.now() / 86_400_000) the player attempted
+   *  the Daily Run. Cleared on save reset. */
+  lastDailyDate?: number;
+  /** Most-recent daily attempt records (cap 30, newest first). */
+  dailyHistory?: DailyHistoryEntry[];
+  /** Best Boss Rush clear time in seconds. Set on a full eight-boss
+   *  clear; undefined if never cleared. Lower is better. */
+  bossRushBestSeconds?: number;
+  /** Highest floor reached across all Boss Rush attempts, including
+   *  failed runs. Surfaces partial progress on the menu badge so a
+   *  floor-50 death feels recognisably different from a floor-10 death. */
+  bossRushBestFloor?: number;
+  /** Best Time Attack score (composite: floor + bosses + time bonus).
+   *  Higher is better. Undefined if never attempted. */
+  timeAttackBestScore?: number;
+  /** floorReached on the run that set timeAttackBestScore — surfaced
+   *  on the menu as a sanity-check next to the raw score. */
+  timeAttackBestFloor?: number;
+}
+
+export interface DailyHistoryEntry {
+  /** UTC day-index — floor(Date.now() / 86_400_000) on the day of the attempt. */
+  dayIndex: number;
+  /** Date.now() captured at run-end for display ordering. */
+  date: number;
+  archetype: ArchetypeId;
+  floorReached: number;
+  bossesDefeated: number;
+  essenceCollected: number;
+  /** Composite score — floor×1000 + essence + bosses×500. Higher is better. */
+  score: number;
+  ogdoadReached: boolean;
+}
+
+export interface RunHistoryEntry {
+  date: number;            // Date.now() at run end
+  archetype: ArchetypeId;
+  floorReached: number;
+  bossesDefeated: number;
+  essenceCollected: number;
+  ascensionLevel: number;
+  deathCause?: string;     // visualKey of the killer, or 'descend' for an Ogdoad clear
 }
 
 export interface SaveState {

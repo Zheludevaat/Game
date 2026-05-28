@@ -1,23 +1,106 @@
 import { RunSummary } from '../game/GameEngine';
+import { RunMode } from '../game/GameTypes';
 import { RELICS } from '../game/data/relics';
 import { WEAPONS } from '../game/data/weapons';
 import { SPELLS } from '../game/data/spells';
 import { CODEX_BY_ID } from '../game/data/codex';
-import { SPHERE_BY_ID } from '../game/data/spheres';
+import { SPHERE_BY_ID, SphereId } from '../game/data/spheres';
+import { BOSSES } from '../game/data/bosses';
 import { PixelButton } from './PixelButton';
 import { PixelPanel } from './PixelPanel';
 import { useMenuNav } from './useMenuNav';
+
+// Human-readable name for a death-cause string. Bosses pull from
+// BOSSES.displayName, regular enemies use the hand-keyed table, and
+// the hazard:* / projectile / dot / sigil tokens get prose summaries
+// so the "Slain by …" line never says a raw engine identifier.
+const ENEMY_NAMES: Record<string, string> = {
+  lesserShade: 'a Lesser Shade',
+  mercuryImp: 'a Mercury Imp',
+  saltGolem: 'a Salt Golem',
+  lunarWisp: 'a Lunar Wisp',
+  saturnKnight: 'a Saturn Knight',
+  serpentOfBrass: 'the Serpent of Brass',
+  martyrBeacon: 'a Martyr Beacon',
+  umbralStalker: 'an Umbral Stalker',
+  mirrorTwin: 'a Mirror Twin',
+  kronosianHerald: 'a Kronosian Herald',
+  heliokrator: 'the Heliokrator',
+  nikethron: 'the Nikethron',
+};
+
+function deathCauseLabel(cause: string | undefined, sphereId: SphereId | undefined): string | null {
+  if (!cause || cause === 'descend') return null;
+  // Boss visualKeys flow first — Wardens get their full title.
+  for (const sid of Object.keys(BOSSES) as SphereId[]) {
+    if (BOSSES[sid].visualKey === cause) return BOSSES[sid].displayName;
+  }
+  if (ENEMY_NAMES[cause]) {
+    const sphere = sphereId ? SPHERE_BY_ID[sphereId] : null;
+    if (sphere) return `${ENEMY_NAMES[cause]} in the Sphere of ${sphere.name}`;
+    return ENEMY_NAMES[cause];
+  }
+  if (cause.startsWith('hazard:')) {
+    const kind = cause.slice(7);
+    const pretty: Record<string, string> = {
+      blade: 'a spinning blade trap',
+      solar: 'a solar flare',
+      lightning: 'a sigil of lightning',
+      vine: 'a thorned root',
+    };
+    return pretty[kind] ?? 'a sphere hazard';
+  }
+  if (cause === 'projectile') return 'an enemy projectile';
+  if (cause === 'sigil') return 'an enemy sigil';
+  if (cause === 'dot') return 'lingering poison and flame';
+  return null;
+}
 
 interface Props {
   summary: RunSummary;
   bestFloor: number;
   essenceTotal: number;
+  mode?: RunMode;
+  /** Best Boss Rush time in seconds (clean clear). Omitted for non-bossRush. */
+  bossRushBestSeconds?: number;
+  /** Highest Boss Rush floor reached, even on a failed run. */
+  bossRushBestFloor?: number;
+  /** Best Time Attack composite score. Omitted for non-timeAttack. */
+  timeAttackBestScore?: number;
   onNewRun: () => void;
   onMenu: () => void;
   onCodex: () => void;
 }
 
-export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onMenu, onCodex }: Props): JSX.Element {
+function modeBestLine(
+  mode: RunMode | undefined,
+  bestFloor: number,
+  bossRushBestSeconds?: number,
+  bossRushBestFloor?: number,
+  timeAttackBestScore?: number,
+): JSX.Element {
+  if (mode === 'bossRush') {
+    if (bossRushBestSeconds != null) {
+      const m = Math.floor(bossRushBestSeconds / 60);
+      const s = bossRushBestSeconds % 60;
+      return <>Boss Rush best: <span className="gold-text">{m}:{String(s).padStart(2, '0')}</span></>;
+    }
+    return <>Boss Rush best floor: <span className="gold-text">F{bossRushBestFloor ?? 0}</span></>;
+  }
+  if (mode === 'timeAttack') {
+    return <>Time Attack best: <span className="gold-text">★ {timeAttackBestScore ?? 0}</span></>;
+  }
+  if (mode === 'daily') {
+    return <>Daily run — see history</>;
+  }
+  return <>Best Floor: <span className="gold-text">{bestFloor}</span></>;
+}
+
+export function GameOverScreen({
+  summary, bestFloor, essenceTotal,
+  mode, bossRushBestSeconds, bossRushBestFloor, timeAttackBestScore,
+  onNewRun, onMenu, onCodex,
+}: Props): JSX.Element {
   const items = [
     { onActivate: onNewRun },
     { onActivate: onCodex },
@@ -29,9 +112,22 @@ export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onM
     .filter(Boolean);
   const title = summary.ogdoadReached ? 'The Eighth Sphere' : 'The Lamps Dim';
   const subtitle = summary.ogdoadReached ? 'The soul, made bare, returns' : 'The initiate falls — what is learned, remains';
+  const slainBy = deathCauseLabel(summary.deathCause, summary.deathSphereId);
   return (
     <div className="menu-screen with-bg">
       <PixelPanel title={title} subtitle={subtitle} width={560}>
+        {slainBy && (
+          <div
+            className="crimson-text"
+            style={{
+              marginTop: 8, marginBottom: 4,
+              fontSize: 12, letterSpacing: '0.16em',
+              textAlign: 'center',
+            }}
+          >
+            Slain by {slainBy}
+          </div>
+        )}
         <div className="gameover-grid" style={{ marginTop: 8 }}>
           <span className="stat-name">Archetype</span><span className="stat-value">{summary.archetype.name}</span>
           <span className="stat-name">Floor Reached</span><span className="stat-value">{summary.floorReached}</span>
@@ -73,9 +169,14 @@ export function GameOverScreen({ summary, bestFloor, essenceTotal, onNewRun, onM
         </div>
         <div className="pixel-divider" />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, letterSpacing: '0.2em' }}>
-          <span>Best Floor: <span className="gold-text">{bestFloor}</span></span>
+          <span>{modeBestLine(mode, bestFloor, bossRushBestSeconds, bossRushBestFloor, timeAttackBestScore)}</span>
           <span>Total Essence: <span className="gold-text">{essenceTotal}</span></span>
         </div>
+        {mode === 'timeAttack' && summary.runTimerSeconds != null && (
+          <div style={{ marginTop: 6, textAlign: 'center', fontSize: 13, letterSpacing: '0.2em', color: '#ff7a5a' }}>
+            FINAL TIME — {String(Math.floor(summary.runTimerSeconds / 60)).padStart(2, '0')}:{String(Math.floor(summary.runTimerSeconds % 60)).padStart(2, '0')}
+          </div>
+        )}
         <div className="pixel-divider" />
         <div style={{ fontSize: 12, letterSpacing: '0.18em', marginBottom: 6 }} className="glow-text">SPHERES VISITED</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
