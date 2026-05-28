@@ -1,4 +1,9 @@
 import { PALETTE } from '../constants';
+import type { SphereDef } from '../data/spheres';
+import {
+  drawCrack, drawRivet, drawMicroRune, drawMossPatch, drawSpiral,
+  drawTideRipple, drawPetalCluster, drawSlash, drawCog, drawStarburst,
+} from './PixelArtUtils';
 
 export type PixelMatrix = string[]; // each string is a row, characters reference palette key
 
@@ -747,6 +752,10 @@ export function drawFloorTile(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, size: number,
   seed: number,
+  /** Optional per-sphere visual data. When omitted the tile renders
+   *  with the global PALETTE defaults — used by menu / cinematic
+   *  contexts that don't carry a sphere. */
+  sphere?: SphereDef,
 ): void {
   const h = tileHash(x, y, seed);
   // Base tile — alternating large slabs with subtle banding
@@ -763,37 +772,77 @@ export function drawFloorTile(
   ctx.fillRect(x, y + size - 1, size, 1);
   ctx.fillRect(x + size - 1, y, 1, size);
 
-  // Mortar / grout
-  ctx.fillStyle = PALETTE.floorCrack;
+  // Mortar / grout — per-sphere when available
+  const mortar = sphere?.floorMortar ?? PALETTE.floorCrack;
+  ctx.fillStyle = mortar;
   ctx.fillRect(x, y, size, 1);
   ctx.fillRect(x, y, 1, size);
 
-  // Occasional cracks
+  // Occasional cracks — Saturn doubles density, Moon halves
+  const motif = sphere?.floorMotif ?? null;
   const detail = (h >>> 8) & 0xff;
-  if (detail < 10) {
-    ctx.fillStyle = PALETTE.floorCrack;
-    ctx.fillRect(x + 3, y + 5, 5, 1);
-    ctx.fillRect(x + 7, y + 6, 3, 1);
-    ctx.fillRect(x + 9, y + 7, 2, 1);
-  } else if (detail < 16) {
-    ctx.fillStyle = PALETTE.floorCrack;
-    ctx.fillRect(x + 4, y + size - 5, 6, 1);
-    ctx.fillRect(x + 6, y + size - 6, 1, 2);
+  const crackGate = motif === 'saturn-crack' ? 22
+                  : motif === 'lunar-tide'   ? 6
+                  : 16;
+  if (detail < crackGate) {
+    drawCrack(ctx, x + 3, y + 5, h >>> 4, mortar);
   }
 
-  // Rare gold inlay / mosaic star
+  // Per-sphere ornament — replaces the hardcoded teal rune + gold inlay
+  // with sphere-themed micro-decals. Gated rare (6-12 % of tiles) so
+  // the floor reads as textured-but-not-cluttered.
   const ornament = (h >>> 16) & 0xff;
-  if (ornament < 6) {
-    const cx = x + size / 2, cy = y + size / 2;
-    ctx.fillStyle = PALETTE.gold3;
-    ctx.fillRect(cx - 2, cy - 1, 4, 2);
-    ctx.fillRect(cx - 1, cy - 2, 2, 4);
-    ctx.fillStyle = PALETTE.gold;
-    ctx.fillRect(cx - 1, cy - 1, 2, 2);
-  } else if (ornament < 12) {
-    // tiny rune mark
-    ctx.fillStyle = 'rgba(108, 246, 229, 0.18)';
-    ctx.fillRect(x + size / 2 - 1, y + size / 2 - 1, 2, 2);
+  const cx = x + size / 2, cy = y + size / 2;
+  if (!motif) {
+    // Legacy fallback — keep the original behaviour for menu / cinematic
+    // surfaces that don't pass a sphere through.
+    if (ornament < 6) {
+      ctx.fillStyle = PALETTE.gold3;
+      ctx.fillRect(cx - 2, cy - 1, 4, 2);
+      ctx.fillRect(cx - 1, cy - 2, 2, 4);
+      ctx.fillStyle = PALETTE.gold;
+      ctx.fillRect(cx - 1, cy - 1, 2, 2);
+    } else if (ornament < 12) {
+      ctx.fillStyle = 'rgba(108, 246, 229, 0.18)';
+      ctx.fillRect(x + size / 2 - 1, y + size / 2 - 1, 2, 2);
+    }
+    return;
+  }
+
+  if (ornament >= 14) return; // most tiles stay clean
+
+  // Sphere-specific motif. Each motif keeps the rare-gate, just with
+  // a different glyph so the floor identity reads at room scale.
+  switch (motif) {
+    case 'lunar-tide':
+      drawTideRipple(ctx, x + 3, cy, 'rgba(168, 192, 232, 0.35)');
+      break;
+    case 'mercury-rivet':
+      drawRivet(ctx, x + 2, y + 2, '#c8983f');
+      drawRivet(ctx, x + size - 5, y + size - 5, '#c8983f');
+      break;
+    case 'venus-petal':
+      drawPetalCluster(ctx, cx - 1, cy - 1, 'rgba(255, 155, 193, 0.45)');
+      break;
+    case 'sun-spiral':
+      if (ornament < 6) drawSpiral(ctx, cx, cy, '#c8983f');
+      else              drawMicroRune(ctx, cx - 1, cy - 1, h, 'rgba(244, 210, 122, 0.35)');
+      break;
+    case 'mars-scar':
+      drawSlash(ctx, x + 4, y + 4, h, 'rgba(122, 16, 32, 0.55)');
+      break;
+    case 'jupiter-cog':
+      if (ornament < 6) drawCog(ctx, cx - 2, cy - 2, 'rgba(200, 152, 63, 0.65)');
+      else              drawMicroRune(ctx, cx - 1, cy - 1, h, 'rgba(200, 152, 63, 0.45)');
+      break;
+    case 'saturn-crack':
+      // Crack already amplified above; add the moss patch in the rare
+      // ornament slot so the decay reads as living, not just broken.
+      drawMossPatch(ctx, x + 3, y + size - 4, h, 'rgba(90, 139, 80, 0.55)');
+      break;
+    case 'ogdoad-star':
+      drawStarburst(ctx, cx, cy, 'rgba(255, 247, 214, 0.65)');
+      break;
   }
 }
 
@@ -801,9 +850,10 @@ export function drawWallTile(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, size: number,
   topEdge: boolean,
-  /** Sphere accent colour. When supplied, the cap-stone strip is tinted
-   * toward this hue so each floor reads as its own sphere at a glance. */
-  tint?: string | null,
+  /** Optional sphere — when supplied, cap-stone strip tints toward
+   *  `sphere.accent` and the rare carved sigil pulls from
+   *  `sphere.wallSigil` + `sphere.wallMotif`. */
+  sphere?: SphereDef,
 ): void {
   // Base stone
   ctx.fillStyle = PALETTE.wallDark;
@@ -813,7 +863,7 @@ export function drawWallTile(
 
   // Highlight ridge on top (cap stones) — tinted by sphere when provided
   if (topEdge) {
-    ctx.fillStyle = tint ?? PALETTE.wallTop;
+    ctx.fillStyle = sphere?.accent ?? PALETTE.wallTop;
     ctx.fillRect(x, y, size, 3);
     ctx.fillStyle = '#7a559e';
     ctx.fillRect(x + 1, y + 1, size - 2, 1);
@@ -835,9 +885,55 @@ export function drawWallTile(
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(x + 4 + (h & 3), y + 3, 2, 1);
   } else if (h < 48) {
-    // tiny carved sigil — soft gold dot
-    ctx.fillStyle = 'rgba(244, 210, 122, 0.18)';
-    ctx.fillRect(x + size / 2 - 1, y + size / 2 + 3, 2, 1);
+    // Carved sigil — per-sphere motif when the floor passes a sphere
+    // through, otherwise the legacy gold dot. Kept rare (h < 48) so
+    // walls read as occasionally-carved stone, not a tapestry.
+    const sx = x + size / 2 - 1;
+    const sy = y + size / 2 + 1;
+    const motif = sphere?.wallMotif ?? null;
+    const colour = sphere?.wallSigil ?? '#f4d27a';
+    const alpha = 'rgba(244, 210, 122, 0.22)'; // fallback
+    if (!motif) {
+      ctx.fillStyle = alpha;
+      ctx.fillRect(sx, sy + 2, 2, 1);
+    } else {
+      switch (motif) {
+        case 'lunar-tide':
+          ctx.fillStyle = colour;
+          ctx.fillRect(sx,     sy, 1, 1);
+          ctx.fillRect(sx + 1, sy + 1, 1, 1);
+          ctx.fillRect(sx,     sy + 2, 1, 1);
+          break;
+        case 'mercury-rivet':
+          drawRivet(ctx, sx - 1, sy - 1, colour);
+          break;
+        case 'venus-petal':
+          drawPetalCluster(ctx, sx, sy, colour);
+          break;
+        case 'sun-spiral':
+          ctx.fillStyle = colour;
+          ctx.fillRect(sx,     sy,     1, 1);
+          ctx.fillRect(sx + 1, sy,     1, 1);
+          ctx.fillRect(sx + 1, sy + 1, 1, 1);
+          ctx.fillRect(sx,     sy + 1, 1, 1);
+          break;
+        case 'mars-scar':
+          drawSlash(ctx, sx - 1, sy - 1, h, colour);
+          break;
+        case 'jupiter-cog':
+          ctx.fillStyle = colour;
+          ctx.fillRect(sx,     sy,     2, 1);
+          ctx.fillRect(sx - 1, sy,     1, 1);
+          ctx.fillRect(sx + 2, sy,     1, 1);
+          break;
+        case 'saturn-crack':
+          drawMossPatch(ctx, sx - 1, sy, h, colour);
+          break;
+        case 'ogdoad-star':
+          drawStarburst(ctx, sx, sy + 1, colour);
+          break;
+      }
+    }
   }
 
   // Bottom shadow line to ground the wall

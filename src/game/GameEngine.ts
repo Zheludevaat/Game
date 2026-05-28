@@ -4951,27 +4951,27 @@ export class GameEngine {
     // colour shift toward the current sphere's accent. Cheap palette
     // pass; every floor reads as its own sphere at a glance.
     const sphere = sphereForFloor(this.floor.number);
-    const wallTint = sphere.accent;
     const torchTint = makeTorchTint(sphere);
-    // floor
+    // floor — per-sphere mortar / motif via the sphere ref
     for (let y = 0; y < ROOM_H; y += TILE) {
       for (let x = 0; x < ROOM_W; x += TILE) {
         const t = (x + y * 7 + this.currentRoom.seed) & 0xffff;
-        drawFloorTile(ctx, x, y, TILE, t);
+        drawFloorTile(ctx, x, y, TILE, t, sphere);
       }
     }
     // Occult circle in arena rooms
     if (this.currentRoom.type === 'enemy' || this.currentRoom.type === 'miniBoss' || this.currentRoom.type === 'boss' || this.currentRoom.type === 'shrine') {
       this.drawOccultCircle(ROOM_W / 2, ROOM_H / 2, this.currentRoom.type === 'boss' ? 100 : 60);
     }
-    // walls (top and bottom)
+    // walls (top and bottom) — sphere now also picks the carved-sigil
+    // motif inside drawWallTile, on top of the cap-stone accent tint.
     for (let x = 0; x < ROOM_W; x += TILE) {
-      drawWallTile(ctx, x, 0, TILE, true, wallTint);
-      drawWallTile(ctx, x, ROOM_H - TILE, TILE, false, wallTint);
+      drawWallTile(ctx, x, 0, TILE, true, sphere);
+      drawWallTile(ctx, x, ROOM_H - TILE, TILE, false, sphere);
     }
     for (let y = TILE; y < ROOM_H - TILE; y += TILE) {
-      drawWallTile(ctx, 0, y, TILE, false, wallTint);
-      drawWallTile(ctx, ROOM_W - TILE, y, TILE, false, wallTint);
+      drawWallTile(ctx, 0, y, TILE, false, sphere);
+      drawWallTile(ctx, ROOM_W - TILE, y, TILE, false, sphere);
     }
     // Doors
     this.drawDoors();
@@ -5610,9 +5610,12 @@ export class GameEngine {
     // longer crushes the floor's brightness. The room reads as a lit
     // dungeon with a faint cool tint; the light pools below add tiny
     // localised warmth at torches / pickups, not big white halos.
+    // Per-sphere ambient: Sun bathes warm-gold, Saturn cold-violet,
+    // Moon cool-silver — without this every floor reads as the same
+    // lavender room regardless of palette.
     ctx.save();
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = 'rgb(215, 200, 230)';
+    ctx.fillStyle = sphere.ambientTint;
     ctx.fillRect(0, 0, ROOM_W, ROOM_H);
     ctx.restore();
 
