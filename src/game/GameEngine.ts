@@ -618,11 +618,12 @@ export class GameEngine {
     this.bossBannerTimer = 0;
     this.roomClearEffects = [];
     this.cbs.onFloorChange(n);
+
+    const sph = sphereForFloor(n);
+    this.currentSphere = sph;
+
     const startRoom = this.floor.rooms.find((r) => r.id === this.floor.startRoomId)!;
     this.enterRoom(startRoom, { x: ROOM_W / 2, y: ROOM_H / 2 });
-
-    // Narrative — name the floor by its planetary sphere.
-    const sph = sphereForFloor(n);
     const isFirstReach = !this.summary.spheresVisited.includes(sph.id);
     if (isFirstReach) this.summary.spheresVisited.push(sph.id);
     const cycle = Math.floor((n - 1) / 7); // 0 = first ascent, 1 = second, …
@@ -685,6 +686,8 @@ export class GameEngine {
     this.camera.y = this.cameraDest.y;
     if (room.type === 'boss') {
       audio.sfx('bossWarn');
+      const sphere = sphereForFloor(this.floor.number);
+      audio.startBossMusic(sphere.id);
       this.bossBannerTimer = 2.2;
       this.camera.shakeT = 0.8;
       this.camera.shakeMag = 5;
@@ -693,7 +696,6 @@ export class GameEngine {
       // actually play (gated on MetaState.bossesSeen + settings).
       if (!this.bossIntroPlayedThisRun) {
         this.bossIntroPlayedThisRun = true;
-        const sphere = sphereForFloor(this.floor.number);
         this.cbs.onBossRoomEntered?.(sphere.id);
       }
     }
@@ -1665,8 +1667,8 @@ export class GameEngine {
 
   private updateWarden(e: Enemy, dt: number, n: Vec, d: number): void {
     if (e.phase == null) e.phase = 1;
-    if (e.phase === 1 && e.hp / e.maxHp < 0.6) { e.phase = 2; this.camera.shakeT = 0.6; this.camera.shakeMag = 4; audio.sfx('bossWarn'); }
-    if (e.phase === 2 && e.hp / e.maxHp < 0.3) { e.phase = 3; this.camera.shakeT = 0.6; this.camera.shakeMag = 5; audio.sfx('bossWarn'); }
+    if (e.phase === 1 && e.hp / e.maxHp < 0.6) { e.phase = 2; this.camera.shakeT = 0.6; this.camera.shakeMag = 4; audio.sfx('bossWarn'); audio.setBossPhase(2); }
+    if (e.phase === 2 && e.hp / e.maxHp < 0.3) { e.phase = 3; this.camera.shakeT = 0.6; this.camera.shakeMag = 5; audio.sfx('bossWarn'); audio.setBossPhase(3); }
 
     // Slow drift toward player but keep distance
     const target = 80;
@@ -2012,6 +2014,7 @@ export class GameEngine {
     if (e.isBoss) {
       this.summary.bossesDefeated += 1;
       audio.sfx('bossDeath');
+      audio.stopBossMusic();
       this.camera.shakeT = 1.0; this.camera.shakeMag = 6;
       // The Warden of this sphere has fallen — the soul surrenders its tribute.
       this.unlockCodex(`asc.${this.currentSphere.id}`);

@@ -97,7 +97,7 @@ export function App(): JSX.Element {
       audio.unlock();
       audio.setMusicVolume(settings.musicVolume);
       audio.setSfxVolume(settings.sfxVolume);
-      if (screen === 'menu' || screen === 'archetype' || screen === 'meta' || screen === 'howTo' || screen === 'settings' || screen === 'controllerTest') {
+      if (screen === 'tabula' || screen === 'menu' || screen === 'archetype' || screen === 'meta' || screen === 'howTo' || screen === 'settings' || screen === 'controllerTest') {
         audio.playMenuHum();
       }
     };
@@ -111,6 +111,45 @@ export function App(): JSX.Element {
       window.removeEventListener('gamepadconnected', handler);
     };
   }, [screen, settings.musicVolume, settings.sfxVolume]);
+
+  // --- Screen-based music ---
+  useEffect(() => {
+    switch (screen) {
+      case 'gameOver':
+        audio.playGameOverMusic();
+        break;
+      case 'prologue':
+        audio.playPrologueMusic();
+        break;
+      case 'epilogue':
+        audio.playEpilogueMusic();
+        break;
+      case 'codex':
+        audio.playCodexMusic();
+        break;
+      default: {
+        audio.stopGameOverMusic();
+        audio.stopPrologueMusic();
+        audio.stopEpilogueMusic();
+        audio.stopCodexMusic();
+        // Restart menu hum when navigating back to a menu-like screen
+        if (screen === 'tabula' || screen === 'menu' || screen === 'archetype' || screen === 'meta' || screen === 'howTo' || screen === 'settings' || screen === 'controllerTest' || screen === 'cinematics') {
+          audio.sfx('menu');
+          audio.playMenuHum();
+        }
+        break;
+      }
+    }
+  }, [screen]);
+
+  // --- Pause music ducking ---
+  useEffect(() => {
+    if (screen === 'pause') {
+      audio.duckMusic();
+    } else {
+      audio.unduckMusic();
+    }
+  }, [screen]);
 
   // --- Orientation detection ---
   useEffect(() => {
@@ -255,6 +294,8 @@ export function App(): JSX.Element {
     engineRef.current = null;
     inputRef.current = null;
     setHud(null);
+    audio.stopAmbience();
+    audio.stopBossMusic();
   }, []);
 
   // Pause behaviour
