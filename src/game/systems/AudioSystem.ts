@@ -248,7 +248,9 @@ export class AudioSystem {
       this.chorus.start();
 
       // Dark delay chain — long feedback through a lowpass filter into chamber verb.
-      this.darkDelay = new Tone.FeedbackDelay({ delayTime: '2n.', feedback: 0.15, wet: 0.5 });
+      // Use 4n (0.5s at 120bpm) — Tone.js internal maxDelay is 1s so dotted
+      // values like 2n. (1.5s) would be clamped and sound garbled.
+      this.darkDelay = new Tone.FeedbackDelay({ delayTime: '4n', feedback: 0.15, wet: 0.5 });
       this.darkFilter = new Tone.Filter({ frequency: 500, type: 'lowpass', rolloff: -24 });
       this.darkDelay.connect(this.darkFilter);
       this.darkFilter.connect(this.chamberReverb);
@@ -289,11 +291,22 @@ export class AudioSystem {
     this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + duration);
   }
 
+  /** Ramp musicGain back up after a stop-fade.
+   *  All stop methods schedule a ramp-to-silence at now+0.4 and dispose
+   *  old nodes at the cleanup timeout (now+0.45). We chain the ramp-up
+   *  to start AT or after the cleanup point so old and new audio never
+   *  overlap.  Do NOT call cancelScheduledValues here — that would
+   *  defeat the stop's fade-out and both old+new would play together.
+   *
+   *  IMPORTANT: must NOT use setValueAtTime here — that schedules an
+   *  absolute event that could fire minutes later during a boss phase
+   *  transition and kill all gain.  linearRampToValueAtTime is safe
+   *  because it defines a trajectory from the previous ramp's endpoint
+   *  (0.001 at stop.now+0.4) to the target volume at the later time. */
   private restoreMusicGain(duration = 0.5): void {
     if (!this.musicGain) return;
     const now = Tone.now();
-    this.musicGain.gain.cancelScheduledValues(now);
-    this.musicGain.gain.linearRampToValueAtTime(this.musicVolume, now + duration);
+    this.musicGain.gain.linearRampToValueAtTime(this.musicVolume, now + 0.45 + duration);
   }
 
   // ── Menu Hum ─────────────────────────────────────────────────────
