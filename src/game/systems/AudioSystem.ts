@@ -13,6 +13,7 @@ type Disposable = { dispose(): void };
 interface MelodyNote { time: string; note: string; dur: string; vel: number; }
 
 const hzToNote = (f: number): string => Tone.Frequency(f, 'hz').toNote();
+const transpose = (note: string, semitones: number): string => Tone.Frequency(note).transpose(semitones).toNote();
 
 // ── Per-sphere music configuration ──────────────────────────────────
 
@@ -216,6 +217,7 @@ export class AudioSystem {
   private bossMusicDisposables: Disposable[] = [];
   private cinematicDisposables: Disposable[] = [];
   private screenDisposables: Disposable[] = [];
+  private transportGeneration = 0;
 
   // ── Initialisation ───────────────────────────────────────────────
 
@@ -243,6 +245,7 @@ export class AudioSystem {
 
       // Chorus on the pad path for thickness.
       this.chorus = new Tone.Chorus({ frequency: 0.35, depth: 0.6, wet: 0.45 });
+      this.chorus.start();
 
       // Dark delay chain — long feedback through a lowpass filter into chamber verb.
       this.darkDelay = new Tone.FeedbackDelay({ delayTime: '2n.', feedback: 0.15, wet: 0.5 });
@@ -286,6 +289,13 @@ export class AudioSystem {
     this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + duration);
   }
 
+  private restoreMusicGain(duration = 0.5): void {
+    if (!this.musicGain) return;
+    const now = Tone.now();
+    this.musicGain.gain.cancelScheduledValues(now);
+    this.musicGain.gain.linearRampToValueAtTime(this.musicVolume, now + duration);
+  }
+
   // ── Menu Hum ─────────────────────────────────────────────────────
   //
   // 32-bar cycle at 56 BPM over Am-F-C-G (8 bars each).
@@ -298,6 +308,7 @@ export class AudioSystem {
     if (!this.unlocked || this.menuActive) return;
     this.menuActive = true;
     this.stopAmbience();
+    this.transportGeneration++;
 
     Tone.Transport.stop();
     Tone.Transport.position = 0;
@@ -576,19 +587,23 @@ export class AudioSystem {
   stopMenuHum(): void {
     if (!this.menuActive) return;
     this.menuActive = false;
+    const generation = this.transportGeneration;
+    const disposables = this.menuDisposables;
+    this.menuDisposables = [];
 
     // Crossfade: ramp musicGain down before disposing so the next
     // music state can ramp it back up over the same bus.
     this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
 
     const clean = () => {
-      Tone.Transport.cancel();
-      Tone.Transport.stop();
-      Tone.Transport.position = 0;
-      for (const d of this.menuDisposables) {
+      if (this.transportGeneration === generation) {
+        Tone.Transport.cancel();
+        Tone.Transport.stop();
+        Tone.Transport.position = 0;
+      }
+      for (const d of disposables) {
         try { d.dispose(); } catch { /* */ }
       }
-      this.menuDisposables = [];
     };
     setTimeout(clean, 450);
   }
@@ -600,6 +615,7 @@ export class AudioSystem {
     this.stopMenuHum();
     this.stopBossMusic();
     this.ambienceActive = true;
+    this.transportGeneration++;
 
     const id = sphereId ?? 'moon';
     const cfg = SPHERE_MUSIC[id];
@@ -610,8 +626,7 @@ export class AudioSystem {
     Tone.Transport.position = 0;
     Tone.Transport.cancel();
     Tone.Transport.bpm.value = bpm;
-    const barSec = 60 / bpm * 4;
-    const loopSec = barSec * cfg.loopBars;
+    this.restoreMusicGain(0.6);
 
     // ── Lead synth ──────────────────────────────────────────────────
     let lead: Tone.Synth | Tone.DuoSynth | Tone.FMSynth;
@@ -651,12 +666,15 @@ export class AudioSystem {
           envelope: { attack: 0.05, decay: 0.3, sustain: 0.25, release: 1.0 },
         });
     }
-    lead.volume.value = -16;
-    const leadSend = new Tone.Gain(0.25);
-    lead.connect(this.reverb);
+    lead.volume.value = -17;
+    const leadSend = new Tone.Gain(0.24);
+    const leadVerbSend = new Tone.Gain(0.28);
+    lead.connect(this.musicGain);
+    lead.connect(leadVerbSend);
+    leadVerbSend.connect(this.reverb);
     lead.connect(leadSend);
     leadSend.connect(this.pingPongDelay);
-    this.ambienceDisposables.push(lead as unknown as Disposable, leadSend);
+    this.ambienceDisposables.push(lead as unknown as Disposable, leadSend, leadVerbSend);
 
     // ── Pad — PolySynth with filter+LFO ────────────────────────────
     const padFilter = new Tone.Filter({
@@ -674,21 +692,28 @@ export class AudioSystem {
       envelope: { attack: 2.0, decay: 0.8, sustain: 0.3, release: 4.0 },
     } as any);
     pad.volume.value = cfg.pad.vol;
-    pad.connect(this.chorus);
-    this.chorus.connect(padFilter);
+    const padChorus = new Tone.Chorus({ frequency: 0.28 + cfg.pad.lfoRate, depth: 0.55, wet: cfg.pad.chorusWet });
+    padChorus.start();
+    pad.connect(padChorus);
+    padChorus.connect(padFilter);
     padFilter.connect(this.musicGain);
     const padReverbSend = new Tone.Gain(0.35);
     padFilter.connect(padReverbSend);
     padReverbSend.connect(this.reverb);
-    this.ambienceDisposables.push(pad, padFilter, padLfo, padReverbSend);
+    this.ambienceDisposables.push(pad, padChorus, padFilter, padLfo, padReverbSend);
 
     // ── Chord loop ──────────────────────────────────────────────────
     let chordIdx = 0;
+    const chordBars = Math.max(2, cfg.loopBars / cfg.chordProg.length);
+    const chordInterval = `${chordBars}m`;
+    const chordDuration = `${Math.max(1, chordBars - 0.2)}m`;
     const chordLoop = new Tone.Loop((time) => {
       const c = cfg.chordProg[chordIdx % cfg.chordProg.length];
-      pad.triggerAttackRelease(c, '7.8m', time, 0.05);
+      const section = Math.floor(chordIdx / cfg.chordProg.length) % 4;
+      const voicing = section === 2 ? [...c, transpose(c[c.length - 1], 12)] : c;
+      pad.triggerAttackRelease(voicing, chordDuration, time, section === 3 ? 0.038 : 0.052);
       chordIdx++;
-    }, '8m').start(0);
+    }, chordInterval).start(0);
     this.ambienceDisposables.push(chordLoop as unknown as Disposable);
 
     // ── Bass ────────────────────────────────────────────────────────
@@ -701,10 +726,16 @@ export class AudioSystem {
     this.ambienceDisposables.push(bassSynth);
 
     let bassOnRoot = true;
+    let bassStep = 0;
     const bassLoop = new Tone.Loop((time) => {
       const note = bassOnRoot ? cfg.bass.root : (cfg.bass.fifth ?? cfg.bass.root);
-      bassSynth.triggerAttackRelease(note, cfg.bass.rhythm, time, 0.7);
+      const accent = bassStep % 8 === 0 ? 0.84 : bassStep % 4 === 0 ? 0.68 : 0.46;
+      bassSynth.triggerAttackRelease(note, cfg.bass.rhythm, time, accent);
+      if (bassStep % 16 === 14 && cfg.bass.fifth) {
+        bassSynth.triggerAttackRelease(transpose(cfg.bass.fifth, 12), '8n', time + Tone.Time('8n').toSeconds(), 0.28);
+      }
       bassOnRoot = !bassOnRoot;
+      bassStep++;
     }, cfg.bass.rhythm).start(0);
     this.ambienceDisposables.push(bassLoop as unknown as Disposable);
 
@@ -715,7 +746,72 @@ export class AudioSystem {
     melodyPart.loop = true;
     melodyPart.loopEnd = `${cfg.loopBars}:0:0`;
     melodyPart.start(0);
+    (melodyPart as unknown as { humanize?: string }).humanize = '32n';
     this.ambienceDisposables.push(melodyPart as unknown as Disposable);
+
+    const counter = new Tone.Synth({
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.04, decay: 0.25, sustain: 0.18, release: 1.4 },
+    });
+    counter.volume.value = -23;
+    const counterDelay = new Tone.Gain(0.22);
+    counter.connect(this.chamberReverb);
+    counter.connect(counterDelay);
+    counterDelay.connect(this.pingPongDelay);
+    const counterEvents: MelodyNote[] = cfg.chordProg.flatMap((chord, i) => {
+      const bar = i * chordBars;
+      const top = chord[chord.length - 1];
+      const inner = chord[Math.max(0, chord.length - 2)];
+      return [
+        { time: `${bar + Math.max(1, chordBars - 2)}:0:0`, note: transpose(inner, 12), dur: '2n', vel: 0.038 },
+        { time: `${bar + Math.max(1, chordBars - 1)}:2:0`, note: transpose(top, 12), dur: '4n', vel: 0.032 },
+      ];
+    });
+    const counterPart = new Tone.Part((time, v) => {
+      counter.triggerAttackRelease(v.note, v.dur, time, v.vel);
+    }, counterEvents);
+    counterPart.loop = true;
+    counterPart.loopEnd = `${cfg.loopBars}:0:0`;
+    counterPart.start(0);
+    (counterPart as unknown as { humanize?: string }).humanize = '32n';
+    this.ambienceDisposables.push(counter, counterDelay, counterPart as unknown as Disposable);
+
+    const ornament = new Tone.FMSynth({
+      harmonicity: 3.01,
+      modulationIndex: 5,
+      oscillator: { type: 'sine' },
+      modulation: { type: 'sine' },
+      envelope: { attack: 0.004, decay: 0.8, sustain: 0, release: 0.35 },
+      modulationEnvelope: { attack: 0.002, decay: 0.45, sustain: 0, release: 0.2 },
+    });
+    ornament.volume.value = -25;
+    ornament.connect(this.pingPongDelay);
+    ornament.connect(this.reverb);
+    const ornamentEvents: MelodyNote[] = cfg.chordProg.map((chord, i) => ({
+      time: `${i * chordBars + Math.max(0, chordBars - 1)}:2:0`,
+      note: transpose(chord[chord.length - 1], 12),
+      dur: '8n',
+      vel: 0.035,
+    }));
+    const ornamentPart = new Tone.Part((time, v) => {
+      ornament.triggerAttackRelease(v.note, v.dur, time, v.vel);
+    }, ornamentEvents);
+    ornamentPart.loop = true;
+    ornamentPart.loopEnd = `${cfg.loopBars}:0:0`;
+    ornamentPart.start(0);
+    this.ambienceDisposables.push(ornament, ornamentPart as unknown as Disposable);
+
+    let sectionCycle = 0;
+    const sectionLoop = new Tone.Loop((time) => {
+      const section = sectionCycle % 4;
+      lead.volume.linearRampToValueAtTime([-17.5, -16.5, -15.2, -18.2][section], time + 0.4);
+      counter.volume.linearRampToValueAtTime([-25, -23, -21.5, -24][section], time + 0.6);
+      padReverbSend.gain.linearRampToValueAtTime([0.28, 0.34, 0.42, 0.24][section], time + 0.8);
+      leadSend.gain.linearRampToValueAtTime([0.18, 0.24, 0.34, 0.16][section], time + 0.6);
+      bassSynth.volume.linearRampToValueAtTime([cfg.bass.vol - 1, cfg.bass.vol, cfg.bass.vol + 1, cfg.bass.vol - 2][section], time + 0.35);
+      sectionCycle++;
+    }, `${Math.max(4, cfg.loopBars / 4)}m`).start(0);
+    this.ambienceDisposables.push(sectionLoop as unknown as Disposable);
 
     // ── Texture layers ──────────────────────────────────────────────
     switch (cfg.texture) {
@@ -839,16 +935,20 @@ export class AudioSystem {
   stopAmbience(): void {
     if (!this.ambienceActive) return;
     this.ambienceActive = false;
+    const generation = this.transportGeneration;
+    const disposables = this.ambienceDisposables;
+    this.ambienceDisposables = [];
     this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
 
     const clean = () => {
-      Tone.Transport.cancel();
-      Tone.Transport.stop();
-      Tone.Transport.position = 0;
-      for (const d of this.ambienceDisposables) {
+      if (this.transportGeneration === generation) {
+        Tone.Transport.cancel();
+        Tone.Transport.stop();
+        Tone.Transport.position = 0;
+      }
+      for (const d of disposables) {
         try { d.dispose(); } catch { /* */ }
       }
-      this.ambienceDisposables = [];
     };
     setTimeout(clean, 450);
   }
@@ -1060,6 +1160,7 @@ export class AudioSystem {
     this.stopAmbience();
     this.bossMusicActive = true;
     this.bossMusicPhase = 1;
+    this.transportGeneration++;
 
     const cfg = SPHERE_MUSIC[sphereId];
     if (!cfg) { this.bossMusicActive = false; return; }
@@ -1082,18 +1183,23 @@ export class AudioSystem {
       envelope: { attack: 1.5, decay: 0.6, sustain: 0.35, release: 3.0 },
     } as any);
     pad.volume.value = cfg.pad.vol + 2;
-    pad.connect(this.chorus);
-    this.chorus.connect(padFilter);
+    const bossChorus = new Tone.Chorus({ frequency: 0.34 + cfg.pad.lfoRate, depth: 0.5, wet: cfg.pad.chorusWet });
+    bossChorus.start();
+    pad.connect(bossChorus);
+    bossChorus.connect(padFilter);
     padFilter.connect(this.musicGain);
-    this.bossMusicDisposables.push(pad, padFilter, padLfo);
+    this.bossMusicDisposables.push(pad, bossChorus, padFilter, padLfo);
 
     // Chord loop
     let chordIdx = 0;
+    const chordBars = Math.max(2, cfg.loopBars / cfg.chordProg.length);
+    const chordInterval = `${chordBars}m`;
+    const chordDuration = `${Math.max(1, chordBars - 0.25)}m`;
     const chordLoop = new Tone.Loop((time) => {
       const c = cfg.chordProg[chordIdx % cfg.chordProg.length];
-      pad.triggerAttackRelease(c, '7.6m', time, 0.06);
+      pad.triggerAttackRelease(c, chordDuration, time, 0.06);
       chordIdx++;
-    }, '8m').start(0);
+    }, chordInterval).start(0);
     this.bossMusicDisposables.push(chordLoop as unknown as Disposable);
 
     // ── Bass — more present ──────────────────────────────────────────
@@ -1160,23 +1266,27 @@ export class AudioSystem {
     }, '4n').start(0);
     this.bossMusicDisposables.push(kickN, kickF, kickG, kickLoop as unknown as Disposable);
 
-    this.musicGain.gain.linearRampToValueAtTime(this.musicVolume, Tone.now() + 0.5);
+    this.restoreMusicGain(0.5);
     Tone.Transport.start();
   }
 
   stopBossMusic(): void {
     if (!this.bossMusicActive) return;
     this.bossMusicActive = false;
+    const generation = this.transportGeneration;
+    const disposables = this.bossMusicDisposables;
+    this.bossMusicDisposables = [];
     this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.3);
 
     const clean = () => {
-      Tone.Transport.cancel();
-      Tone.Transport.stop();
-      Tone.Transport.position = 0;
-      for (const d of this.bossMusicDisposables) {
+      if (this.transportGeneration === generation) {
+        Tone.Transport.cancel();
+        Tone.Transport.stop();
+        Tone.Transport.position = 0;
+      }
+      for (const d of disposables) {
         try { d.dispose(); } catch { /* */ }
       }
-      this.bossMusicDisposables = [];
       this.bossMusicPhase = 1;
     };
     setTimeout(clean, 350);
@@ -1184,10 +1294,12 @@ export class AudioSystem {
 
   setBossPhase(phase: BossPhase): void {
     if (!this.bossMusicActive) return;
+    const previousPhase = this.bossMusicPhase;
+    if (phase <= previousPhase) return;
     this.bossMusicPhase = phase;
     const now = Tone.now();
 
-    if (phase === 2) {
+    if (phase >= 2 && previousPhase < 2) {
       // Intensify — boost music gain, faster LFO
       this.musicGain.gain.linearRampToValueAtTime(Math.min(1, this.musicVolume * 1.15), now + 0.3);
       // Add snare layer on backbeats
@@ -1203,7 +1315,7 @@ export class AudioSystem {
       this.bossMusicDisposables.push(snareN, snareF, snareG, snareLoop as unknown as Disposable);
     }
 
-    if (phase === 3) {
+    if (phase >= 3 && previousPhase < 3) {
       // Maximum intensity — boost gain further
       this.musicGain.gain.linearRampToValueAtTime(Math.min(1, this.musicVolume * 1.3), now + 0.3);
       // Double-time percussion feel
@@ -1226,7 +1338,16 @@ export class AudioSystem {
     if (!this.unlocked || this.gameOverActive) return;
     this.stopAmbience();
     this.stopMenuHum();
+    this.stopBossMusic();
+    this.stopPrologueMusic();
+    this.stopEpilogueMusic();
+    this.stopCodexMusic();
     this.gameOverActive = true;
+    this.transportGeneration++;
+    Tone.Transport.cancel();
+    Tone.Transport.stop();
+    Tone.Transport.position = 0;
+    this.restoreMusicGain(0.5);
 
     // Somber Am pad — sine waves through reverb
     const pad = new Tone.PolySynth(Tone.Synth, {
@@ -1272,13 +1393,19 @@ export class AudioSystem {
   }
 
   private stopScreenMusicCommon(): void {
+    const generation = this.transportGeneration;
+    const disposables = this.screenDisposables;
+    this.screenDisposables = [];
     this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.35);
     setTimeout(() => {
-      for (const d of this.screenDisposables) {
+      for (const d of disposables) {
         try { d.dispose(); } catch { /* */ }
       }
-      this.screenDisposables = [];
-      Tone.Transport.cancel();
+      if (this.transportGeneration === generation) {
+        Tone.Transport.cancel();
+        Tone.Transport.stop();
+        Tone.Transport.position = 0;
+      }
     }, 400);
   }
 
@@ -1291,7 +1418,17 @@ export class AudioSystem {
   playPrologueMusic(): void {
     if (!this.unlocked || this.prologueActive) return;
     this.stopMenuHum();
+    this.stopAmbience();
+    this.stopBossMusic();
+    this.stopGameOverMusic();
+    this.stopEpilogueMusic();
+    this.stopCodexMusic();
     this.prologueActive = true;
+    this.transportGeneration++;
+    Tone.Transport.cancel();
+    Tone.Transport.stop();
+    Tone.Transport.position = 0;
+    this.restoreMusicGain(0.5);
 
     // Mysterious Dm pad — starts dark, filter opens as a "reveal"
     const pad = new Tone.PolySynth(Tone.Synth, {
@@ -1344,7 +1481,16 @@ export class AudioSystem {
     if (!this.unlocked || this.epilogueActive) return;
     this.stopAmbience();
     this.stopMenuHum();
+    this.stopBossMusic();
+    this.stopGameOverMusic();
+    this.stopPrologueMusic();
+    this.stopCodexMusic();
     this.epilogueActive = true;
+    this.transportGeneration++;
+    Tone.Transport.cancel();
+    Tone.Transport.stop();
+    Tone.Transport.position = 0;
+    this.restoreMusicGain(0.5);
 
     // Triumphant Cmaj7 — bright fatsine pad through reverb
     const pad = new Tone.PolySynth(Tone.Synth, {
@@ -1392,7 +1538,14 @@ export class AudioSystem {
   playCodexMusic(): void {
     if (!this.unlocked || this.codexActive) return;
     this.stopMenuHum();
+    this.stopAmbience();
+    this.stopBossMusic();
+    this.stopGameOverMusic();
+    this.stopPrologueMusic();
+    this.stopEpilogueMusic();
     this.codexActive = true;
+    this.transportGeneration++;
+    this.restoreMusicGain(0.5);
 
     // Scholarly quiet — two soft sine layers, barely there
     const dr1 = new Tone.Synth({

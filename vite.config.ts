@@ -7,6 +7,9 @@ export default defineConfig({
   build: {
     target: 'es2020',
     sourcemap: false,
+    rollupOptions: {
+      input: ['index.html', 'audio-showcase.html'],
+    },
   },
   server: {
     host: true,
