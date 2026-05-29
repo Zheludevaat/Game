@@ -1,10 +1,10 @@
-﻿name: Deploy PWA to GitHub Pages
+name: Deploy PWA to GitHub Pages
 
 on:
   push:
     branches:
-      - claude/abyss-seven-lamps-game-057YQ
       - main
+      - 'claude/**'
   workflow_dispatch:
 
 permissions:
@@ -20,13 +20,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
-      - run: npm install
-      - run: npm run build
+
+      - name: Install dependencies (lockfile-tolerant)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --prefer-offline || npm install --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Build
+        run: npm run build
+
       - uses: actions/configure-pages@v5
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
