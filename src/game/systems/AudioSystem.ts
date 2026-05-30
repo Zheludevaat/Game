@@ -191,12 +191,12 @@ export class AudioSystem {
   // Shared signal chain
   private master!: Tone.Gain;
   private musicGain!: Tone.Gain;
+  private musicStateGain!: Tone.Gain;
   private sfxGain!: Tone.Gain;
   private limiter!: Tone.Limiter;
   private reverb!: Tone.Reverb;
   private chamberReverb!: Tone.Reverb;
   private pingPongDelay!: Tone.PingPongDelay;
-  private chorus!: Tone.Chorus;
   private darkDelay!: Tone.FeedbackDelay;
   private darkFilter!: Tone.Filter;
 
@@ -229,23 +229,20 @@ export class AudioSystem {
       this.limiter = new Tone.Limiter(-3).toDestination();
       this.master = new Tone.Gain(1).connect(this.limiter);
       this.musicGain = new Tone.Gain(this.musicVolume).connect(this.master);
+      this.musicStateGain = new Tone.Gain(1).connect(this.musicGain);
       this.sfxGain = new Tone.Gain(this.sfxVolume).connect(this.master);
 
       // Cathedral reverb — 9s decay, the main spatial verb.
       this.reverb = new Tone.Reverb({ decay: 9, preDelay: 0.12, wet: 1 });
-      this.reverb.connect(this.musicGain);
+      this.reverb.connect(this.musicStateGain);
 
       // Chamber reverb — 3.5s, tighter, for contrast and texture sends.
       this.chamberReverb = new Tone.Reverb({ decay: 3.5, preDelay: 0.04, wet: 1 });
-      this.chamberReverb.connect(this.musicGain);
+      this.chamberReverb.connect(this.musicStateGain);
 
       // Ping-pong delay for stereo width — feeds the cathedral verb.
       this.pingPongDelay = new Tone.PingPongDelay({ delayTime: '4n.', feedback: 0.25, wet: 0.4 });
       this.pingPongDelay.connect(this.reverb);
-
-      // Chorus on the pad path for thickness.
-      this.chorus = new Tone.Chorus({ frequency: 0.35, depth: 0.6, wet: 0.45 });
-      this.chorus.start();
 
       // Dark delay chain — long feedback through a lowpass filter into chamber verb.
       // Use 4n (0.5s at 120bpm) — Tone.js internal maxDelay is 1s so dotted
@@ -275,20 +272,19 @@ export class AudioSystem {
   getSfxVolume(): number { return this.sfxVolume; }
 
   duckMusic(): void {
-    if (!this.musicGain || this.ducked) return;
+    if (!this.musicStateGain || this.ducked) return;
     this.ducked = true;
-    const duckLevel = this.musicVolume * 0.3;
-    this.musicGain.gain.linearRampToValueAtTime(duckLevel, Tone.now() + 0.3);
+    this.musicStateGain.gain.linearRampToValueAtTime(0.3, Tone.now() + 0.3);
   }
   unduckMusic(): void {
-    if (!this.musicGain || !this.ducked) return;
+    if (!this.musicStateGain || !this.ducked) return;
     this.ducked = false;
-    this.musicGain.gain.linearRampToValueAtTime(this.musicVolume, Tone.now() + 0.5);
+    this.musicStateGain.gain.linearRampToValueAtTime(1, Tone.now() + 0.5);
   }
 
   crossfadeOut(duration = 0.5): void {
-    if (!this.musicGain) return;
-    this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + duration);
+    if (!this.musicStateGain) return;
+    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + duration);
   }
 
   /** Ramp musicGain back up after a stop-fade.
@@ -304,9 +300,9 @@ export class AudioSystem {
    *  because it defines a trajectory from the previous ramp's endpoint
    *  (0.001 at stop.now+0.4) to the target volume at the later time. */
   private restoreMusicGain(duration = 0.5): void {
-    if (!this.musicGain) return;
+    if (!this.musicStateGain) return;
     const now = Tone.now();
-    this.musicGain.gain.linearRampToValueAtTime(this.musicVolume, now + 0.45 + duration);
+    this.musicStateGain.gain.linearRampToValueAtTime(1, now + 0.45 + duration);
   }
 
   // ── Menu Hum ─────────────────────────────────────────────────────
@@ -332,11 +328,11 @@ export class AudioSystem {
 
     // ── Per-channel gain nodes for structural arc ──────────────────
     // Initial values are the Intro section (bars 0-1): drone only.
-    const padAGain = new Tone.Gain(Tone.dbToGain(-24)).connect(this.musicGain);
-    const padBGain = new Tone.Gain(Tone.dbToGain(-24)).connect(this.musicGain);
-    const padCGain = new Tone.Gain(Tone.dbToGain(-30)).connect(this.musicGain);
-    const leadGain = new Tone.Gain(Tone.dbToGain(-40)).connect(this.musicGain);
-    const bellGain = new Tone.Gain(Tone.dbToGain(-30)).connect(this.musicGain);
+    const padAGain = new Tone.Gain(Tone.dbToGain(-24)).connect(this.musicStateGain);
+    const padBGain = new Tone.Gain(Tone.dbToGain(-24)).connect(this.musicStateGain);
+    const padCGain = new Tone.Gain(Tone.dbToGain(-30)).connect(this.musicStateGain);
+    const leadGain = new Tone.Gain(Tone.dbToGain(-40)).connect(this.musicStateGain);
+    const bellGain = new Tone.Gain(Tone.dbToGain(-30)).connect(this.musicStateGain);
     const hbGain = new Tone.Gain(0).connect(this.reverb);
     this.menuDisposables.push(padAGain, padBGain, padCGain, leadGain, bellGain, hbGain);
 
@@ -346,7 +342,7 @@ export class AudioSystem {
       envelope: { attack: 3.0, decay: 0.5, sustain: 0.8, release: 5.0 },
     });
     drone1.volume.value = -16;
-    drone1.connect(this.musicGain);
+    drone1.connect(this.musicStateGain);
     drone1.triggerAttack('C2');
     this.menuDisposables.push(drone1);
 
@@ -355,7 +351,7 @@ export class AudioSystem {
       envelope: { attack: 2.5, decay: 0.4, sustain: 0.7, release: 4.0 },
     });
     drone2.volume.value = -20;
-    drone2.connect(this.musicGain);
+    drone2.connect(this.musicStateGain);
     drone2.triggerAttack('G2');
     this.menuDisposables.push(drone2);
 
@@ -364,7 +360,7 @@ export class AudioSystem {
       envelope: { attack: 2.0, decay: 0.3, sustain: 0.6, release: 3.0 },
     });
     drone3.volume.value = -22;
-    drone3.connect(this.musicGain);
+    drone3.connect(this.musicStateGain);
     drone3.triggerAttack('C3');
     this.menuDisposables.push(drone3);
 
@@ -380,14 +376,16 @@ export class AudioSystem {
       envelope: { attack: 2.0, decay: 0.8, sustain: 0.35, release: 4.0 },
     } as any);
     padA.volume.value = -10;
-    padA.connect(this.chorus);
-    this.chorus.connect(padAFilter);
+    const menuChorus = new Tone.Chorus({ frequency: 0.35, depth: 0.6, wet: 0.45 });
+    menuChorus.start();
+    padA.connect(menuChorus);
+    menuChorus.connect(padAFilter);
     padAFilter.connect(padAGain);
     // Wet send: filtered pad → ping-pong delay → cathedral verb
     const padASend = new Tone.Gain(0.30);
     padAFilter.connect(padASend);
     padASend.connect(this.pingPongDelay);
-    this.menuDisposables.push(padA, padAFilter, padALfo, padASend);
+    this.menuDisposables.push(padA, menuChorus, padAFilter, padALfo, padASend);
 
     // Pad B: sine → direct to musicGain (body, no filter)
     const padB = new Tone.PolySynth(Tone.Synth, {
@@ -562,7 +560,7 @@ export class AudioSystem {
     const noiseGain = new Tone.Gain(0.020);
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(this.musicGain);
+    noiseGain.connect(this.musicStateGain);
     noise.start();
     this.menuDisposables.push(noise, noiseFilter, noiseLfo, noiseGain);
 
@@ -578,7 +576,7 @@ export class AudioSystem {
     ];
     const arcPart = new Tone.Part((time, s: Record<string, number>) => {
       const ramp = barSec * 1.5;
-      this.musicGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.master), time + ramp);
+      this.musicStateGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.master), time + ramp);
       padAGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.padA), time + ramp);
       padBGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.padB), time + ramp);
       padCGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.padC), time + ramp);
@@ -592,7 +590,7 @@ export class AudioSystem {
     this.menuDisposables.push(arcPart as unknown as Disposable);
 
     // Ramp into Intro level so transitions are smooth.
-    this.musicGain.gain.linearRampToValueAtTime(Tone.dbToGain(-18), Tone.now() + 0.3);
+    this.musicStateGain.gain.linearRampToValueAtTime(Tone.dbToGain(-18), Tone.now() + 0.3);
 
     Tone.Transport.start();
   }
@@ -606,7 +604,7 @@ export class AudioSystem {
 
     // Crossfade: ramp musicGain down before disposing so the next
     // music state can ramp it back up over the same bus.
-    this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
+    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
 
     const clean = () => {
       if (this.transportGeneration === generation) {
@@ -682,7 +680,7 @@ export class AudioSystem {
     lead.volume.value = -17;
     const leadSend = new Tone.Gain(0.24);
     const leadVerbSend = new Tone.Gain(0.28);
-    lead.connect(this.musicGain);
+    lead.connect(this.musicStateGain);
     lead.connect(leadVerbSend);
     leadVerbSend.connect(this.reverb);
     lead.connect(leadSend);
@@ -709,7 +707,7 @@ export class AudioSystem {
     padChorus.start();
     pad.connect(padChorus);
     padChorus.connect(padFilter);
-    padFilter.connect(this.musicGain);
+    padFilter.connect(this.musicStateGain);
     const padReverbSend = new Tone.Gain(0.35);
     padFilter.connect(padReverbSend);
     padReverbSend.connect(this.reverb);
@@ -735,7 +733,7 @@ export class AudioSystem {
       envelope: { attack: 0.02, decay: 0.4, sustain: 0.5, release: 1.0 },
     });
     bassSynth.volume.value = cfg.bass.vol;
-    bassSynth.connect(this.musicGain);
+    bassSynth.connect(this.musicStateGain);
     this.ambienceDisposables.push(bassSynth);
 
     let bassOnRoot = true;
@@ -837,7 +835,7 @@ export class AudioSystem {
         const surfGain = new Tone.Gain(0.015);
         surfNoise.connect(surfFilter);
         surfFilter.connect(surfGain);
-        surfGain.connect(this.musicGain);
+        surfGain.connect(this.musicStateGain);
         surfNoise.start();
         this.ambienceDisposables.push(surfNoise, surfFilter, surfLfo, surfGain);
         break;
@@ -871,7 +869,7 @@ export class AudioSystem {
         const marchEnv = new Tone.Gain(0);
         marchNoise.connect(marchFilter);
         marchFilter.connect(marchEnv);
-        marchEnv.connect(this.musicGain);
+        marchEnv.connect(this.musicStateGain);
         marchNoise.start();
         const marchLoop = new Tone.Loop((time) => {
           marchEnv.gain.setValueAtTime(0.03, time);
@@ -886,7 +884,7 @@ export class AudioSystem {
         const drumEnv = new Tone.Gain(0);
         drumNoise.connect(drumFilter);
         drumFilter.connect(drumEnv);
-        drumEnv.connect(this.musicGain);
+        drumEnv.connect(this.musicStateGain);
         drumNoise.start();
         // Aggressive 8th-note pattern with accents
         const drumLoop = new Tone.Loop((time) => {
@@ -941,7 +939,7 @@ export class AudioSystem {
     }
 
     // Crossfade in
-    this.musicGain.gain.linearRampToValueAtTime(this.musicVolume, Tone.now() + 0.6);
+    this.musicStateGain.gain.linearRampToValueAtTime(1, Tone.now() + 0.6);
     Tone.Transport.start();
   }
 
@@ -951,7 +949,7 @@ export class AudioSystem {
     const generation = this.transportGeneration;
     const disposables = this.ambienceDisposables;
     this.ambienceDisposables = [];
-    this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
+    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
 
     const clean = () => {
       if (this.transportGeneration === generation) {
@@ -973,6 +971,9 @@ export class AudioSystem {
     const now = Tone.now();
     const d: Disposable[] = [];
     const dur = 28; // seconds for the arc
+    const cinematicGain = new Tone.Gain(1).connect(this.musicStateGain);
+    const cinematicVerbSend = new Tone.Gain(1).connect(this.reverb);
+    d.push(cinematicGain, cinematicVerbSend);
 
     switch (mood) {
       case 'cosmos': {
@@ -983,17 +984,13 @@ export class AudioSystem {
           envelope: { attack: 6.0, decay: 2.0, sustain: 0.4, release: 8.0 },
         } as any);
         pad.volume.value = -22;
-        pad.connect(this.reverb);
-        pad.triggerAttack(['F2', 'A2', 'C3', 'E3', 'G3', 'C4']);
-        d.push(pad);
-
         const padGain = new Tone.Gain(0);
         pad.connect(padGain);
-        padGain.connect(this.reverb);
-        pad.disconnect(this.reverb);
-        pad.connect(padGain);
+        padGain.connect(cinematicVerbSend);
         padGain.gain.setValueAtTime(0, now);
         padGain.gain.linearRampToValueAtTime(0.7, now + 8);
+        pad.triggerAttack(['F2', 'A2', 'C3', 'E3', 'G3', 'C4']);
+        d.push(pad);
         d.push(padGain);
 
         // Floating melody — high sine, delayed entry
@@ -1023,7 +1020,7 @@ export class AudioSystem {
           envelope: { attack: 0.5, decay: 1.0, sustain: 0.6, release: 1.0 },
         });
         rumble.volume.value = -18;
-        rumble.connect(this.musicGain);
+        rumble.connect(cinematicGain);
         rumble.triggerAttack('D1');
         d.push(rumble);
 
@@ -1033,14 +1030,14 @@ export class AudioSystem {
           envelope: { attack: 4.0, decay: 1.0, sustain: 0.4, release: 6.0 },
         } as any);
         pad.volume.value = -20;
-        pad.connect(this.reverb);
+        pad.connect(cinematicVerbSend);
         d.push(pad);
         pad.triggerAttack(['D3', 'F3', 'A3', 'C4', 'E4']);
 
         const filter = new Tone.Filter({ frequency: 250, type: 'lowpass', rolloff: -12 });
-        pad.disconnect(this.reverb);
+        pad.disconnect(cinematicVerbSend);
         pad.connect(filter);
-        filter.connect(this.reverb);
+        filter.connect(cinematicVerbSend);
         filter.frequency.linearRampToValueAtTime(1200, now + 14);
         d.push(filter);
 
@@ -1050,7 +1047,7 @@ export class AudioSystem {
           envelope: { attack: 0.3, decay: 0.4, sustain: 0.2, release: 1.5 },
         });
         lead.volume.value = -22;
-        lead.connect(this.reverb);
+        lead.connect(cinematicVerbSend);
         d.push(lead);
         const notes = ['D5', 'C5', 'Bb4', 'A4', 'G4', 'F4', 'E4', 'D4', 'C4', 'F4'];
         notes.forEach((note, i) => {
@@ -1067,7 +1064,7 @@ export class AudioSystem {
           envelope: { attack: 0.02, decay: 0.6, sustain: 0.1, release: 1.0 },
         } as any);
         stab.volume.value = -14;
-        stab.connect(this.musicGain);
+        stab.connect(cinematicGain);
         d.push(stab);
 
         // Three stabs
@@ -1080,7 +1077,7 @@ export class AudioSystem {
         const drumN = new Tone.Noise('brown');
         const drumF = new Tone.Filter({ frequency: 180, type: 'lowpass', rolloff: -24 });
         const drumG = new Tone.Gain(0);
-        drumN.connect(drumF); drumF.connect(drumG); drumG.connect(this.musicGain);
+        drumN.connect(drumF); drumF.connect(drumG); drumG.connect(cinematicGain);
         drumN.start();
         d.push(drumN, drumF, drumG);
         for (let i = 0; i < 8; i++) {
@@ -1096,7 +1093,7 @@ export class AudioSystem {
           envelope: { attack: 2.0, decay: 0.5, sustain: 0.5, release: 4.0 },
         } as any);
         held.volume.value = -18;
-        held.connect(this.reverb);
+        held.connect(cinematicVerbSend);
         held.triggerAttackRelease(['F2', 'C3', 'G#3', 'C4', 'G4'], '16n', now + 8, 0.06);
         d.push(held);
         break;
@@ -1109,7 +1106,7 @@ export class AudioSystem {
           envelope: { attack: 5.0, decay: 1.0, sustain: 0.5, release: 8.0 },
         } as any);
         pad.volume.value = -18;
-        pad.connect(this.reverb);
+        pad.connect(cinematicVerbSend);
         d.push(pad);
 
         // Gradual chord build
@@ -1126,7 +1123,7 @@ export class AudioSystem {
           envelope: { attack: 3.0, decay: 0.5, sustain: 0.4, release: 6.0 },
         } as any);
         close.volume.value = -20;
-        close.connect(this.reverb);
+        close.connect(cinematicVerbSend);
         close.triggerAttackRelease(['C3', 'E3', 'G3', 'B3', 'D4'], '4n', now + dur, 0.05);
         d.push(close);
         break;
@@ -1136,7 +1133,9 @@ export class AudioSystem {
     this.cinematicDisposables.push(...d);
 
     return () => {
-      this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.8);
+      const stopAt = Tone.now();
+      cinematicGain.gain.linearRampToValueAtTime(0.001, stopAt + 0.8);
+      cinematicVerbSend.gain.linearRampToValueAtTime(0.001, stopAt + 0.8);
       setTimeout(() => {
         for (const x of d) { try { x.dispose(); } catch { /* */ } }
       }, 1000);
@@ -1200,7 +1199,7 @@ export class AudioSystem {
     bossChorus.start();
     pad.connect(bossChorus);
     bossChorus.connect(padFilter);
-    padFilter.connect(this.musicGain);
+    padFilter.connect(this.musicStateGain);
     this.bossMusicDisposables.push(pad, bossChorus, padFilter, padLfo);
 
     // Chord loop
@@ -1221,7 +1220,7 @@ export class AudioSystem {
       envelope: { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.8 },
     });
     bassSynth.volume.value = cfg.bass.vol + 3;
-    bassSynth.connect(this.musicGain);
+    bassSynth.connect(this.musicStateGain);
     this.bossMusicDisposables.push(bassSynth);
 
     let bassOnRoot = true;
@@ -1271,7 +1270,7 @@ export class AudioSystem {
     const kickN = new Tone.Noise('brown');
     const kickF = new Tone.Filter({ frequency: 140, type: 'lowpass', rolloff: -24 });
     const kickG = new Tone.Gain(0);
-    kickN.connect(kickF); kickF.connect(kickG); kickG.connect(this.musicGain);
+    kickN.connect(kickF); kickF.connect(kickG); kickG.connect(this.musicStateGain);
     kickN.start();
     const kickLoop = new Tone.Loop((time) => {
       kickG.gain.setValueAtTime(0.04, time);
@@ -1289,7 +1288,7 @@ export class AudioSystem {
     const generation = this.transportGeneration;
     const disposables = this.bossMusicDisposables;
     this.bossMusicDisposables = [];
-    this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.3);
+    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.3);
 
     const clean = () => {
       if (this.transportGeneration === generation) {
@@ -1314,12 +1313,12 @@ export class AudioSystem {
 
     if (phase >= 2 && previousPhase < 2) {
       // Intensify — boost music gain, faster LFO
-      this.musicGain.gain.linearRampToValueAtTime(Math.min(1, this.musicVolume * 1.15), now + 0.3);
+      this.musicStateGain.gain.linearRampToValueAtTime(1.15, now + 0.3);
       // Add snare layer on backbeats
       const snareN = new Tone.Noise('white');
       const snareF = new Tone.Filter({ frequency: 800, type: 'bandpass', rolloff: -24, Q: 1.5 });
       const snareG = new Tone.Gain(0);
-      snareN.connect(snareF); snareF.connect(snareG); snareG.connect(this.musicGain);
+      snareN.connect(snareF); snareF.connect(snareG); snareG.connect(this.musicStateGain);
       snareN.start();
       const snareLoop = new Tone.Loop((time) => {
         snareG.gain.setValueAtTime(0.025, time);
@@ -1330,12 +1329,12 @@ export class AudioSystem {
 
     if (phase >= 3 && previousPhase < 3) {
       // Maximum intensity — boost gain further
-      this.musicGain.gain.linearRampToValueAtTime(Math.min(1, this.musicVolume * 1.3), now + 0.3);
+      this.musicStateGain.gain.linearRampToValueAtTime(1.3, now + 0.3);
       // Double-time percussion feel
       const hatN = new Tone.Noise('white');
       const hatF = new Tone.Filter({ frequency: 3000, type: 'highpass', rolloff: -12 });
       const hatG = new Tone.Gain(0);
-      hatN.connect(hatF); hatF.connect(hatG); hatG.connect(this.musicGain);
+      hatN.connect(hatF); hatF.connect(hatG); hatG.connect(this.musicStateGain);
       hatN.start();
       const hatLoop = new Tone.Loop((time) => {
         hatG.gain.setValueAtTime(0.015, time);
@@ -1397,7 +1396,7 @@ export class AudioSystem {
       envelope: { attack: 3.0, decay: 0.5, sustain: 0.6, release: 5.0 },
     });
     sub.volume.value = -20;
-    sub.connect(this.musicGain);
+    sub.connect(this.musicStateGain);
     sub.triggerAttack('A1');
     this.screenDisposables.push(sub);
 
@@ -1409,7 +1408,7 @@ export class AudioSystem {
     const generation = this.transportGeneration;
     const disposables = this.screenDisposables;
     this.screenDisposables = [];
-    this.musicGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.35);
+    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.35);
     setTimeout(() => {
       for (const d of disposables) {
         try { d.dispose(); } catch { /* */ }
@@ -1566,7 +1565,7 @@ export class AudioSystem {
       envelope: { attack: 2.0, decay: 0.5, sustain: 0.5, release: 3.0 },
     });
     dr1.volume.value = -28;
-    dr1.connect(this.musicGain);
+    dr1.connect(this.musicStateGain);
     dr1.triggerAttack('G2');
     this.screenDisposables.push(dr1);
 
