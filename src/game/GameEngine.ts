@@ -2,7 +2,7 @@ import { PALETTE, ROOM_H, ROOM_W, TILE, VIRTUAL_H, VIRTUAL_W } from './constants
 import { RNG, hashSeed } from './math/rng';
 import { clamp, dist, lerp, norm } from './math/vec2';
 import {
-  ActiveDialogueState, ArchetypeDef, Floor, MetaState, RelicId, Room, RoomDoorState, RoomType, ShrineKind,
+  ActiveDialogueState, ArchetypeDef, DebugSnapshot, Floor, MetaState, RelicId, Room, RoomDoorState, RoomType, ShrineKind,
   SpellId, WeaponId,
 } from './GameTypes';
 import { getArchetype } from './data/archetypes';
@@ -312,6 +312,7 @@ export class GameEngine {
   private renderer = new Renderer();
   private rafId = 0;
   private lastTime = 0;
+  private lastDt = 0;
   private accumulator = 0;
   private fixedStep = 1 / 60;
   private running = false;
@@ -680,6 +681,18 @@ export class GameEngine {
     return this.rng.state;
   }
 
+  getDebugSnapshot(): DebugSnapshot {
+    return {
+      fps: this.lastDt > 0 ? 1 / this.lastDt : 0,
+      frameMs: this.lastDt * 1000,
+      floor: this.floor?.number ?? 0,
+      roomType: this.currentRoom?.type ?? 'none',
+      enemies: this.enemies.length,
+      pickups: this.pickups.length,
+      particles: this.particles.parts.length,
+    };
+  }
+
   goToFloorForTest(n: number): void {
     if (!this.player) {
       this.initForTest();
@@ -1031,6 +1044,7 @@ export class GameEngine {
     let dt = (now - this.lastTime) / 1000;
     this.lastTime = now;
     if (dt > 0.1) dt = 0.1;
+    this.lastDt = dt;
     if (!this.paused) {
       this.accumulator += dt;
       while (this.accumulator >= this.fixedStep) {

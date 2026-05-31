@@ -821,6 +821,23 @@
   background: rgba(0,0,0,0.5);
 }
 
+.debug-overlay {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  left: calc(12px + var(--safe-left));
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--crimson);
+  color: #0f0;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 6px 10px;
+  pointer-events: none;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .loading-lamps {
   display: flex;
   gap: 14px;

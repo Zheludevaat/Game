@@ -220,3 +220,18 @@ export interface ActiveDialogueState {
   lineIndex: number;
   choicesVisible: boolean;
 }
+
+export interface DebugSnapshot {
+  fps: number;
+  frameMs: number;
+  floor: number;
+  roomType: string;
+  enemies: number;
+  pickups: number;
+  particles: number;
+  audio?: {
+    activeCue: string | null;
+    clipping: boolean;
+    activeNodeCount: number;
+  };
+}

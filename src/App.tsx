@@ -20,13 +20,14 @@ import { GameOverScreen } from './components/GameOver';
 import { MetaProgression } from './components/MetaProgression';
 import { TouchControls } from './components/TouchControls';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
-import { ActiveDialogueState, ArchetypeId, MetaState, SettingsState } from './game/GameTypes';
+import { ActiveDialogueState, ArchetypeId, DebugSnapshot, MetaState, SettingsState } from './game/GameTypes';
 import { MapOverlay } from './components/MapOverlay';
 import { CodexScreen } from './components/CodexScreen';
 import { CinematicsScreen } from './components/CinematicsScreen';
 import { Prologue } from './components/Prologue';
 import { Epilogue } from './components/Epilogue';
 import { CinematicShort } from './components/CinematicShort';
+import { DebugOverlay } from './components/DebugOverlay';
 import { DialoguePanel } from './components/DialoguePanel';
 import { getDialogueView } from './game/systems/dialogue';
 import { NPC_BY_ID } from './game/data/npcs';
@@ -58,6 +59,8 @@ export function App(): JSX.Element {
 
   const [hud, setHud] = useState<HudSnapshot | null>(null);
   const [summary, setSummary] = useState<RunSummary | null>(null);
+  const [debugVisible, setDebugVisible] = useState<boolean>(false);
+  const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot | null>(null);
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
   const [resumeAvailable, setResumeAvailable] = useState<boolean>(() => !!loadResume() || !!loadRunSnapshot());
   const [isTouchDevice] = useState<boolean>(() => {
@@ -342,6 +345,35 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('blur', onBlur);
   }, []);
 
+  // Debug overlay toggle (Shift+Backquote)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.shiftKey && e.code === 'Backquote' && !e.repeat) {
+        setDebugVisible((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // Poll debug snapshot from engine + audio when overlay is visible
+  useEffect(() => {
+    if (!debugVisible) return;
+    const id = setInterval(() => {
+      const engine = engineRef.current;
+      if (!engine) return;
+      const snap = engine.getDebugSnapshot();
+      const diag = audio.getDiagnostics();
+      snap.audio = {
+        activeCue: diag.activeCue,
+        clipping: diag.clipping,
+        activeNodeCount: diag.activeNodeCount,
+      };
+      setDebugSnapshot(snap);
+    }, 200);
+    return () => { clearInterval(id); setDebugSnapshot(null); };
+  }, [debugVisible]);
+
   // Reduced particles toggle should propagate live
   useEffect(() => {
     engineRef.current?.setReducedParticles(settings.reducedParticles);
@@ -386,6 +418,7 @@ export function App(): JSX.Element {
           display: showCanvas ? 'block' : 'none',
         }}
       />
+      <DebugOverlay snapshot={debugVisible ? debugSnapshot : null} />
       {screen === 'loading' && <LoadingScreen />}
 
       {screen === 'menu' && (
