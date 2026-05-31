@@ -308,15 +308,17 @@ export class GameEngine {
   private runSeed = 0;
   /** Per-floor seeded RNG for loot and gameplay randomness.
    *  Reseeded in goToFloor so all runs with the same seed produce
-   *  the same outcomes. Visual-only Math.random() calls are left
-   *  alone — determinism matters for gameplay, not particles. */
+   *  the same outcomes. In-engine particles also route through this
+   *  so they don't consume real randomness between gameplay rolls.
+   *  Visual-only Math.random() in Renderer/Particles class are
+   *  intentionally left on the system RNG. */
   private rng!: RNG;
 
   // ── Seeded RNG helpers ───────────────────────────────────────
   private rand(): number { return this.rng.next(); }
   private randInt(min: number, max: number): number { return this.rng.int(min, max); }
   private randChance(probability: number): boolean { return this.rng.chance(probability); }
-  private randPick<T>(items: readonly T[]): T { return items[this.randInt(0, items.length)]; }
+  private randPick<T>(items: readonly T[]): T { return this.rng.pick(items); }
 
   /** Cached sphere data for the current floor — updated once per frame
    *  in update() so all render paths read a single ref instead of calling
@@ -644,6 +646,7 @@ export class GameEngine {
   }
 
   setDebugRngSeed(seed: number): void {
+    this.runSeed = seed;
     this.rng = new RNG(seed);
   }
 
