@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getConfirmButton, getCancelButton } from '../game/input/activeLayout';
+import { isNativeUiTarget } from './inputTargetGuards';
 
 export interface MenuItem {
   onActivate: () => void;
@@ -30,6 +31,7 @@ export function useMenuNav(items: MenuItem[], opts?: { onCancel?: () => void; ho
     };
     const onKey = (e: KeyboardEvent): void => {
       if (optsRef.current?.enabled === false) return;
+      if (isNativeUiTarget(e.target)) return;
       const horiz = !!optsRef.current?.horizontal;
       if (e.code === 'ArrowDown' || (!horiz && e.code === 'KeyS')) { move(1); e.preventDefault(); }
       else if (e.code === 'ArrowUp' || (!horiz && e.code === 'KeyW')) { move(-1); e.preventDefault(); }

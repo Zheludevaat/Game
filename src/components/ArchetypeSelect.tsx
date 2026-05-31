@@ -32,7 +32,18 @@ export function ArchetypeSelect({ onSelect, onBack, lastArchetype }: Props): JSX
       <div className="archetype-grid">
         {ARCHETYPES.map((a, i) => (
           <PixelPanel key={a.id} style={{ height: '100%' }}>
-            <div className="archetype-card" onClick={() => onSelect(a.id)}>
+            <div
+              className="archetype-card"
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(a.id)}
+              onKeyDown={(e) => {
+                if (e.code === 'Enter' || e.code === 'Space') {
+                  e.preventDefault();
+                  onSelect(a.id);
+                }
+              }}
+            >
               <ArchetypeArt id={a.id} />
               <h3>{a.name}</h3>
               <div className="pixel-tag" style={{ alignSelf: 'flex-start' }}>{a.subtitle}</div>

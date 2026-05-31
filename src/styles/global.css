@@ -94,6 +94,28 @@ button {
   border: none;
   background: transparent;
   color: inherit;
+  touch-action: manipulation;
+}
+
+button,
+input,
+select,
+textarea,
+a[href],
+[role="button"],
+[role="slider"],
+[role="switch"],
+[role="menuitem"] {
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+input,
+select,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 
 @keyframes glow-pulse {

@@ -58,10 +58,10 @@ export class ErrorBoundary extends Component<Props, State> {
           {this.state.error?.message}
         </pre>
         <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-          <button onClick={this.handleReset} style={btnStyle}>
+          <button type="button" onClick={this.handleReset} style={btnStyle}>
             Try Again
           </button>
-          <button onClick={this.handleResetSave} style={{ ...btnStyle, borderColor: '#e23a4a', color: '#e23a4a' }}>
+          <button type="button" onClick={this.handleResetSave} style={{ ...btnStyle, borderColor: '#e23a4a', color: '#e23a4a' }}>
             Reset Save &amp; Reload
           </button>
         </div>

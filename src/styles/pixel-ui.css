@@ -696,6 +696,7 @@
 
 .settings-row input[type="range"] {
   width: 140px;
+  touch-action: pan-x;
 }
 
 .settings-row-focused {
@@ -766,6 +767,8 @@
   background: #000;
   border: 1px solid var(--gold-2);
   cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
 }
 .toggle .knob {
   position: absolute;

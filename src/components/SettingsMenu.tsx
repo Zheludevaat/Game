@@ -110,10 +110,8 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     }
   };
 
-  const adjust = (dir: number): void => {
+  const adjustRow = (row: RowDef, dir: number): void => {
     if (remapping) return;
-    const row = rows[focus];
-    if (!row) return;
     if (row.kind === 'slider') {
       const key = row.id as 'musicVolume' | 'sfxVolume';
       const cur = settings[key];
@@ -130,6 +128,12 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     }
   };
 
+  const adjust = (dir: number): void => {
+    const row = rows[focus];
+    if (!row) return;
+    adjustRow(row, dir);
+  };
+
   useGamepadButtons({
     onA: activate,
     onB: () => { if (remapping) return; if (confirm) setConfirm(false); else onBack(); },
@@ -140,7 +144,7 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
     onRight: () => adjust(1),
   });
 
-  const Row = ({ row, i }: { row: RowDef; i: number }): JSX.Element => {
+  const renderRow = (row: RowDef, i: number): JSX.Element => {
     const focused = focus === i;
     const focusedClass = focused ? ' settings-row-focused' : '';
     if (row.kind === 'slider') {
@@ -170,9 +174,14 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
       return (
         <div className={'settings-row' + focusedClass} onMouseEnter={() => setFocus(i)}>
           <span>{row.label}</span>
-          <div className={`toggle ${on ? 'on' : ''}`} onClick={() => set(key, !on as never)}>
+          <button
+            type="button"
+            className={`toggle ${on ? 'on' : ''}`}
+            aria-pressed={on}
+            onClick={() => set(key, !on as never)}
+          >
             <div className="knob" />
-          </div>
+          </button>
         </div>
       );
     }
@@ -224,7 +233,8 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
 
   const adjustForIdx = (i: number, dir: number): void => {
     setFocus(i);
-    setTimeout(() => adjust(dir), 0);
+    const row = rows[i];
+    if (row) adjustRow(row, dir);
   };
 
   return (
@@ -232,11 +242,13 @@ export function SettingsMenu({ settings, onChange, onResetSave, onResetPad, onBa
       <PixelPanel title="Settings" subtitle="Adjust the temple" width={560}>
         <div className="scroll-area">
           {rows.map((row, i) => (
-            <Row key={row.id} row={row} i={i} />
+            <div key={row.id}>
+              {renderRow(row, i)}
+            </div>
           ))}
         </div>
         <div style={{ marginTop: 8, textAlign: 'center', fontSize: 10, letterSpacing: '0.18em', color: 'rgba(231,227,215,0.6)' }}>
-          D-PAD / WASD · ← → adjust · A toggle · B back
+          Tap / click to change · arrows / WASD move focus · Enter changes
         </div>
       </PixelPanel>
     </div>

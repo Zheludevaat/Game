@@ -13,6 +13,7 @@ interface PixelButtonProps {
 export function PixelButton(props: PixelButtonProps): JSX.Element {
   return (
     <button
+      type="button"
       className={`pixel-btn${props.focused ? ' is-focused' : ''}`}
       onClick={props.onClick}
       disabled={props.disabled}

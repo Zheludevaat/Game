@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { isNativeUiTarget } from './components/inputTargetGuards';
 import { registerServiceWorker } from './pwa/registerServiceWorker';
 import './styles/global.css';
 import './styles/pixel-ui.css';
@@ -15,6 +16,7 @@ import './styles/pixel-ui.css';
 document.addEventListener('touchmove', (e) => {
   if (e.touches.length > 1) { e.preventDefault(); return; }
   const target = e.target as HTMLElement | null;
+  if (isNativeUiTarget(target)) return;
   // Walk up the DOM looking for an explicitly-scrollable container.
   let n: HTMLElement | null = target;
   while (n && n !== document.body) {

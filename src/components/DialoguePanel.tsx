@@ -33,7 +33,7 @@ export function DialoguePanel({ speaker, text, onAdvance, choices }: Props): JSX
         {choices && (
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             {choices.map((c, i) => (
-              <button key={i} onClick={c.onChoose} style={{
+              <button key={i} type="button" onClick={c.onChoose} style={{
                 padding: '6px 14px', border: '1px solid var(--gold-3)',
                 background: 'rgba(20,12,38,0.8)', color: 'var(--gold-1)',
                 fontFamily: 'inherit', fontSize: 11, cursor: 'pointer',

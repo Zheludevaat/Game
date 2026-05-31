@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { getActiveLayout } from '../game/input/activeLayout';
+import { isNativeUiTarget } from './inputTargetGuards';
 
 /**
  * Lightweight gamepad button hook. Fires the matching callback on the
@@ -36,6 +37,7 @@ export function useGamepadButtons(handlers: GamepadButtonHandlers & { enabled?: 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (ref.current.enabled === false) return;
+      if (isNativeUiTarget(e.target)) return;
       const h = ref.current;
       if (e.code === 'Escape') { h.onB?.(); }
       else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyJ') { h.onA?.(); }
