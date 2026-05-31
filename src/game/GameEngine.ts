@@ -7,6 +7,7 @@ import {
 } from './GameTypes';
 import { getArchetype } from './data/archetypes';
 import { RELICS, RELIC_IDS } from './data/relics';
+import { ENEMY_REGISTRY, enemiesForSphere } from './data/enemies';
 import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
 import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
 import { CODEX, CODEX_BY_ID } from './data/codex';
@@ -867,14 +868,9 @@ export class GameEngine {
   }
 
   private pickEnemyType(rng: RNG): Enemy['type'] {
-    const floor = this.floor.number;
-    const pool: Enemy['type'][] = ['lesserShade'];
-    if (floor >= 1) pool.push('mercuryImp');
-    if (floor >= 2) pool.push('lunarWisp');
-    if (floor >= 3) pool.push('saltGolem');
-    if (floor >= 4) pool.push('saturnKnight');
-    if (floor >= 8) pool.push('saltBanshee');
-    return pool[rng.int(0, pool.length)];
+    const sphere = this.currentSphere.id;
+    const pool = enemiesForSphere(sphere);
+    return pool[rng.int(0, pool.length)] as Enemy['type'];
   }
 
   private spawnEnemy(type: Enemy['type'], pos: Vec, floor: number, isMiniBoss = false): void {
