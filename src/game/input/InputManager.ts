@@ -15,8 +15,8 @@ export interface InputState {
   interactPressed: boolean;
   pausePressed: boolean;
   mapPressed: boolean;
-  useItemPressed: boolean;
-  cycleRelicPressed: boolean;
+  // Note: useItemPressed and cycleRelicPressed removed in favor of
+  // cycleWeaponPressed / cycleSpellPressed (renamed to match game verbs).
   cycleWeaponPressed: boolean;
   cycleSpellPressed: boolean;
   uiUp: boolean;
@@ -209,7 +209,6 @@ export class InputManager {
       attackPressed: false, attackHeld: false,
       dashPressed: false, spellPressed: false, spellHeld: false,
       interactPressed: false, pausePressed: false, mapPressed: false,
-      useItemPressed: false, cycleRelicPressed: false,
       cycleWeaponPressed: false, cycleSpellPressed: false,
       uiUp: false, uiDown: false, uiLeft: false, uiRight: false,
       uiConfirm: false, uiCancel: false,
@@ -237,8 +236,8 @@ export class InputManager {
     s.interactPressed ||= this.keysPressedThisFrame.has('KeyE') || this.keysPressedThisFrame.has('Enter');
     s.pausePressed    ||= this.keysPressedThisFrame.has('Escape') || this.keysPressedThisFrame.has('KeyP');
     s.mapPressed      ||= this.keysPressedThisFrame.has('KeyM') || this.keysPressedThisFrame.has('Tab');
-    s.useItemPressed  ||= this.keysPressedThisFrame.has('KeyU');
-    s.cycleRelicPressed ||= this.keysPressedThisFrame.has('KeyT');
+    s.cycleSpellPressed  ||= this.keysPressedThisFrame.has('KeyU');
+    s.cycleWeaponPressed ||= this.keysPressedThisFrame.has('KeyT');
     s.cycleWeaponPressed ||= this.keysPressedThisFrame.has('KeyQ');
     s.cycleSpellPressed  ||= this.keysPressedThisFrame.has('KeyR');
 
@@ -297,10 +296,8 @@ export class InputManager {
       s.interactPressed ||= this.padPressed(m.interact);
       s.pausePressed    ||= this.padPressed(m.pause);
       s.mapPressed      ||= this.padPressed(m.map);
-      s.useItemPressed  ||= this.padPressed(m.useItem);
-      s.cycleRelicPressed ||= this.padPressed(m.cycleRelic);
-      s.cycleWeaponPressed ||= this.padPressed(m.cycleRelic);
-      s.cycleSpellPressed  ||= this.padPressed(m.useItem);
+      s.cycleWeaponPressed ||= this.padPressed(m.cycleWeapon);
+      s.cycleSpellPressed  ||= this.padPressed(m.cycleSpell);
 
       s.uiUp     ||= this.padPressed(m.dpadUp);
       s.uiDown   ||= this.padPressed(m.dpadDown);

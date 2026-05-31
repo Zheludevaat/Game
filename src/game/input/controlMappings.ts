@@ -5,8 +5,8 @@ export type ActionName =
   | 'interact'
   | 'pause'
   | 'map'
-  | 'useItem'
-  | 'cycleRelic';
+  | 'cycleWeapon'
+  | 'cycleSpell';
 
 export interface GamepadMap {
   attack: number;
@@ -15,8 +15,8 @@ export interface GamepadMap {
   interact: number;
   pause: number;
   map: number;
-  useItem: number;
-  cycleRelic: number;
+  cycleWeapon: number;
+  cycleSpell: number;
   // D-pad
   dpadUp: number;
   dpadDown: number;
@@ -45,8 +45,8 @@ export const DEFAULT_GAMEPAD_MAP: GamepadMap = {
   dash: 1,        // B / Circle (Xbox B, right)
   spell: 2,       // X / Square (Xbox X, left)
   interact: 3,    // Y / Triangle (Xbox Y, top)
-  useItem: 4,     // LB / L1
-  cycleRelic: 5,  // RB / R1
+  cycleSpell: 4,
+  cycleWeapon: 5,
   pause: 9,       // Start / Menu / +
   map: 8,         // Select / Share / −
   dpadUp: 12,
@@ -63,8 +63,8 @@ export const SWITCH_GAMEPAD_MAP: GamepadMap = {
   dash: 0,        // B button (Nintendo bottom)
   spell: 3,       // X button (Nintendo top)
   interact: 2,    // Y button (Nintendo left)
-  useItem: 4,     // L
-  cycleRelic: 5,  // R
+  cycleSpell: 4,
+  cycleWeapon: 5,
   pause: 9,       // + (Plus)
   map: 8,         // − (Minus)
   dpadUp: 12,
