@@ -8,11 +8,12 @@
 // + surrender lines.
 
 import { Shot, ShotArgs } from '../../components/CinematicShort';
-import { drawEnemy, getEnemySize } from '../rendering/PixelArt';
+import { drawWardenCinematic } from '../rendering/cinematicSprites';
 import {
   clamp01, easeIn, easeOut, withAlpha,
   vignette, colorGrade, bloomPoint, starfield, motes,
-  nebula, applyShake, cinemaText,
+  nebula, applyShake, godRays, filmGrain,
+  emberParticles, chromaticAberration, volumetricFog, strobe,
 } from '../rendering/cinemaHelpers';
 import { STAR_PRESETS } from '../rendering/artBible';
 import { SPHERE_BY_ID, SphereId, SphereDef } from './spheres';
@@ -40,6 +41,8 @@ function shotSphereApproach(a: ShotArgs, s: SphereDef): void {
     { ...FAR_STARS, speed: 1.8 + ramp * 8 },
     { ...MID_STARS, speed: 4 + ramp * 20 },
   ], 31);
+
+  motes(a, 14, '155, 108, 255', 41);
 
   const cx = a.width / 2;
   const cy = a.height * 0.48;
@@ -76,6 +79,8 @@ function shotSphereApproach(a: ShotArgs, s: SphereDef): void {
   a.ctx.shadowBlur = 0;
   a.ctx.restore();
 
+  godRays(a, cx, cy, 6, a.height * 0.4, s.colour, 0.06 * grow * pulse, 8);
+
   // Drifting tick-marks around the ring (slow rotation)
   a.ctx.save();
   a.ctx.translate(cx, cy);
@@ -90,6 +95,7 @@ function shotSphereApproach(a: ShotArgs, s: SphereDef): void {
   a.ctx.restore();
 
   colorGrade(a, s.colour, 0.06);
+  filmGrain(a, 0.025, 41);
   vignette(a, 0.55);
 }
 
@@ -106,6 +112,7 @@ function shotWardenManifests(a: ShotArgs, s: SphereDef): void {
   const rise = easeOut(clamp01(p / 0.75));
   const tremble = clamp01((p - 0.35) / 0.4) * (1 - clamp01((p - 0.75) / 0.25));
   if (tremble > 0.05) applyShake(a, { magnitude: 1.5 + tremble * 2.5, freq: 26 });
+  if (tremble > 0.5) filmGrain(a, tremble * 0.12, 11);
 
   // Sky
   a.ctx.fillStyle = '#02010a';
@@ -161,18 +168,22 @@ function shotWardenManifests(a: ShotArgs, s: SphereDef): void {
   a.ctx.fillRect(cx - a.height * 0.45, floorCy - a.height * 0.45, a.height * 0.9, a.height * 0.45);
   a.ctx.restore();
 
-  // The Warden rises from the centre — rendered with the gameplay
-  // sprite. Pixel scale is set big for cinematic impact.
-  const sz = getEnemySize('wardenBoss');
-  const scale = Math.min(10, Math.max(5, a.height / 50));
-  const bx = cx - (sz.w * scale) / 2;
+  if (rise > 0.2) godRays(a, cx, floorCy, circleR * 0.5, a.height * 0.3, s.accent, rise * 0.08, 6);
+  if (rise > 0.3) emberParticles(a, 6, cx, floorCy, 40, 19);
+  if (rise > 0.3) volumetricFog(a, s.colour, 0.05, 0.4, 61);
+
+  // The Warden rises from the centre — cinematic sprite with sphere
+  // accent colour replacing the sigil keys.
+  const wScale = Math.min(5, Math.max(2.5, a.height / 180));
+  const bx = cx - 16 * wScale;
   // Starts below the circle (in the void) and rises into the centre
   const riseFrom = floorCy + circleR * 0.2;
-  const riseTo = floorCy - circleR * 0.15 - sz.h * scale * 0.55;
+  const riseTo = floorCy - circleR * 0.15 - 36 * wScale;
   const by = riseFrom + (riseTo - riseFrom) * rise;
   // Bloom around the Warden as it rises
-  bloomPoint(a, cx, by + sz.h * scale * 0.45, sz.w * scale * 1.2, s.accent, 0.45 * rise);
-  drawEnemy(a.ctx, 'wardenBoss', bx, by, scale, 0, false);
+  bloomPoint(a, cx, by + 20 * wScale, 60 * wScale, s.accent, 0.45 * rise);
+  if (rise > 0.85) strobe(a, 0.15 * (1 - (rise - 0.85) / 0.15), s.accent);
+  drawWardenCinematic(a.ctx, bx, by, wScale, 'rising', s.colour, s.accent);
 
   // Crimson ward sigils on the arena edge — flare on rise
   a.ctx.fillStyle = withAlpha('#e23a4a', 0.5 * rise);
@@ -235,6 +246,13 @@ function shotThreshold(a: ShotArgs, s: SphereDef): void {
     a.ctx.fillRect(cx - 1, doorTopY, 2, doorH);
   }
 
+  // Camera shake at door impact
+  if (slam > 0.85 && slam < 1.05) {
+    const impact = clamp01((slam - 0.85) / 0.15) * (1 - clamp01((slam - 0.85) / 0.2));
+    if (impact > 0) applyShake(a, { magnitude: 2.5 * impact, freq: 28 });
+    chromaticAberration(a, 1.5 + slam * 2);
+  }
+
   // Three crimson ward sigils slammed across each door — flare on impact
   const sigilColour = `rgba(226, 58, 74, ${0.5 + 0.5 * flare})`;
   a.ctx.fillStyle = sigilColour;
@@ -252,17 +270,21 @@ function shotThreshold(a: ShotArgs, s: SphereDef): void {
     }
   }
 
+  // Spirit motes through the gap while doors are open
+  if (slam < 0.95) motes(a, 8, '155, 108, 255', 31);
+  filmGrain(a, 0.08 * flare, 43);
+
   // The Warden looms behind — silhouetted between the doors (visible until
   // doors fully close)
   if (slam < 1.0) {
-    const sz = getEnemySize('wardenBoss');
-    const scale = Math.min(8, Math.max(5, a.height / 60));
-    const bx = cx - (sz.w * scale) / 2;
-    const by = doorTopY + doorH * 0.18;
-    drawEnemy(a.ctx, 'wardenBoss', bx, by, scale, 0, false);
+    const ds = Math.min(5, Math.max(2.5, a.height / 180));
+    const bx = cx - 16 * ds;
+    const by = doorTopY + doorH * 0.1;
+    drawWardenCinematic(a.ctx, bx, by, ds, 'looming', s.colour, s.accent);
   }
 
   colorGrade(a, s.colour, 0.08);
+  volumetricFog(a, s.colour, 0.06, 0.5, 43);
   vignette(a, 0.55);
 }
 
@@ -276,11 +298,13 @@ export function bossIntroShots(sphereId: SphereId): Shot[] {
       duration: 4.5,
       render: (a) => shotSphereApproach(a, s),
       subtitle: `${s.numeral} — ${s.name.toUpperCase()}    ·    ${s.godName}`,
+      transition: { type: 'radialWipe', duration: 500 },
     },
     {
       duration: 5.0,
       render: (a) => shotWardenManifests(a, s),
       subtitle: `${data.wardenName}  ·  ${data.epithet}`,
+      transition: { type: 'dipToBlack', duration: 400 },
     },
     {
       duration: 3.5,
@@ -288,10 +312,8 @@ export function bossIntroShots(sphereId: SphereId): Shot[] {
       subtitle: data.surrender,
       source: 'Pimander I.25',
       holdSubtitle: true,
+      transition: { type: 'glitch', duration: 300 },
     },
   ];
 }
 
-export function bossIntroLength(sphereId: SphereId): number {
-  return bossIntroShots(sphereId).reduce((acc, s) => acc + s.duration, 0);
-}

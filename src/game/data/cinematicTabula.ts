@@ -8,7 +8,7 @@
 
 import { Shot, ShotArgs } from '../../components/CinematicShort';
 import {
-  drawInitiateProfile, drawInitiateFace,
+  drawInitiateProfile, drawInitiateFace, drawInitiateMeditating,
   drawDistantLamp,
 } from '../rendering/cinematicSprites';
 import {
@@ -16,6 +16,7 @@ import {
   vignette, colorGrade, bloomPoint, starfield, motes,
   nebula, groundMist, brokenColumn, cinemaText, applyShake,
   godRays, filmGrain, chromaticAberration, emberParticles,
+  lensFlare, volumetricFog,
 } from '../rendering/cinemaHelpers';
 import { SPHERE_COLOURS, STAR_PRESETS } from '../rendering/artBible';
 
@@ -44,12 +45,15 @@ function shotCosmos(a: ShotArgs): void {
     { ...NEAR_STARS, speed: 16 + ramp * 90 },
   ]);
 
+  motes(a, 16, '244, 210, 122', 13);
+
   // The One — distant pinprick that pushes in
   const cx = a.width / 2, cy = a.height * 0.5;
   const grow = easeInOut(clamp01(a.t / a.duration));
   const r = 2 + grow * 130;
 
   bloomPoint(a, cx, cy, r * 3.4, '#ffe6a3', 0.6 + 0.3 * grow);
+  godRays(a, cx, cy, 6, a.height * 0.45, '#ffe6a3', 0.05 * grow, 8);
 
   const halo = a.ctx.createRadialGradient(cx, cy, 1, cx, cy, r * 2.6);
   halo.addColorStop(0, `rgba(255, 255, 255, ${0.95 + 0.05 * grow})`);
@@ -79,6 +83,8 @@ function shotCosmos(a: ShotArgs): void {
   a.ctx.fill();
 
   colorGrade(a, '#3a225f', 0.08);
+  chromaticAberration(a, 0.6 + grow * 1.6);
+  filmGrain(a, 0.02, 13);
   vignette(a, 0.45);
 }
 
@@ -223,6 +229,11 @@ function shotRings(a: ShotArgs): void {
   // Faint god rays from the cosmic centre as rings form
   godRays(a, cx, cy, 8, a.height * 0.45, '#ffe6a3', 0.06 * dim, 8);
 
+  // Lens flare on the bright centre as rings expand
+  if (dim > 0.3) {
+    lensFlare(a, cx, cy, '#ffe6a3', dim * corePulse * 0.3);
+  }
+
   colorGrade(a, '#1f1142', 0.10);
   vignette(a, 0.5);
 }
@@ -273,6 +284,7 @@ function shotWalk(a: ShotArgs): void {
 
   // Ground mist near the horizon
   groundMist(a, horizonY, 100);
+  volumetricFog(a, '#1f1142', 0.12, 0.5, 3);
 
   // Distant lamps along the horizon — extinguish one by one as the Initiate walks
   const lampCount = 7;
@@ -355,6 +367,10 @@ function shotHero(a: ShotArgs): void {
   const lampAlpha = easeOut(clamp01(p * 1.4));
   drawDistantLamp(a.ctx, lx, ly + 20, lampAlpha, 0.85 + Math.sin(a.total * 4) * 0.15);
 
+  motes(a, 10, '244, 210, 122', 11);
+  filmGrain(a, 0.035, 11);
+  chromaticAberration(a, 1.2);
+
   colorGrade(a, '#2a1656', 0.15);
   vignette(a, 0.65, 0.2);
 }
@@ -411,15 +427,13 @@ function shotTitle(a: ShotArgs): void {
   a.ctx.fillText('A SOLITARY DESCENT', cx, titleY + 84);
   a.ctx.restore();
 
-  // Below, far at the bottom edge, the Initiate in profile — small, alone,
-  // facing into the title's promise
+  // Below, far at the bottom edge, the Initiate standing still — small,
+  // alone, breathing, facing into the title's promise
   const groundY = a.height * 0.88;
   const initiateScale = Math.min(5, Math.max(3, a.height / 130));
   const ix = cx - 8 * initiateScale;
   const iy = groundY - 24 * initiateScale;
-  // Subtle bob
-  const bob = Math.sin(a.total * 1.6) * 1;
-  drawInitiateProfile(a.ctx, ix, iy + bob, initiateScale, 0.4, false);
+  drawInitiateMeditating(a.ctx, ix, iy, initiateScale, a.total);
   // Shadow puddle under feet
   a.ctx.fillStyle = 'rgba(0,0,0,0.45)';
   a.ctx.fillRect(ix + 6 * initiateScale, groundY + 1, 12 * initiateScale, 3);
@@ -435,6 +449,7 @@ export const TABULA_CINEMATIC: Shot[] = [
     render: shotCosmos,
     subtitle: 'It is true, without lies, certain and most true.',
     source: 'Tabula Smaragdina',
+    transition: { type: 'radialWipe', duration: 600 },
   },
   {
     duration: 3.8,
@@ -447,16 +462,19 @@ export const TABULA_CINEMATIC: Shot[] = [
     duration: 5.4,
     render: shotRings,
     subtitle: 'Seven lamps. Seven veils. Seven forgettings.',
+    transition: { type: 'irisOut', duration: 400 },
   },
   {
     duration: 5.6,
     render: shotWalk,
     subtitle: 'The lamps have gone out.',
+    transition: { type: 'glitch', duration: 300 },
   },
   {
     duration: 4.6,
     render: shotHero,
     subtitle: 'Take up thy lamp, Initiate.',
+    transition: { type: 'irisIn', duration: 500 },
   },
   {
     duration: 5.6,

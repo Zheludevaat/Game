@@ -11,10 +11,15 @@ import {
   drawStoneArch,
   drawDistantLamp,
   drawInitiateHeroic,
+  drawInitiateArmsRaised,
   drawHandsDagger,
   drawInitiateFalling,
   drawOgdoadGlyph,
   drawInitiateLookingUp,
+  drawInitiateIdle,
+  drawInitiateBack,
+  drawInitiateMeditating,
+  drawWardenCinematic,
 } from '../game/rendering/cinematicSprites';
 
 interface SpriteEntry {
@@ -28,14 +33,20 @@ const SCALES = [1, 2, 4, 8];
 
 const SPRITES: SpriteEntry[] = [
   { name: 'Initiate Profile (walk)', draw: (c, x, y, s) => drawInitiateProfile(c, x, y, s, 0, false, 'cosmic'), nativeW: 16, nativeH: 26 },
+  { name: 'Initiate Idle', draw: (c, x, y, s) => drawInitiateIdle(c, x, y, s, 0, 'cosmic'), nativeW: 16, nativeH: 26 },
+  { name: 'Initiate Meditating', draw: (c, x, y, s) => drawInitiateMeditating(c, x, y, s, 0, 'cosmic'), nativeW: 16, nativeH: 26 },
+  { name: 'Initiate Back', draw: (c, x, y, s) => drawInitiateBack(c, x, y, s, 0, 'cosmic'), nativeW: 16, nativeH: 26 },
   { name: 'Initiate Face (close-up)', draw: (c, x, y, s) => drawInitiateFace(c, x, y, s, 0.6, 'cosmic'), nativeW: 28, nativeH: 28 },
   { name: 'Initiate Heroic', draw: (c, x, y, s) => drawInitiateHeroic(c, x, y, s, 0.6, 'cosmic'), nativeW: 22, nativeH: 30 },
+  { name: 'Initiate Arms Raised', draw: (c, x, y, s) => drawInitiateArmsRaised(c, x, y, s, 0.8, 'cosmic'), nativeW: 22, nativeH: 30 },
   { name: 'Initiate Falling', draw: (c, x, y, s) => drawInitiateFalling(c, x, y, s, 0, 'cosmic'), nativeW: 14, nativeH: 22 },
   { name: 'Initiate Looking Up', draw: (c, x, y, s) => drawInitiateLookingUp(c, x, y, s, 0.5, 'cosmic'), nativeW: 14, nativeH: 22 },
   { name: 'Ogdoad Glyph', draw: (c, x, y, s) => drawOgdoadGlyph(c, x, y, s, 0.85, 0), nativeW: 48, nativeH: 48 },
   { name: 'Stone Arch', draw: (c, x, y, s) => drawStoneArch(c, x, y + 18 * s, s, 'gold'), nativeW: 28, nativeH: 36 },
   { name: 'Distant Lamp', draw: (c, x, y, s) => drawDistantLamp(c, x, y, 1, 0.85), nativeW: 24, nativeH: 22 },
   { name: 'Hands + Dagger', draw: (c, x, y, s) => drawHandsDagger(c, x, y, s), nativeW: 22, nativeH: 14 },
+  { name: 'Warden (Rising)', draw: (c, x, y, s) => drawWardenCinematic(c, x, y, s, 'rising', '#ff8844', '#ffbb77'), nativeW: 32, nativeH: 40 },
+  { name: 'Warden (Looming)', draw: (c, x, y, s) => drawWardenCinematic(c, x, y, s, 'looming', '#ff8844', '#ffbb77'), nativeW: 32, nativeH: 40 },
 ];
 
 interface Props {

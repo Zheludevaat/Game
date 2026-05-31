@@ -38,9 +38,32 @@ function mixHexToward(hex: string, target: [number, number, number], t: number):
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
+// ─── Cloth ripple — secondary motion via palette modulation ──────────
+
+function applyClothRipple(
+  pal: Record<string, string | null>,
+  keys: string[],
+  phase: number,
+  rowOffset: number,
+  rowCount: number,
+  intensity: number,
+): Record<string, string | null> {
+  const p = { ...pal };
+  for (let row = 0; row < rowCount; row++) {
+    const ripple = Math.sin(phase * 3 + row * 0.4) * intensity;
+    for (const key of keys) {
+      const t = ripple * (1 - (row / rowCount) * 0.5);
+      if (p[key]) {
+        p[key] = mixHexToward(p[key]!, [255, 255, 255], Math.abs(t));
+      }
+    }
+  }
+  return p;
+}
+
 // ─── Initiate, side-profile, walking ──────────────────────────────────
 // 16 × 26. The hood projects forward (left), the cloak trails right.
-// Two frames for a walking cycle.
+// Eight frames for a walking cycle (4 keyframes + 4 interstitials).
 
 const initiateProfilePalette: Record<string, string | null> = {
   '.': null,
@@ -183,7 +206,127 @@ const initiateProfileFrameD: PixelMatrix = [
   '................',
 ];
 
-const PROFILE_FRAMES = [initiateProfileFrameA, initiateProfileFrameB, initiateProfileFrameC, initiateProfileFrameD];
+const initiateProfileFrameAB: PixelMatrix = [
+  '.....ooo........',
+  '....oHhho.......',
+  '...oHhhhho......',
+  '..oHhhhhhHo.....',
+  '.oHhfffhhhHo....',
+  '.oHhefffhhho....',
+  '.oHhfffhhhho....',
+  '.oHhhhhhhhho....',
+  '..ohhhrrrhho....',
+  '..orrrrrCCCo....',
+  '.orrrrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '.orrgrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '..orrrrrCCCo....',
+  '..orrrrrCCCo....',
+  '..orrrrrCCCo....',
+  '..orrrrCCco.....',
+  '..orrrrCCco.....',
+  '..orrrrCCco.....',
+  '..orrrCcco......',
+  '..orrr..........',
+  '...orr..........',
+  '...obb..........',
+  '...oo...........',
+  '................',
+  '................',
+];
+
+const initiateProfileFrameBC: PixelMatrix = [
+  '.....ooo........',
+  '....oHhho.......',
+  '...oHhhhho......',
+  '..oHhhhhhHo.....',
+  '.oHhfffhhhHo....',
+  '.oHhefffhhho....',
+  '.oHhfffhhhho....',
+  '.oHhhhhhhhho....',
+  '..ohhhrrrhho....',
+  '..orrrrrCCCo....',
+  '.orrrrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '.orrgrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '..orrrrrCCCo....',
+  '..orrrrrCCCo....',
+  '..orrrrrCCCo....',
+  '..orrrrrCCco....',
+  '..orrrrrcco.....',
+  '...orrrrCCco....',
+  '...orrrcco......',
+  '...orr..........',
+  '...orr..........',
+  '...obb..........',
+  '...oo...........',
+  '................',
+  '................',
+];
+
+const initiateProfileFrameCD: PixelMatrix = [
+  '.....ooo........',
+  '....oHhho.......',
+  '...oHhhhho......',
+  '..oHhhhhhHo.....',
+  '.oHhfffhhhHo....',
+  '.oHhefffhhho....',
+  '.oHhfffhhhho....',
+  '.oHhhhhhhhho....',
+  '..ohhhrrrhho....',
+  '..orrrrrCCCo....',
+  '.orrrrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '.orrgrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '..orrrrrCCCo....',
+  '..orrrrCCCCo....',
+  '..orrrrCCCCo....',
+  '..orrrrCCCCo....',
+  '..orrrrCCcco....',
+  '..orrrrCCCco....',
+  '...orrrCco......',
+  '...orrr.........',
+  '....orr.........',
+  '....obb.........',
+  '....oo..........',
+  '................',
+  '................',
+];
+
+const initiateProfileFrameDA: PixelMatrix = [
+  '.....ooo........',
+  '....oHhho.......',
+  '...oHhhhho......',
+  '..oHhhhhhHo.....',
+  '.oHhfffhhhHo....',
+  '.oHhefffhhho....',
+  '.oHhfffhhhho....',
+  '.oHhhhhhhhho....',
+  '..ohhhrrrhho....',
+  '..orrrrrCCCo....',
+  '.orrrrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '.orrgrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '..orrrrrCCCo....',
+  '..orrrrrCCCo....',
+  '..orrrrrCCCo....',
+  '..orrrrrCCco....',
+  '..orrrrrcco.....',
+  '...orrrrCCco....',
+  '...orrrcco......',
+  '...orr..........',
+  '...orr..........',
+  '...obb..........',
+  '...oo...........',
+  '................',
+  '................',
+];
+
+const PROFILE_FRAMES = [initiateProfileFrameA, initiateProfileFrameAB, initiateProfileFrameB, initiateProfileFrameBC, initiateProfileFrameC, initiateProfileFrameCD, initiateProfileFrameD, initiateProfileFrameDA];
 
 export function drawInitiateProfile(
   ctx: CanvasRenderingContext2D,
@@ -193,10 +336,10 @@ export function drawInitiateProfile(
   facingRight = false,
   lighting: LightingMood = 'cosmic',
 ): void {
-  const frame = PROFILE_FRAMES[Math.floor(walkPhase) % 4];
+  const frame = PROFILE_FRAMES[Math.floor(walkPhase) % 8];
   const raw = Math.abs(Math.sin(walkPhase * Math.PI * 0.5));
   const bob = Math.floor(raw * 1.5);
-  const pal = modulateProfile(lighting);
+  const pal = applyClothRipple(modulateProfile(lighting), ['C', 'c', 'R'], walkPhase, 9, 11, 0.04);
   drawSprite(ctx, frame, pal, Math.floor(x), Math.floor(y - bob * scale), scale, facingRight);
 }
 
@@ -216,6 +359,151 @@ function modulateProfile(lighting: LightingMood): Record<string, string | null> 
     pal.g = mixHexToward(pal.g!, target, 0.30);
   }
   return pal;
+}
+
+// ─── Initiate idle — standing still, breathing ────────────────────────
+// 16 × 26. Hood forward, arms at sides, cloak draping straight down.
+// Feet together. Shares the profile palette and modulateProfile helper.
+
+const initiateIdle: PixelMatrix = [
+  '.....ooo........',
+  '....oHhho.......',
+  '...oHhhhho......',
+  '..oHhhhhhHo.....',
+  '.oHhfffhhhHo....',
+  '.oHhefffhhho....',
+  '.oHhfffhhhho....',
+  '.oHhhhhhhhho....',
+  '..ohhhrrrhho....',
+  '..orrrrrrrro.....',
+  '.orrrrrrrrrro...',
+  '.orrrrrrrrrro...',
+  '.orrgrrrrrrro...',
+  '.orrrrrrrrrro...',
+  '..orrrrrrrrro...',
+  '..orrrrrrrrro...',
+  '..orrrrrrrrro...',
+  '..orrrrrrrrro...',
+  '..orrrrrrrrro...',
+  '..orrrrrrroo....',
+  '..orrrrrro......',
+  '..obbbbbo.......',
+  '..oooooo........',
+  '................',
+  '................',
+  '................',
+];
+
+export function drawInitiateIdle(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+  breathPhase: number,
+  lighting: LightingMood = 'cosmic',
+): void {
+  const basePal = modulateProfile(lighting);
+  const breath = Math.sin(breathPhase * 1.3) * 0.06;
+  const pal = { ...basePal };
+  pal.r = mixHexToward(pal.r!, [255, 255, 255], breath + 0.06);
+  pal.R = mixHexToward(pal.R!, [255, 255, 255], breath + 0.04);
+  drawSprite(ctx, initiateIdle, pal, Math.floor(x), Math.floor(y), scale, false);
+}
+
+// ─── Initiate meditating — cross-legged, head bowed ──────────────────
+// 16 × 26. Seated meditation pose: hood forward, head bowed, robe
+// pooling on the ground. Shares the profile palette.
+
+const initiateMeditating: PixelMatrix = [
+  '.....ooo........',
+  '....oHhho.......',
+  '...oHhhhho......',
+  '..oHhhhhhHo.....',
+  '.oHhfffhhhHo....',
+  '.oHhefffhhho....',
+  '.oHhfffhhhho....',
+  '.oHhhhhhhhho....',
+  '..ohhhhrrhho....',
+  '..orrrrrrrro.....',
+  '.orrcrrrcrro...',
+  '.orrcrrrcrro...',
+  '.orrcrrrcrro...',
+  '.orrrrrrrrrro...',
+  '..orrcrrrcrro...',
+  '..orrcrrrcrro...',
+  '..orrrcrrrroo...',
+  '..orrrrrrrrro...',
+  '..orrrrrrrrro...',
+  '.orrrrrrrrrrro..',
+  '.orrrrrrrrrrro..',
+  'orrrrrrrrrrrrro.',
+  'obbbbbbbbbbbbo.',
+  '.ooooooooooooo..',
+  '................',
+  '................',
+];
+
+export function drawInitiateMeditating(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+  breathPhase: number,
+  lighting: LightingMood = 'cosmic',
+): void {
+  const basePal = modulateProfile(lighting);
+  const breath = Math.sin(breathPhase * 0.8) * 0.04;
+  const pal = { ...basePal };
+  pal.r = mixHexToward(pal.r!, [255, 255, 255], breath + 0.04);
+  pal.R = mixHexToward(pal.R!, [255, 255, 255], breath + 0.03);
+  drawSprite(ctx, initiateMeditating, pal, Math.floor(x), Math.floor(y), scale, false);
+}
+
+// ─── Initiate back view — seen from behind ─────────────────────────────
+// 16 × 26. Hood and cloak from behind: hood covers head and shoulders,
+// cloak drapes down the back with a central spine-seam highlight.
+// Gold pendant visible as a glint at the neck. Uses the profile palette.
+
+const initiateBack: PixelMatrix = [
+  '.....ooo........',
+  '....oHHHo.......',
+  '...oHhhhHo......',
+  '..oHhhhhhHo.....',
+  '.oHhhhhhhhHo....',
+  '.oHhhhhhhhho....',
+  '.oHhhchhhhho....',
+  '.oHhccgchhho....',
+  '.ohhccccchho....',
+  '.ohhccccchho....',
+  '..ohcccccho.....',
+  '..orrrrRrro.....',
+  '..orrrrRrro.....',
+  '.orrrrrrrrro....',
+  '.orrrrRrrrro....',
+  '.orrRrrrRrro....',
+  '.orrrrRrrrro....',
+  '..orrrrrrrro....',
+  '..orrrrRrrro....',
+  '..orrrrrrrro....',
+  '..orrrrrrroo....',
+  '...orrrrrro.....',
+  '...obbbbbo......',
+  '...oooooo.......',
+  '................',
+  '................',
+];
+
+export function drawInitiateBack(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+  breathPhase: number,
+  lighting: LightingMood = 'cosmic',
+): void {
+  const basePal = modulateProfile(lighting);
+  const breath = Math.sin(breathPhase * 1.3) * 0.06;
+  const pal = { ...basePal };
+  pal.r = mixHexToward(pal.r!, [255, 255, 255], breath + 0.06);
+  pal.R = mixHexToward(pal.R!, [255, 255, 255], breath + 0.04);
+  drawSprite(ctx, initiateBack, pal, Math.floor(x), Math.floor(y), scale, false);
 }
 
 // ─── Initiate face — hero close-up ────────────────────────────────────
@@ -526,6 +814,75 @@ export function drawInitiateHeroic(
   drawSprite(ctx, initiateHeroicFromBelow, pal, Math.floor(x), Math.floor(y), scale, false);
 }
 
+// ─── Initiate arms-raised — heroic pose with arms uplifted ─────────────
+// 22 × 30. Same hood/face as InitiateHeroic but arms project upward
+// and outward from the shoulders in a V-shape. Replaces the crude
+// fillRect overlay in Ending shotHymned.
+
+const initiateArmsRaised: PixelMatrix = [
+  '........oooooo........',
+  '......ooHHHHHHoo......',
+  '.....oHHhhhhhHHo......',
+  '....oHhhhhhhhhHo......',
+  '...oHhhffffffhhHo.....',
+  '..oHhhffffffffhho.....',
+  '..oHhhffeefeffhho.....',
+  '.RoHhfffeefefffhho....',
+  '.rRoHhffffffffffho....',
+  '.rRroHhhffffffffhho...',
+  '..rRrohhhhhhhhorRo...',
+  '...rRroiiiiiiiorRo...',
+  '....rrodrRRRRdRorro...',
+  '...oRroRdRRRRRRdrRo...',
+  '..orrorrRgGGgRRrroro..',
+  '.orrrrrRRRRRRRRrrrrro.',
+  '.orRRRRRRRRRRRRRRRrro.',
+  '.orRRRRRRRRRRRRRRRrro.',
+  '..orRRRRRRRRRRRRRrro..',
+  '..orRRRRdRRRRdRRrro..',
+  '...orRRRRRRRRRRRrro...',
+  '...orRRrrRRRrrRRro...',
+  '....orrr...rrrroo....',
+  '....orr.....rro......',
+  '....obb.....bbo......',
+  '....oob.....boo......',
+  '.....oo.....oo.......',
+  '......................',
+  '......................',
+  '......................',
+];
+
+export function drawInitiateArmsRaised(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+  eyeGlow: number,
+  lighting: LightingMood = 'cosmic',
+): void {
+  const pal = { ...initiateHeroicPalette };
+  const t = Math.max(0, Math.min(1, eyeGlow));
+  pal.e = `rgb(${Math.round(108 + 56 * t)}, 246, ${Math.round(229 + 11 * t)})`;
+  if (lighting !== 'cosmic') {
+    const target = LIGHTING_TARGETS[lighting];
+    if (lighting === 'brazier') {
+      pal.H = mixHexToward(pal.H!, target, 0.35);
+      pal.i = mixHexToward(pal.i!, target, 0.30);
+      pal.R = mixHexToward(pal.R!, target, 0.25);
+      pal.d = mixHexToward(pal.d!, target, 0.30);
+      pal.g = mixHexToward(pal.g!, target, 0.30);
+      pal.G = mixHexToward(pal.G!, target, 0.25);
+    } else {
+      pal.H = mixHexToward(pal.H!, target, 0.35);
+      pal.i = mixHexToward(pal.i!, target, 0.25);
+      pal.R = mixHexToward(pal.R!, target, 0.30);
+      pal.d = mixHexToward(pal.d!, target, 0.25);
+      pal.g = mixHexToward(pal.g!, target, 0.35);
+      pal.G = mixHexToward(pal.G!, target, 0.25);
+    }
+  }
+  drawSprite(ctx, initiateArmsRaised, pal, Math.floor(x), Math.floor(y), scale, false);
+}
+
 // ─── Hands holding a dagger — close-up ───────────────────────────────
 
 const handsDaggerPalette: Record<string, string | null> = {
@@ -580,7 +937,7 @@ const initiateFallingPalette: Record<string, string | null> = {
   g: '#f4d27a',
 };
 
-// Three cape frames for flutter during the tumble. Hood (rows 0-4)
+// Five cape frames for flutter during the tumble. Hood (rows 0-4)
 // identical in all frames; cape (rows 5-19) shifts left/centre/right.
 
 const initiateFallingFrameA: PixelMatrix = [
@@ -658,7 +1015,57 @@ const initiateFallingFrameC: PixelMatrix = [
   '..............',
 ];
 
-const FALLING_FRAMES = [initiateFallingFrameA, initiateFallingFrameB, initiateFallingFrameC];
+const initiateFallingFrameD: PixelMatrix = [
+  '.....oooo.....',
+  '....oHHHHo....',
+  '...oHhhhhHo...',
+  '..oHhhhhhhHo..',
+  '..ohhhhhhhho..',
+  '..occcccccco..',
+  '.occcccccccco.',
+  '.occCCCCCCcco.',
+  'occCCCCCCCCcco',
+  'occcCCggCCccco',
+  'occccCCCCcccCo',
+  'occcccccccccCo',
+  '.occcccccccCo.',
+  '.occcccccccco.',
+  '..occcccccco..',
+  '..occcccccco..',
+  '...occccccc...',
+  '....occcco....',
+  '....occcco....',
+  '.....occo.....',
+  '..............',
+  '..............',
+];
+
+const initiateFallingFrameE: PixelMatrix = [
+  '.....oooo.....',
+  '....oHHHHo....',
+  '...oHhhhhHo...',
+  '..oHhhhhhhHo..',
+  '..ohhhhhhhho..',
+  '...occccccco..',
+  '...occccccco..',
+  '...occCCcco...',
+  '...occcccco...',
+  '...occgccco...',
+  '...occcccco...',
+  '...occcccco...',
+  '...occcccco...',
+  '...occcccco...',
+  '...occcccco...',
+  '...occcccco...',
+  '...occcccco...',
+  '....occcco....',
+  '....occcco....',
+  '.....occo.....',
+  '..............',
+  '..............',
+];
+
+const FALLING_FRAMES = [initiateFallingFrameA, initiateFallingFrameB, initiateFallingFrameC, initiateFallingFrameD, initiateFallingFrameE];
 
 function modulateFalling(lighting: LightingMood): Record<string, string | null> {
   if (lighting === 'cosmic') return initiateFallingPalette;
@@ -688,9 +1095,9 @@ export function drawInitiateFalling(
   ctx.save();
   ctx.translate(Math.floor(x + 7 * scale), Math.floor(y + 11 * scale));
   ctx.rotate(spin);
-  const frameIndex = Math.floor(Math.abs(spin) / (Math.PI * 2 / 3)) % 3;
+  const frameIndex = Math.floor(Math.abs(spin) / (Math.PI * 2 / 5)) % 5;
   const frame = FALLING_FRAMES[frameIndex];
-  const pal = modulateFalling(lighting);
+  const pal = applyClothRipple(modulateFalling(lighting), ['C', 'c'], spin * 3, 5, 15, 0.06);
   drawSprite(ctx, frame, pal, Math.floor(-7 * scale), Math.floor(-11 * scale), scale, false);
   ctx.restore();
 }
@@ -799,4 +1206,129 @@ function modulateLookingUp(lighting: LightingMood): Record<string, string | null
     pal.g = mixHexToward(pal.g!, target, 0.25);
   }
   return pal;
+}
+
+// ─── Warden Cinematic Sprite — boss-intro actor ──────────────────────
+// 32 × 40 pixel matrix. Two poses: "rising" (arms spread, emerging from
+// occult circle) and "looming" (hunched forward, arms reaching out).
+// Accent keys `a`/`A` are replaced with the active sphere's colour at
+// draw time so the same sprite works for all 8 Wardens.
+
+const wardenRising: PixelMatrix = [
+  '................................',
+  '................................',
+  '..............oooo..............',
+  '.............oHHHHo.............',
+  '............oHHHHHHo............',
+  '...........oHHhhhhHHo...........',
+  '..........oHHhsssshhHHo.........',
+  '.........oHHhsseffesshhHo.......',
+  '........oHHhssseffeEssshhHo.....',
+  '.......oHHhsssseffeEsssshhHo....',
+  '......oHHhssssseffeEssssshhHo...',
+  '.....oHHhhssssseffeEssssshhhHo..',
+  '....oHHhhhssssseffeEssssshhhHo..',
+  '...oHHhhhhssssseffeEssssshhhhHo.',
+  '..oHHhhhhhhsssseffesssshhhhhhHo.',
+  '.oHHhhhhhhhhsssssssssshhhhhhhhHo',
+  '.oHHHHHHHHhhhhhhhhhhhhhhHHHHHHHo',
+  '.oHHHHHHHHHHHHhhhhhHHHHHHHHHHHHo',
+  '..oHHHHHHHHHHHHhhhHHHHHHHHHHHHo.',
+  '..oHHHHHHHbbbbbbbbbbbbbbbbHHHHo.',
+  '...oHHHHHbbbbbbbbbbbbbbbbbbHHo..',
+  '....oHHHHbmBBBBBBBBBBBBBBmbHo...',
+  '....oHHHHbmBBaAAaaAAaBBBmbHo...',
+  '....oHHHHbmBBAAgGGgAAaBBmbHo...',
+  '.....oHHHbmBBaAAaaAAaBBmbHo.....',
+  '.....oHHHHbmBBBBBBBBBBBBmbHo....',
+  '......oHHHHbmbmbbbbbbbbmbmHo.....',
+  '.......oHHHHHbbbbbbbbbbHHo......',
+  '........oHHHHHHHbbbbHHHHo.......',
+  '.........oHHHHHHHHHHHHHo........',
+  '..........oHHHHHHHHHHHo.........',
+  '...........oHHHHHHHHo...........',
+  '............oHHHHHHo............',
+  '.............oHHHHo.............',
+  '..............oHHo..............',
+  '...............oo...............',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+];
+
+const wardenLooming: PixelMatrix = [
+  '................................',
+  '................................',
+  '................................',
+  '..............oooo..............',
+  '.............oHHHHo.............',
+  '............oHHHHHHo............',
+  '...........oHHhhhhHHo...........',
+  '..........oHHhsssshhHHo.........',
+  '.........oHHhsseffeEsshhHo......',
+  '........oHHhssseffeEssshhHo.....',
+  '.......oHHhsssseffeEsssshhHo....',
+  '......oHHhssssseffeEssssshhHo...',
+  '..ooHHHhhsssssseffeEssssshhhHo..',
+  '.oHHHHHhhhssssseffeEssssshhhHo..',
+  'oHHHHhhhhhssssseffeEssssshhhhHo.',
+  'oHHHHhhhhhhsssseffeEsssshhhhhHoo',
+  '.oHHHHHHHHhhhhsssssssshhhhhooHHH',
+  '..oHHHHHHHHHHHhhhhhhhhhhhooHHHHH',
+  '...oHHHHHHHHHHHhhhhhhhhhooHHHHHo',
+  '....oHHHHHbbbbbbbbbbbbbbboHHo...',
+  '.....oHHHHbbbbbbbbbbbbbbboo.....',
+  '......oHHHHmBBBBBBBBBBBBm.......',
+  '......oHHHbmBBaAAaaAABBmb.......',
+  '......oHHHbmBAAgGGgAABBmb.......',
+  '.......oHHbmBBaAAaaAABmb........',
+  '.......oHHHmBBBBBBBBBBm.........',
+  '........oHHHmbmbbbbbbbm..........',
+  '.........oHHHHbbbbbbHo..........',
+  '..........oHHHHHHHHHHo..........',
+  '...........oHHHHHHHHo...........',
+  '............oHHHHHHo............',
+  '.............oHHHHo.............',
+  '..............oHHo..............',
+  '...............oo...............',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+];
+
+const wardenCinematicPalette: Record<string, string | null> = {
+  '.': null,
+  o: '#04020a',
+  s: '#0e0824',
+  b: '#1a0f2c',
+  m: '#2a1a4a',
+  B: '#3b265c',
+  H: '#5b3a86',
+  h: '#1f1142',
+  a: '#ff8844',
+  A: '#ffbb77',
+  e: '#6cf6e5',
+  E: '#a4faf0',
+  f: '#0a0420',
+  g: '#f4d27a',
+  G: '#ffe6a3',
+};
+
+export function drawWardenCinematic(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+  pose: 'rising' | 'looming',
+  sphereAccent: string,
+  sphereAccentBright: string,
+): void {
+  const matrix = pose === 'rising' ? wardenRising : wardenLooming;
+  const pal = { ...wardenCinematicPalette };
+  pal.a = sphereAccent;
+  pal.A = sphereAccentBright;
+  drawSprite(ctx, matrix, pal, Math.floor(x), Math.floor(y), scale, false);
 }

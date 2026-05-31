@@ -14,13 +14,12 @@ import { ShotArgs } from '../../components/CinematicShort';
 // ─── Curves & helpers ────────────────────────────────────────────────
 
 export function clamp01(v: number): number { return v < 0 ? 0 : v > 1 ? 1 : v; }
-export function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
 export function easeOut(t: number): number { return 1 - Math.pow(1 - t, 3); }
 export function easeIn(t: number): number { return t * t * t; }
 export function easeInOut(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
-export function wrap01(v: number): number { return ((v % 1) + 1) % 1; }
+function wrap01(v: number): number { return ((v % 1) + 1) % 1; }
 
 export function withAlpha(hex: string, alpha: number): string {
   let h = hex.replace('#', '');
@@ -379,19 +378,15 @@ export function lensFlare(
   // Diagonal rays
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const g = a.ctx.createLinearGradient(
-      cx, cy,
-      cx + Math.cos(angle) * 80, cy + Math.sin(angle) * 80,
-    );
+    a.ctx.save();
+    a.ctx.translate(cx, cy);
+    a.ctx.rotate(angle);
+    const g = a.ctx.createLinearGradient(0, 0, 80, 0);
     g.addColorStop(0, withAlpha(colour, 0.5 * intensity));
     g.addColorStop(1, withAlpha(colour, 0));
     a.ctx.fillStyle = g;
-    a.ctx.fillRect(cx - 40, cy - 1, 80, 2);
-    a.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    a.ctx.translate(cx, cy);
-    a.ctx.rotate(angle);
     a.ctx.fillRect(0, -1, 80, 2);
-    a.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    a.ctx.restore();
   }
 
   // Ghost reflection opposite

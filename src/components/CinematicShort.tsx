@@ -14,8 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useGamepadButtons } from './useGamepadButtons';
 import { audio, CinematicMood } from '../game/systems/AudioSystem';
 import { renderTransition, TransitionDef } from '../game/rendering/cinemaTransitions';
-
-function clamp01(v: number): number { return v < 0 ? 0 : v > 1 ? 1 : v; }
+import { clamp01 } from '../game/rendering/cinemaHelpers';
 
 export interface ShotArgs {
   ctx: CanvasRenderingContext2D;
@@ -165,11 +164,7 @@ export function CinematicShort(p: CinematicShortProps): JSX.Element {
       // Black overlay for cross-cuts (or custom transition)
       if (overlay > 0) {
         if (shot?.transition) {
-          const transProgress = 1 - outAlpha;
-          const dur = shot.transition.duration ?? 400;
-          const durSec = dur / 1000;
-          const shotOverlay = 1 - Math.min(fadeIn, Math.min(1, Math.max(0, (dur - tShot) / durSec)));
-          renderTransition(ctx, W, H, letterbox, shot.transition, clamp01(shotOverlay));
+          renderTransition(ctx, W, H, letterbox, shot.transition, clamp01(outAlpha));
         } else {
           ctx.fillStyle = `rgba(0,0,0,${overlay})`;
           ctx.fillRect(0, 0, W, H);
@@ -190,7 +185,6 @@ export function CinematicShort(p: CinematicShortProps): JSX.Element {
   const [subAlpha, setSubAlpha] = useState(0);
   useEffect(() => {
     if (!shot?.subtitle) { setSubAlpha(0); return; }
-    setSubAlpha(0);
     const fadeIn = shot.fadeInMs ?? 600;
     const startedAt = performance.now();
     const dur = shot.duration * 1000;

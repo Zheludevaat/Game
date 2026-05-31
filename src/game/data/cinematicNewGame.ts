@@ -12,9 +12,11 @@ import {
   drawStoneArch, drawOgdoadGlyph,
 } from '../rendering/cinematicSprites';
 import {
-  clamp01, easeOut,
+  clamp01, easeOut, easeInOut,
   vignette, colorGrade, bloomPoint, starfield, motes,
   nebula, groundMist, cinemaText, applyShake,
+  lensFlare, volumetricFog, emberParticles, strobe, brokenColumn,
+  filmGrain, chromaticAberration,
 } from '../rendering/cinemaHelpers';
 import { STAR_PRESETS } from '../rendering/artBible';
 
@@ -42,6 +44,7 @@ function shotApproach(a: ShotArgs): void {
   a.ctx.fillStyle = '#0a0420';
   a.ctx.fillRect(0, horizonY, a.width, a.height - horizonY);
   groundMist(a, horizonY, 100);
+  volumetricFog(a, '#3a225f', 0.10, 0.4, 7);
 
   // The Stone Arch — centered, large, the destination
   const archScale = a.height * 0.018;
@@ -56,12 +59,12 @@ function shotApproach(a: ShotArgs): void {
   }
 
   // The Initiate — small, walking up toward the arch from the bottom
-  const p = clamp01(a.t / a.duration);
+  const p = easeInOut(clamp01(a.t / a.duration));
   const px = a.width / 2;
   const py = a.height * 0.95 - p * (a.height * 0.18);
   const scale = Math.min(4, Math.max(2.5, a.height / 200));
   const phase = a.t * 4;
-  drawInitiateProfile(a.ctx, px - 8 * scale, py - 24 * scale, scale, phase, true);
+  drawInitiateProfile(a.ctx, px - 8 * scale, py - 24 * scale, scale, phase, true, 'cosmic');
   // Shadow
   a.ctx.fillStyle = 'rgba(0,0,0,0.55)';
   a.ctx.fillRect(px - 6 * scale, py + 2, 12 * scale, 3);
@@ -85,13 +88,14 @@ function shotOath(a: ShotArgs): void {
   // Hands holding dagger, foreground big — slow camera tilt by translating
   const p = clamp01(a.t / a.duration);
   const tilt = (p - 0.5) * 18; // small drift
-  a.ctx.save();
-  a.ctx.translate(0, tilt);
-
   const scale = Math.min(14, Math.max(8, a.height / 60));
   const cx = a.width / 2;
   const cy = a.height * 0.55;
+
+  a.ctx.save();
+  a.ctx.translate(0, tilt);
   drawHandsDagger(a.ctx, cx - 11 * scale, cy - 7 * scale, scale);
+  a.ctx.restore();
 
   // Accent glint on the blade — sweeps across as the camera moves
   const glintP = clamp01((a.t - 0.6) / 1.4);
@@ -99,11 +103,12 @@ function shotOath(a: ShotArgs): void {
     const gx = cx - 11 * scale + glintP * 22 * scale;
     a.ctx.fillStyle = `rgba(255, 255, 255, ${1 - glintP})`;
     a.ctx.fillRect(gx - 2, cy - 1 * scale, 4 * scale, 2);
+    lensFlare(a, a.width * 0.55, a.height * 0.55, '#ffe6a3', glintP * 0.2 * (1 - glintP));
+    chromaticAberration(a, 0.8 * glintP * (1 - glintP));
   }
 
-  a.ctx.restore();
-
   colorGrade(a, '#3a2410', 0.18);
+  filmGrain(a, 0.015, 31);
   vignette(a, 0.7, 0.18);
 }
 
@@ -132,18 +137,9 @@ function shotLookUp(a: ShotArgs): void {
     drawDistantLamp(a.ctx, x - 5, cy - 2, ember, flick);
   }
 
-  // Stone columns flanking — silhouetted, very tall (we are looking up)
-  a.ctx.fillStyle = '#000';
-  // Left column
-  a.ctx.fillRect(20, 0, 50, a.height);
-  a.ctx.fillRect(8,  a.height * 0.6, 80, 12);  // capital outcrop
-  // Right column
-  a.ctx.fillRect(a.width - 70, 0, 50, a.height);
-  a.ctx.fillRect(a.width - 88, a.height * 0.6, 80, 12);
-  // Inner silhouette stripe
-  a.ctx.fillStyle = '#0a0420';
-  a.ctx.fillRect(24, 0, 44, a.height);
-  a.ctx.fillRect(a.width - 66, 0, 44, a.height);
+  // Stone columns flanking — broken silhouettes, very tall (we are looking up)
+  brokenColumn(a, 44, a.height * 0.98, a.height * 0.6, 0.75);
+  brokenColumn(a, a.width - 44, a.height * 0.98, a.height * 0.6, 0.7);
 
   // The Initiate at the bottom of frame, looking up — face/upper-body sprite
   const baseY = a.height * 0.98;
@@ -162,7 +158,10 @@ function shotLookUp(a: ShotArgs): void {
   a.ctx.fillRect(0, baseY - a.height * 0.4, a.width, a.height * 0.4);
   a.ctx.restore();
 
+  motes(a, 12, '244, 130, 60', 41);
+
   colorGrade(a, '#1f1142', 0.10);
+  volumetricFog(a, '#3a2410', 0.06, 0.3, 41);
   vignette(a, 0.55);
 }
 
@@ -205,6 +204,11 @@ function shotStep(a: ShotArgs): void {
   a.ctx.stroke();
   a.ctx.restore();
 
+  // Abyss atmosphere leaking through as the seal breaks
+  if (irisP > 0.1) groundMist(a, cy + daisR * 0.3, 120, '108, 246, 229');
+  if (irisP > 0.2) volumetricFog(a, '#1f8a86', 0.08, 0.3, 11);
+  if (irisP > 0.3) emberParticles(a, 5, cx, cy + daisR * 0.2, daisR * 0.5, 19);
+
   // The Initiate stands on the dais, silhouetted against the deep abyss below
   const baseY = cy + daisR * 0.05; // top edge of dais
   const stepOff = irisP > 0.5 ? (irisP - 0.5) * 2 : 0;
@@ -243,6 +247,8 @@ function shotFall(a: ShotArgs): void {
   // Pure abyss
   a.ctx.fillStyle = '#000';
   a.ctx.fillRect(0, 0, a.width, a.height);
+
+  a.ctx.save();
 
   const p = clamp01(a.t / a.duration);
 
@@ -291,8 +297,9 @@ function shotFall(a: ShotArgs): void {
   }
 
   // The end of the fall — light blooming up from below
-  const arrival = clamp01((p - 0.6) * 3);
+  const arrival = clamp01((p - 0.55) * 3);
   if (arrival > 0) {
+    if (arrival < 0.1) strobe(a, 0.4 * (1 - arrival / 0.1), '#f4d27a');
     bloomPoint(a, cx, a.height + 40, 220 + arrival * 220, '#f4d27a', 0.55 * arrival);
   }
 
@@ -313,10 +320,14 @@ function shotFall(a: ShotArgs): void {
     a.ctx.restore();
   }
 
-  // Camera shake throughout the fall
-  // (applyShake takes the current ctx so call before drawing if we want shake;
-  //  here a small wobble at the end for impact)
-  // We'd need to wrap in save/restore — skipping for clarity.
+  // Wobble peaking at ~52.5% through the fall
+  const shakeP = clamp01((a.t - a.duration * 0.45) / (a.duration * 0.15));
+  if (shakeP > 0 && shakeP < 1) {
+    const mag = 2.0 * Math.sin(shakeP * Math.PI);
+    applyShake(a, { magnitude: mag, freq: 20 });
+  }
+
+  a.ctx.restore();
 
   colorGrade(a, '#1f1142', 0.10);
   vignette(a, 0.5);
@@ -329,27 +340,32 @@ export const NEW_GAME_CINEMATIC: Shot[] = [
     duration: 5.5,
     render: shotApproach,
     subtitle: 'The Initiate approaches the threshold.',
+    transition: { type: 'dipToBlack', duration: 400 },
   },
   {
     duration: 5.0,
     render: shotOath,
     subtitle: 'By the Word, the cosmos was made. By the Word, I descend.',
     source: 'Oath of the Magus',
+    transition: { type: 'radialWipe', duration: 500 },
   },
   {
     duration: 5.0,
     render: shotLookUp,
     subtitle: 'Seven lamps await thee. They are extinguished.',
+    transition: { type: 'irisIn', duration: 500 },
   },
   {
     duration: 6.5,
     render: shotStep,
     subtitle: 'To ascend, thou must first descend.',
+    transition: { type: 'irisOut', duration: 600 },
   },
   {
     duration: 6.5,
     render: shotFall,
     subtitle: 'The Abyss is thy forgetting. Remember.',
     holdSubtitle: true,
+    transition: { type: 'glitch', duration: 500 },
   },
 ];

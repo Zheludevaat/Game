@@ -114,29 +114,28 @@ function glitchTransition(
   _lb: number,
   p: number,
 ): void {
+  ctx.save();
+
   const src = ctx.getImageData(0, 0, W, H);
   const shiftAmt = (1 - p) * 16 + 2;
   const seed = Math.floor(p * 100);
 
   // RGB channel offset
-  ctx.save();
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
 
   // Red channel shifted right
-  drawShiftedChannel(ctx, src, W, H, shiftAmt, 0, 0);
+  drawShiftedChannel(ctx, src, W, H, shiftAmt, 0);
   // Green channel (normal position)
   ctx.putImageData(src, 0, 0);
   // Blue channel shifted left
-  drawShiftedChannel(ctx, src, W, H, -shiftAmt, 2, 0);
+  drawShiftedChannel(ctx, src, W, H, -shiftAmt, 2);
 
   ctx.globalAlpha = 0.7;
   ctx.putImageData(src, 0, 0);
-  ctx.restore();
 
   // Horizontal noise bars
-  ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   for (let i = 0; i < 6; i++) {
     const barY = ((i * 137 + seed * 31) % H);
@@ -145,7 +144,6 @@ function glitchTransition(
     ctx.fillStyle = `rgba(255,255,255,${alpha})`;
     ctx.fillRect(0, barY, W, barH);
   }
-  ctx.restore();
 
   // Fade to black at end
   if (p > 0.7) {
@@ -153,6 +151,8 @@ function glitchTransition(
     ctx.fillStyle = `rgba(0,0,0,${fade})`;
     ctx.fillRect(0, 0, W, H);
   }
+
+  ctx.restore();
 }
 
 function drawShiftedChannel(
@@ -161,7 +161,6 @@ function drawShiftedChannel(
   W: number, H: number,
   shiftX: number,
   channel: number,
-  _alpha: number,
 ): void {
   const dst = ctx.createImageData(W, H);
   for (let py = 0; py < H; py++) {

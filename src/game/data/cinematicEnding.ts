@@ -6,12 +6,13 @@
 // seven planetary rings and the apotheosis into the Eighth Nature.
 
 import { Shot, ShotArgs } from '../../components/CinematicShort';
-import { drawInitiateHeroic, drawOgdoadGlyph } from '../rendering/cinematicSprites';
+import { drawInitiateHeroic, drawInitiateMeditating, drawInitiateArmsRaised, drawInitiateBack, drawDistantLamp, drawOgdoadGlyph } from '../rendering/cinematicSprites';
 import {
   clamp01, easeIn, easeOut, easeInOut, withAlpha,
   vignette, colorGrade, bloomPoint, starfield, motes,
   nebula, cinemaText, applyShake,
   chromaticAberration, filmGrain, strobe, godRays,
+  lensFlare, innerLetterbox,
 } from '../rendering/cinemaHelpers';
 import { SPHERE_COLOURS, STAR_PRESETS } from '../rendering/artBible';
 
@@ -48,19 +49,11 @@ function shotSeventhLamp(a: ShotArgs): void {
     if (lit > 0.05) {
       bloomPoint(a, x, cy, 32, colour, lit * flick * 0.65);
     }
-    // Bracket
-    a.ctx.fillStyle = `rgba(40, 22, 70, ${0.9})`;
-    a.ctx.fillRect(x - 1.5, cy + 6, 3, 12);
-    a.ctx.fillRect(x - 5, cy + 16, 10, 3);
-    // Flame
+    // Pixel lamp body with flame, dimmed by alpha/flick
     if (lit > 0.05) {
-      const fh = 9 + Math.sin(a.total * 5 + i) * 1.5;
-      a.ctx.fillStyle = withAlpha(colour, lit * flick);
-      a.ctx.beginPath();
-      a.ctx.ellipse(x, cy, 4.5, fh, 0, 0, Math.PI * 2);
-      a.ctx.fill();
-      a.ctx.fillStyle = `rgba(255, 247, 214, ${lit})`;
-      a.ctx.fillRect(x - 1, cy - 2, 2, 4);
+      drawDistantLamp(a.ctx, x - 5, cy - 2, lit, flick);
+      if (isLast && lit > 0.05) godRays(a, x, cy, 6, a.height * 0.35, '#9b6cff', lit * 0.08, 6);
+      else godRays(a, x, cy, 4, a.height * 0.15, colour, 0.03, 4);
     }
   }
 
@@ -99,6 +92,7 @@ function shotRingCollapse(a: ShotArgs): void {
 
   // Stars during draw, fading toward explosion
   starfield(a, [FAR_STARS], 51);
+  nebula(a, a.width * 0.5, a.height * 0.5, a.height * 0.6, '#3a225f', 0.15);
 
   // Bright central pinprick
   const corePhase = p < drawDur ? p / drawDur : 1;
@@ -152,6 +146,10 @@ function shotRingCollapse(a: ShotArgs): void {
       a.ctx.restore();
       // Bloom on each ring as brightness builds
       bloomPoint(a, cx, cy, r + 30, col.ring, 0.15 * brightness);
+    }
+    // Lens flare at rotation peak
+    if (rotP > 0.5) {
+      lensFlare(a, cx, cy, '#ffe6a3', (rotP - 0.5) * 0.6);
     }
     // Camera shake increases with rotation speed
     if (rotP > 0.3) applyShake(a, { magnitude: 1 + rotP * 4, freq: 32 });
@@ -244,23 +242,17 @@ function shotHymned(a: ShotArgs): void {
     const iy = baseY - 28 * scale;
     a.ctx.save();
     a.ctx.globalAlpha = matP;
-    drawInitiateHeroic(a.ctx, ix, iy, scale, 0.7 + p * 0.3);
-    a.ctx.restore();
-    // Arms-raise — simple V of two pixel-art arms over the figure's body.
-    // Done in canvas (not the sprite) so we don't need a new frame.
     if (armsRaise > 0) {
-      a.ctx.save();
-      a.ctx.globalAlpha = matP * armsRaise;
-      a.ctx.fillStyle = '#3d2273';
-      const armUp = armsRaise * scale * 5;
-      a.ctx.fillRect(ix + 6 * scale,  iy + 10 * scale - armUp, 2 * scale, armUp);
-      a.ctx.fillRect(ix + 14 * scale, iy + 10 * scale - armUp, 2 * scale, armUp);
-      a.ctx.restore();
+      drawInitiateArmsRaised(a.ctx, ix, iy, scale, 0.7 + p * 0.3);
+    } else {
+      drawInitiateHeroic(a.ctx, ix, iy, scale, 0.7 + p * 0.3);
     }
+    a.ctx.restore();
   }
 
   colorGrade(a, '#f4d27a', 0.05);
   vignette(a, 0.55, 0.3);
+  innerLetterbox(a, 0.10);
 }
 
 // ─── Shot 4 — The Hymn ──────────────────────────────────────────────
@@ -286,6 +278,10 @@ function shotHymn(a: ShotArgs): void {
   // God rays radiating from the Ogdoad glyph
   if (lift > 0.2) godRays(a, cx, cy, 10, a.height * 0.8, '#fff7d6', lift * 0.1, 12);
 
+  if (lift > 0.3) motes(a, 20, '244, 210, 122', 13);
+  filmGrain(a, 0.025, 5);
+  chromaticAberration(a, 1.5);
+
   // Initiate silhouette in front of star — outline only
   const scale = Math.min(8, Math.max(5, a.height / 70));
   const baseY = a.height * 0.72;
@@ -297,18 +293,18 @@ function shotHymn(a: ShotArgs): void {
   drawInitiateHeroic(a.ctx, ix, iy, scale, 1);
   a.ctx.restore();
 
-  // Four lines of the Hymn — fade in at 1.0, 3.5, 6.5, 10s; hold all
+  // Four lines of the Hymn — fade in at relative points; hold all
   const lines = [
     'Holy is God, the Father of all things.',
     'Holy is God, whose will is accomplished by his own powers.',
     'Holy is God, who would be known and is known by his own.',
     'Holy art Thou, of whom all Nature is the image.',
   ];
-  const fadeStarts = [1.0, 3.5, 6.5, 10.0];
+  const fadePoints = [0.07, 0.25, 0.46, 0.71];
   const lineFontPx = Math.min(22, Math.max(14, a.height / 32));
   const topY = a.height * 0.18;
   for (let i = 0; i < lines.length; i++) {
-    const alpha = clamp01((a.t - fadeStarts[i]) / 1.0);
+    const alpha = clamp01((a.t - fadePoints[i] * a.duration) / (a.duration * 0.07));
     if (alpha <= 0) continue;
     cinemaText(a, lines[i], cx, topY + i * (lineFontPx + 10), lineFontPx, alpha, '#3a225f');
   }
@@ -335,9 +331,11 @@ function shotFlight(a: ShotArgs): void {
   if (goldFade > 0) {
     const cx = a.width / 2, cy = a.height * 0.5;
     bloomPoint(a, cx, cy, 200 + (1 - p) * 200, '#ffe6a3', 0.4 * goldFade);
+    godRays(a, cx, cy, 8, a.height * 0.5, '#ffe6a3', goldFade * 0.06, 8);
   }
 
   motes(a, 16, '108, 246, 229', 89);
+  filmGrain(a, 0.03, 7);
 
   // Plotinus quote — fades in, then fades back at end
   const alpha = p < 0.25 ? p / 0.25 : (p > 0.85 ? 1 - (p - 0.85) / 0.15 : 1);
@@ -347,6 +345,7 @@ function shotFlight(a: ShotArgs): void {
   cinemaText(a, 'the flight of the Alone to the Alone.', cx, cy + 38, 22, alpha);
 
   vignette(a, 0.6);
+  innerLetterbox(a, 0.10);
 }
 
 // ─── Shot 6 — The cycle turns ───────────────────────────────────────
@@ -357,6 +356,7 @@ function shotCycleTurns(a: ShotArgs): void {
   a.ctx.fillStyle = '#02010a';
   a.ctx.fillRect(0, 0, a.width, a.height);
   starfield(a, [FAR_STARS, MID_STARS], 91);
+  nebula(a, a.width * 0.5, a.height * 0.2, a.height * 0.4, '#3a225f', 0.15);
   motes(a, 22, '244, 210, 122', 97);
 
   const cx = a.width / 2;
@@ -372,27 +372,26 @@ function shotCycleTurns(a: ShotArgs): void {
     const flick = 0.75 + Math.sin(a.total * 3 + i * 0.5) * 0.2;
     const alpha = clamp01(p * 2);
     bloomPoint(a, x, y, 28, '#ffe6a3', 0.55 * flick * alpha);
-    // Flame
-    a.ctx.fillStyle = withAlpha('#f4d27a', 0.9 * flick * alpha);
-    a.ctx.beginPath();
-    a.ctx.ellipse(x, y, 3.5, 6 + Math.sin(a.total * 5 + i) * 1, 0, 0, Math.PI * 2);
-    a.ctx.fill();
-    a.ctx.fillStyle = withAlpha('#ffe6a3', alpha);
-    a.ctx.fillRect(x - 1, y - 2, 2, 4);
+    // Pixel lamp body with flame
+    if (alpha > 0.05) {
+      drawDistantLamp(a.ctx, x - 5, y - 7, alpha, flick);
+      if (alpha > 0.1) godRays(a, x, y, 4, a.height * 0.25, '#ffe6a3', alpha * 0.04, 4);
+    }
   }
+
+  // Meditating Initiate below
+  const medScale = Math.min(4, Math.max(2.5, a.height / 160));
+  const medX = cx - 8 * medScale;
+  const medY = a.height * 0.86 - 26 * medScale;
+  drawInitiateMeditating(a.ctx, medX, medY, medScale, a.total, 'cosmic');
+  a.ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  a.ctx.fillRect(medX + 4 * medScale, medY + 26 * medScale, 10 * medScale, 3);
 
   // Resolving text, appears after lamps settle
   if (p > 0.5) {
     const ta = easeOut(clamp01((p - 0.5) * 2));
     cinemaText(a, 'Thus ends the first work.', cx, a.height * 0.62, 22, ta);
-    a.ctx.save();
-    a.ctx.font = 'italic 16px "Iowan Old Style","Georgia",serif';
-    a.ctx.textAlign = 'center';
-    a.ctx.fillStyle = `rgba(108, 246, 229, ${ta})`;
-    a.ctx.shadowColor = '#000';
-    a.ctx.shadowBlur = 6;
-    a.ctx.fillText('The cycle turns again.', cx, a.height * 0.62 + 26);
-    a.ctx.restore();
+    cinemaText(a, 'The cycle turns again.', cx, a.height * 0.62 + 26, 16, ta, '#6cf6e5');
   }
 
   vignette(a, 0.5);
@@ -405,29 +404,34 @@ export const ENDING_CINEMATIC: Shot[] = [
     duration: 7.0,
     render: shotSeventhLamp,
     subtitle: 'The seventh ring is undone.',
+    transition: { type: 'irisOut', duration: 500 },
   },
   {
     duration: 9.0,
     render: shotRingCollapse,
     subtitle: 'Made bare of all the workings of the cosmic frame…',
     source: 'Corpus Hermeticum I.26',
+    transition: { type: 'radialWipe', duration: 700 },
   },
   {
     duration: 9.0,
     render: shotHymned,
     subtitle: 'With its own proper power it hymneth with the Powers there to the Father.',
     source: 'Corpus Hermeticum I.26',
+    transition: { type: 'glitch', duration: 400 },
   },
   {
     duration: 14.0,
     render: shotHymn,
     holdSubtitle: true,
+    transition: { type: 'dipToBlack', duration: 600 },
   },
   {
     duration: 9.0,
     render: shotFlight,
     source: 'Plotinus, Enneads VI.9.11',
     holdSubtitle: true,
+    transition: { type: 'irisIn', duration: 500 },
   },
   {
     duration: 8.0,
