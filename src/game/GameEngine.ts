@@ -604,6 +604,45 @@ export class GameEngine {
     return true;
   }
 
+  // -- debug/test helpers -------------------------------------------------
+  /** Initialise the minimal engine state needed to exercise progression
+   *  logic without calling mount() (which requires a real Canvas 2D context). */
+  initForTest(): void {
+    this.archetype = getArchetype('magus');
+    this.meta = {
+      bonusMaxHp: 0,
+      bonusStartingMp: 0,
+      bonusEssenceGain: 0,
+      cosmeticLampAura: false,
+      unlockedCodex: [],
+      seenPrologue: false,
+      seenNewRunCinematic: false,
+      bossesSeen: [],
+      seenEnding: false,
+      ogdoadReached: 0,
+    };
+    this.initPlayer();
+  }
+
+  getDebugFloorNumber(): number {
+    return this.floor.number;
+  }
+
+  getDebugSummary(): RunSummary {
+    return { ...this.summary };
+  }
+
+  setDebugBossesDefeated(count: number): void {
+    this.summary.bossesDefeated = Math.max(0, count);
+  }
+
+  goToFloorForTest(n: number): void {
+    if (!this.player) {
+      this.initForTest();
+    }
+    this.goToFloor(n);
+  }
+
   private goToFloor(n: number): void {
     const seed = hashSeed(this.runSeed, n);
     this.floor = generateFloor({ floor: n, seed });
