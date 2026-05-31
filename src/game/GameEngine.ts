@@ -12,7 +12,6 @@ import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
 import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
 import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
-import { requiredWardenIdsBeforeOgdoad } from './progression/progressionRules';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
 import { DialogueChoice, NPCS, NPC_BY_ID, NpcDef, NpcPassive } from './data/npcs';
 import { generateFloor } from './world/DungeonGenerator';
@@ -21,6 +20,10 @@ import { InputManager } from './input/InputManager';
 import { audio } from './systems/AudioSystem';
 import { Renderer, RenderState, CameraState } from './rendering/Renderer';
 import { RunSnapshot, RUN_SNAPSHOT_VERSION } from './systems/runSnapshot';
+import { RewardContext, rollChestLoot, rollEnemyDrop, rollBossDrop } from './systems/rewards';
+import { applyArmorDamage, calculateMeleeDamage, calculateSpellDamage, hitPauseDuration, hitPauseMaxBound } from './systems/combat';
+import { canEnterOgdoad, shouldPlayBossIntro, recordBossDefeat, nextFloorAfterExit } from './systems/progression';
+import { isHostileRoom, areEnemiesStillAlive } from './systems/roomTransitions';
 
 export interface HudSnapshot {
   hp: number; maxHp: number;
@@ -729,7 +732,7 @@ export class GameEngine {
     }
     // Reaching the Eighth Sphere is the climactic moment.
     if (isOgdoadFloor(n)) {
-      const hasSevenLamps = this.summary.bossesDefeated >= requiredWardenIdsBeforeOgdoad().length;
+      const hasSevenLamps = canEnterOgdoad(this.summary.bossesDefeated);
       if (!this.summary.ogdoadReached) {
         this.summary.ogdoadReached = true;
         this.unlockCodex('ogdoad.hymn');
@@ -834,7 +837,7 @@ export class GameEngine {
       // First time this run that we step into THIS sphere's boss room,
       // ask the host to play the cinematic. The host decides whether to
       // actually play (gated on MetaState.bossesSeen + settings).
-      if (!this.bossIntroPlayedThisRun) {
+      if (shouldPlayBossIntro(sphere.id, this.bossIntroPlayedThisRun)) {
         this.bossIntroPlayedThisRun = true;
         this.cbs.onBossRoomEntered?.(sphere.id);
       }
@@ -1152,7 +1155,7 @@ export class GameEngine {
 
     // Bounds — let the player walk into the doorway gap when a door is open
     const room = this.currentRoom;
-    const hostileBounds = (room.type === 'enemy' || room.type === 'miniBoss' || room.type === 'boss') && !room.cleared;
+    const hostileBounds = isHostileRoom(room.type) && !room.cleared;
     const dwHalf = 22;
     const inXDoor = Math.abs(p.pos.x - ROOM_W / 2) < dwHalf;
     const inYDoor = Math.abs(p.pos.y - ROOM_H / 2) < dwHalf;
@@ -1358,7 +1361,7 @@ export class GameEngine {
     const fl = Math.hypot(fx, fy) || 1;
     const ux = fx / fl, uy = fy / fl;
     const baseAngle = Math.atan2(fy, fx);
-    const dmg = p.attack * p.damageMul * w.damageMul;
+    const dmg = calculateMeleeDamage(p.attack, p.damageMul, w.damageMul);
 
     // Hit detection — circle around an offset point, gated by angle to the facing
     const reach = w.range;
@@ -1427,7 +1430,7 @@ export class GameEngine {
     const fl = Math.hypot(fx, fy) || 1;
     const dir = { x: fx / fl, y: fy / fl };
     const baseAngle = Math.atan2(fy, fx);
-    const dmg = p.spellPower * p.damageMul * sp.damageMul;
+    const dmg = calculateSpellDamage(p.spellPower, p.damageMul, sp.damageMul);
     const pierce = sp.pierce + (p.relics.includes('emeraldTablet') ? 1 : 0);
     const homing = sp.seeking || p.relics.includes('serpentWand');
 
@@ -1522,39 +1525,32 @@ export class GameEngine {
 
   private openChestLoot(x: number, y: number): void {
     audio.sfx('chest');
-    const r = this.rand();
-    // 12% weapon, 12% spell, 14% relic, rest is gold/essence
-    if (r < 0.12) {
-      const pool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
-      if (pool.length > 0) {
-        const id = this.randPick(pool);
-        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'weapon', value: 0, weapon: id, life: 30 });
-        return;
-      }
+    const p = this.player;
+    const ctx: RewardContext = {
+      luck: p.luck,
+      coinBoost: p.relics.includes('solarCoin') ? 1.5 : 1,
+      ownedWeapons: p.weapons,
+      ownedSpells: p.spells,
+      ownedRelics: p.relics,
+    };
+    const reward = rollChestLoot(this.rng, ctx);
+
+    if (reward.kind === 'weapon' && reward.weaponId) {
+      this.pickups.push({ id: nid(), pos: { x, y }, kind: 'weapon', value: 0, weapon: reward.weaponId, life: 30 });
+      return;
     }
-    if (r < 0.24) {
-      const pool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
-      if (pool.length > 0) {
-        const id = this.randPick(pool);
-        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'spell', value: 0, spell: id, life: 30 });
-        return;
-      }
+    if (reward.kind === 'spell' && reward.spellId) {
+      this.pickups.push({ id: nid(), pos: { x, y }, kind: 'spell', value: 0, spell: reward.spellId, life: 30 });
+      return;
     }
-    if (r < 0.38) {
-      // relic
-      const owned = new Set(this.player.relics);
-      const pool = RELIC_IDS.filter((id) => !owned.has(id));
-      if (pool.length > 0) {
-        const id = this.randPick(pool);
-        this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: id, life: 20 });
-        return;
-      }
+    if (reward.kind === 'relic' && reward.relicId) {
+      this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: reward.relicId, life: 20 });
+      return;
     }
-    // Coins + essence + possible pickups
-    const luck = 1 + this.player.luck * 0.05;
-    const coinBoost = this.player.relics.includes('solarCoin') ? 1.5 : 1;
-    const coins = Math.round((6 + this.rand() * 10) * luck * coinBoost);
-    const ess = Math.round((2 + this.rand() * 5) * coinBoost);
+
+    // Consumables: coins + essence + possible pickups
+    const coins = reward.coins;
+    const ess = reward.essence;
     for (let i = 0; i < coins / 2; i++) {
       const a = this.rand() * Math.PI * 2;
       const d = 8 + this.rand() * 16;
@@ -1573,13 +1569,13 @@ export class GameEngine {
         kind: 'essence', value: 1, life: 18,
       });
     }
-    if (this.randChance(0.45)) {
+    if (reward.hasHp) {
       this.pickups.push({ id: nid(), pos: { x: x - 12, y: y + 4 }, kind: 'hp', value: 18, life: 18 });
     }
-    if (this.randChance(0.45)) {
+    if (reward.hasMp) {
       this.pickups.push({ id: nid(), pos: { x: x + 12, y: y + 4 }, kind: 'mp', value: 25, life: 18 });
     }
-    if (this.randChance(0.18)) {
+    if (reward.hasKey) {
       this.pickups.push({ id: nid(), pos: { x, y: y + 18 }, kind: 'key', value: 1, life: 22 });
     }
     this.particles.burst(x, y, 30, { colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.9 });
@@ -1627,7 +1623,7 @@ export class GameEngine {
             }, this.floor.number);
           }
           // Need to lock doors since enemies appeared
-          if (this.enemies.length > 0) room.cleared = false;
+          if (areEnemiesStillAlive(this.enemies.length)) room.cleared = false;
           break;
         }
         case 'fermentation':
@@ -1806,7 +1802,7 @@ export class GameEngine {
     }
 
     // Room clear check
-    if (!this.currentRoom.cleared && this.currentRoom.enemiesSpawned && this.enemies.length === 0) {
+    if (!this.currentRoom.cleared && this.currentRoom.enemiesSpawned && !areEnemiesStillAlive(this.enemies.length)) {
       this.onRoomCleared();
     }
   }
@@ -2158,7 +2154,7 @@ export class GameEngine {
       colour: e.isBoss ? '#ffd97a' : '#e23a4a', life: 0.9, maxLife: 0.9,
     });
     if (e.isBoss) {
-      this.defeatedWardenIds.push(e.visualKey);
+      this.defeatedWardenIds = recordBossDefeat(e.visualKey, this.defeatedWardenIds);
       this.summary.bossesDefeated += 1;
       audio.sfx('bossDeath');
       audio.stopBossMusic();
@@ -2169,38 +2165,23 @@ export class GameEngine {
       if (this.summary.bossesDefeated >= 2) this.unlockCodex('ogdoad.beauty');
       if (this.summary.bossesDefeated >= 3) this.unlockCodex('ogdoad.theurgy');
       // drop relic and lots of essence
-      const pool = RELIC_IDS.filter((id) => !this.player.relics.includes(id));
-      if (pool.length) {
-        const id = this.randPick(pool);
-        this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'relic', value: 0, relic: id, life: 30 });
+      const p = this.player;
+      const ctx: RewardContext = {
+        luck: p.luck,
+        coinBoost: p.relics.includes('solarCoin') ? 1.6 : 1,
+        ownedWeapons: p.weapons,
+        ownedSpells: p.spells,
+        ownedRelics: p.relics,
+      };
+      const bossReward = rollBossDrop(this.rng, ctx, this.floor.number);
+      if (bossReward.relicId) {
+        this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'relic', value: 0, relic: bossReward.relicId, life: 30 });
       }
-      // Every boss drops either a weapon or a spell the player doesn't own yet.
-      // Alternate by floor — odd floors give weapons, even floors give spells.
-      const giveWeapon = this.floor.number % 2 === 1;
-      if (giveWeapon) {
-        const wPool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
-        if (wPool.length) {
-          const id = this.randPick(wPool);
-          this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'weapon', value: 0, weapon: id, life: 60 });
-        } else {
-          const sPool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
-          if (sPool.length) {
-            const id = this.randPick(sPool);
-            this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'spell', value: 0, spell: id, life: 60 });
-          }
-        }
-      } else {
-        const sPool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
-        if (sPool.length) {
-          const id = this.randPick(sPool);
-          this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'spell', value: 0, spell: id, life: 60 });
-        } else {
-          const wPool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
-          if (wPool.length) {
-            const id = this.randPick(wPool);
-            this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'weapon', value: 0, weapon: id, life: 60 });
-          }
-        }
+      if (bossReward.weaponId) {
+        this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'weapon', value: 0, weapon: bossReward.weaponId, life: 60 });
+      }
+      if (bossReward.spellId) {
+        this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'spell', value: 0, spell: bossReward.spellId, life: 60 });
       }
       for (let i = 0; i < 20; i++) {
         const a = this.rand() * Math.PI * 2;
@@ -2219,32 +2200,33 @@ export class GameEngine {
   }
 
   private dropLoot(e: Enemy): void {
-    const luck = 1 + this.player.luck * 0.05;
-    const coinBoost = this.player.relics.includes('solarCoin') ? 1.6 : 1;
-    if (this.randChance(0.85 * luck)) {
-      const coins = 1 + this.randInt(0, e.isMiniBoss ? 8 : 3);
-      for (let i = 0; i < coins; i++) {
-        this.pickups.push({
-          id: nid(),
-          pos: { x: e.pos.x + (this.rand() - 0.5) * 12, y: e.pos.y + (this.rand() - 0.5) * 12 },
-          kind: 'coin', value: 1, life: 12,
-        });
-      }
+    const p = this.player;
+    const ctx: RewardContext = {
+      luck: p.luck,
+      coinBoost: p.relics.includes('solarCoin') ? 1.6 : 1,
+      ownedWeapons: p.weapons,
+      ownedSpells: p.spells,
+      ownedRelics: p.relics,
+    };
+    const reward = rollEnemyDrop(this.rng, ctx, !!e.isMiniBoss);
+
+    for (let i = 0; i < reward.coins; i++) {
+      this.pickups.push({
+        id: nid(),
+        pos: { x: e.pos.x + (this.rand() - 0.5) * 12, y: e.pos.y + (this.rand() - 0.5) * 12 },
+        kind: 'coin', value: 1, life: 12,
+      });
     }
-    if (this.randChance((e.isMiniBoss ? 1 : 0.4) * coinBoost)) {
+    if (reward.essence) {
       this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'essence', value: 1, life: 12 });
     }
-    if (e.isMiniBoss && this.randChance(0.5)) {
-      const pool = RELIC_IDS.filter((id) => !this.player.relics.includes(id));
-      if (pool.length) {
-        const id = this.randPick(pool);
-        this.pickups.push({ id: nid(), pos: { x: e.pos.x, y: e.pos.y - 6 }, kind: 'relic', value: 0, relic: id, life: 20 });
-      }
+    if (reward.relicId) {
+      this.pickups.push({ id: nid(), pos: { x: e.pos.x, y: e.pos.y - 6 }, kind: 'relic', value: 0, relic: reward.relicId, life: 20 });
     }
-    if (this.randChance(0.08)) {
+    if (reward.hp) {
       this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'hp', value: 12, life: 12 });
     }
-    if (this.randChance(0.06)) {
+    if (reward.mp) {
       this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'mp', value: 16, life: 12 });
     }
   }
@@ -2286,9 +2268,9 @@ export class GameEngine {
     // Brief hit-pause on damage landing. Every hit gets a 2-frame
     // pause for "punch" feel; big hits get 4 frames. Avoid stacking
     // beyond timeAlive + 0.06 so multi-hits don't lock the world.
-    const pauseDur = dmg >= 8 ? 0.05 : 0.025;
+    const pauseDur = hitPauseDuration(dmg);
     this.hitPauseUntil = Math.min(
-      this.timeAlive + 0.06,
+      this.timeAlive + hitPauseMaxBound(),
       Math.max(this.hitPauseUntil, this.timeAlive + pauseDur),
     );
     if (!this.reducedParticles) {
@@ -2347,7 +2329,7 @@ export class GameEngine {
   private damagePlayer(raw: number): void {
     const p = this.player;
     if (p.iframes > 0 || this.dead) return;
-    const dmg = Math.max(1, Math.round(raw - p.armor));
+    const dmg = applyArmorDamage(raw, p.armor);
     p.hp -= dmg;
     p.iframes = 0.7;
     p.flash = 0.15;
@@ -2614,7 +2596,7 @@ export class GameEngine {
     const p = this.player.pos;
     const cur = this.currentRoom;
     // Block exits when room not cleared and is hostile
-    const hostile = (cur.type === 'enemy' || cur.type === 'miniBoss' || cur.type === 'boss') && !cur.cleared;
+    const hostile = isHostileRoom(cur.type) && !cur.cleared;
     if (hostile) return;
     const margin = 14;
     const dwHalf = 22;
@@ -2653,7 +2635,7 @@ export class GameEngine {
 
   private descend(): void {
     this.floorTransition = { t: 0, duration: 0.6 };
-    this.goToFloor(this.floor.number + 1);
+    this.goToFloor(nextFloorAfterExit(this.floor.number));
   }
 
   private updateCamera(dt: number): void {
