@@ -1,8 +1,7 @@
 export interface AudioDiagnosticsSnapshot {
   activeCue: string | null;
   transportState: string;
-  scheduledEvents: number;
-  disposableCount: number;
+  activeNodeCount: number;
   peakDb: number;
   clipping: boolean;
 }
@@ -15,3 +14,6 @@ export function peakToDb(peak: number): number {
 export function isClippingPeak(peak: number): boolean {
   return peak >= 0.98;
 }
+
+/** dBFS threshold corresponding to a linear peak of 0.98. */
+export const CLIP_DB_THRESHOLD = -0.18;

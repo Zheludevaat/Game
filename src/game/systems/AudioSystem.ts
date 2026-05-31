@@ -1,6 +1,6 @@
 import * as Tone from 'tone';
 import type { AudioDiagnosticsSnapshot } from '../audio/audioDiagnostics';
-import { peakToDb } from '../audio/audioDiagnostics';
+import { peakToDb, CLIP_DB_THRESHOLD } from '../audio/audioDiagnostics';
 
 export type SfxName =
   | 'menu' | 'attack' | 'dash' | 'spell' | 'enemyHit' | 'playerHit'
@@ -1800,13 +1800,7 @@ export class AudioSystem {
 
   // ── Diagnostics ───────────────────────────────────────────────────
 
-  private getScheduledEventCount(): number {
-    return this.menuDisposables.length + this.ambienceDisposables.length +
-      this.bossMusicDisposables.length + this.cinematicDisposables.length +
-      this.screenDisposables.length;
-  }
-
-  private countDisposables(): number {
+  private countActiveNodes(): number {
     return this.menuDisposables.length + this.ambienceDisposables.length +
       this.bossMusicDisposables.length + this.cinematicDisposables.length +
       this.screenDisposables.length;
@@ -1825,10 +1819,9 @@ export class AudioSystem {
     return {
       activeCue: this.activeCueName ?? null,
       transportState: Tone.Transport.state,
-      scheduledEvents: this.getScheduledEventCount(),
-      disposableCount: this.countDisposables(),
+      activeNodeCount: this.countActiveNodes(),
       peakDb: this.lastPeakDb,
-      clipping: this.lastPeakDb >= -0.2,
+      clipping: this.lastPeakDb >= CLIP_DB_THRESHOLD,
     };
   }
 }
