@@ -282,7 +282,25 @@
   text-align: center;
   z-index: 6;
   pointer-events: none;
-  animation: drift-up 0.6s ease;
+  animation: banner-drift-up 0.6s ease;
+}
+
+@keyframes banner-drift-up {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.floor-banner {
+  top: 40%;
+  width: min(960px, calc(100dvw - var(--safe-left) - var(--safe-right) - 48px));
+}
+
+.floor-banner-title {
+  font-size: clamp(20px, 3.5vw, 32px);
+  letter-spacing: 0.18em;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .boss-banner .title {
@@ -1319,8 +1337,9 @@
   .hud-bottom-left,
   .hud-bottom-right {
     padding: 0;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 0.08em;
+    line-height: 1.25;
   }
 
   .hud-top-left {
@@ -1337,29 +1356,29 @@
 
   .bar {
     width: min(42vw, 168px);
-    height: 12px;
+    height: 18px;
   }
 
   .bar .label {
-    font-size: 8px;
+    font-size: 11px;
     letter-spacing: 0.08em;
   }
 
   .hud-currency-row {
     margin-top: 5px;
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.08em;
   }
 
   .hud-floor-label {
     letter-spacing: 0.12em;
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .hud-top-right .violet-text,
   .hud-top-right .glow-text,
   .hud-top-right .pixel-tag {
-    font-size: 8px !important;
+    font-size: 11px !important;
     letter-spacing: 0.1em !important;
   }
 
@@ -1387,7 +1406,7 @@
     bottom: calc(152px + var(--safe-bottom));
     width: min(42vw, 260px);
     max-width: min(42vw, 260px);
-    font-size: 9px;
+    font-size: 11px;
   }
 
   .boss-banner {
@@ -1398,6 +1417,17 @@
   .boss-banner .title {
     font-size: clamp(18px, 5vw, 24px);
     letter-spacing: 0.18em;
+  }
+
+  .floor-banner {
+    top: 38%;
+    width: min(56vw, 520px);
+  }
+
+  .floor-banner-title {
+    font-size: clamp(18px, 3.2vw, 22px);
+    letter-spacing: 0.14em;
+    line-height: 1.18;
   }
 
   .boss-bar {
@@ -1442,7 +1472,7 @@
 
   .touch-buttons button {
     border-width: 1px;
-    font-size: clamp(8px, 2.4vw, 11px);
+    font-size: 11px;
     letter-spacing: 0.08em;
   }
 
@@ -1456,7 +1486,7 @@
     width: clamp(42px, 10vw, 52px);
     height: clamp(42px, 10vw, 52px);
     border-width: 1px;
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .touch-pause {
@@ -1731,5 +1761,1940 @@
 
   .touch-controls {
     display: none;
+  }
+}
+
+/* Mobile-first premium UI pass: keep the pixel occult identity, but raise
+ * contrast, tap clarity, and hierarchy for phone-sized screens. */
+.main-menu-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.main-menu-screen {
+  z-index: 5;
+  padding:
+    calc(16px + var(--safe-top))
+    calc(16px + var(--safe-right))
+    calc(16px + var(--safe-bottom))
+    calc(16px + var(--safe-left));
+}
+
+.main-menu-shell {
+  position: relative;
+  width: min(560px, 100%);
+  min-height: min(760px, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 32px));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  padding: clamp(18px, 4vw, 26px);
+  background:
+    linear-gradient(180deg, rgba(19, 12, 36, 0.88), rgba(7, 3, 18, 0.94)),
+    radial-gradient(circle at 50% 8%, rgba(244, 210, 122, 0.22), transparent 34%),
+    radial-gradient(circle at 20% 90%, rgba(108, 246, 229, 0.18), transparent 44%);
+  border: 1px solid rgba(244, 210, 122, 0.42);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.9),
+    inset 0 0 0 4px rgba(34, 22, 54, 0.72),
+    0 24px 80px rgba(0, 0, 0, 0.62),
+    0 0 42px rgba(108, 246, 229, 0.08);
+}
+
+.main-menu-shell::before,
+.main-menu-shell::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(244, 210, 122, 0.55), rgba(108, 246, 229, 0.35), transparent);
+  pointer-events: none;
+}
+
+.main-menu-shell::before { top: 10px; }
+.main-menu-shell::after { bottom: 10px; }
+
+.main-menu-crest {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0.95;
+}
+
+.main-menu-crest span {
+  display: block;
+  width: 9px;
+  height: 18px;
+  border: 1px solid rgba(244, 210, 122, 0.75);
+  background:
+    linear-gradient(180deg, #fff4c6, #f4d27a 42%, #7a5a1a 43%, #2d1d55);
+  box-shadow: 0 0 18px rgba(244, 210, 122, 0.45);
+}
+
+.main-menu-crest span:nth-child(2) {
+  width: 12px;
+  height: 24px;
+  box-shadow: 0 0 24px rgba(244, 210, 122, 0.58), 0 0 18px rgba(108, 246, 229, 0.14);
+}
+
+.main-menu-title {
+  margin: 0;
+}
+
+.main-menu-title .pixel-subtitle {
+  color: #95fff4;
+  text-shadow: 0 0 10px rgba(108, 246, 229, 0.52), 0 1px 0 #000;
+}
+
+.main-menu-heading {
+  margin: 8px 0 0;
+  font-size: clamp(36px, 7vw, 56px);
+  line-height: 0.92;
+  letter-spacing: 0.1em;
+  background: none;
+  color: #f4d27a;
+  -webkit-text-fill-color: #f4d27a;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.82),
+    0 0 18px rgba(244, 210, 122, 0.36),
+    0 0 46px rgba(244, 210, 122, 0.12);
+  filter: none;
+}
+
+.main-menu-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.main-menu-status div {
+  min-width: 0;
+  padding: 8px 6px;
+  text-align: center;
+  background: rgba(6, 3, 16, 0.72);
+  border: 1px solid rgba(122, 90, 26, 0.72);
+  box-shadow: inset 0 0 14px rgba(108, 246, 229, 0.04);
+}
+
+.main-menu-status span,
+.main-menu-status strong {
+  display: block;
+  white-space: nowrap;
+}
+
+.main-menu-status span {
+  color: rgba(231, 227, 215, 0.78);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.main-menu-status strong {
+  margin-top: 2px;
+  color: #ffe6a3;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+
+.main-menu-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.main-menu-primary {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.main-menu-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.main-menu-secondary .pixel-btn {
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 10px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+.pixel-panel {
+  background:
+    linear-gradient(180deg, rgba(19, 12, 36, 0.96), rgba(6, 3, 15, 0.97)),
+    radial-gradient(circle at 50% 0%, rgba(108, 246, 229, 0.08), transparent 38%);
+  border-color: rgba(244, 210, 122, 0.78);
+  box-shadow:
+    inset 0 0 0 2px #000,
+    inset 0 0 0 4px rgba(34, 22, 54, 0.95),
+    inset 0 0 28px rgba(244, 210, 122, 0.04),
+    0 16px 44px rgba(0, 0, 0, 0.72),
+    0 0 34px rgba(108, 246, 229, 0.12);
+}
+
+.pixel-btn {
+  min-height: 46px;
+  border-color: rgba(200, 152, 63, 0.86);
+  background:
+    linear-gradient(180deg, rgba(62, 38, 98, 0.98), rgba(18, 10, 36, 0.99));
+  color: #f8f0d4;
+  text-shadow: 0 1px 0 #000, 0 0 10px rgba(244, 210, 122, 0.08);
+}
+
+.pixel-btn::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 5px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 230, 163, 0.62), transparent);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.pixel-btn:hover,
+.pixel-btn:focus-visible,
+.pixel-btn.is-focused {
+  color: #fff2bd;
+  border-color: var(--gold-1);
+  background:
+    linear-gradient(180deg, rgba(60, 38, 100, 0.98), rgba(16, 9, 34, 0.98));
+  box-shadow:
+    inset 0 0 0 2px #000,
+    inset 0 0 24px rgba(108, 246, 229, 0.18),
+    0 0 24px rgba(244, 210, 122, 0.32);
+}
+
+.pixel-btn:active {
+  transform: translateY(1px) scale(0.992);
+}
+
+.pixel-btn-primary {
+  min-height: 58px;
+  color: #1b102d;
+  border-color: #ffe6a3;
+  background:
+    linear-gradient(180deg, #fff8d6, #f4d27a 48%, #c99537 49%, #8c5b17);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.34);
+  box-shadow:
+    inset 0 0 0 2px rgba(34, 20, 5, 0.75),
+    inset 0 0 18px rgba(255, 246, 204, 0.22),
+    0 0 26px rgba(244, 210, 122, 0.28);
+}
+
+.pixel-btn-primary:hover,
+.pixel-btn-primary:focus-visible,
+.pixel-btn-primary.is-focused {
+  color: #08040f;
+  background:
+    linear-gradient(180deg, #fff7d6, #ffd97a 48%, #c99537 49%, #7f4f14);
+  box-shadow:
+    inset 0 0 0 2px rgba(34, 20, 5, 0.75),
+    0 0 30px rgba(244, 210, 122, 0.52),
+    0 0 18px rgba(108, 246, 229, 0.18);
+}
+
+.pixel-btn-quiet {
+  border-color: rgba(108, 246, 229, 0.42);
+  color: rgba(231, 227, 215, 0.9);
+  background:
+    linear-gradient(180deg, rgba(20, 22, 44, 0.86), rgba(6, 6, 18, 0.92));
+}
+
+.main-menu-version {
+  position: static;
+  color: rgba(231, 227, 215, 0.78);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .main-menu-screen {
+    justify-content: center;
+    overflow: hidden;
+    padding:
+      calc(12px + var(--safe-top))
+      calc(12px + var(--safe-right))
+      calc(12px + var(--safe-bottom))
+      calc(12px + var(--safe-left));
+  }
+
+  .main-menu-shell {
+    width: 100%;
+    min-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 24px);
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 24px);
+    gap: clamp(9px, 1.45dvh, 14px);
+    padding: clamp(14px, 4vw, 20px);
+  }
+
+  .main-menu-crest {
+    height: clamp(22px, 4dvh, 32px);
+  }
+
+  .main-menu-heading {
+    font-size: clamp(32px, 11vw, 46px);
+    line-height: 0.9;
+    letter-spacing: 0.07em;
+  }
+
+  .main-menu-status {
+    gap: 6px;
+  }
+
+  .main-menu-status div {
+    padding: 7px 4px;
+  }
+
+  .main-menu-status span {
+    font-size: 8px;
+    letter-spacing: 0.12em;
+  }
+
+  .main-menu-status strong {
+    font-size: 13px;
+  }
+
+  .main-menu-actions {
+    gap: 8px;
+  }
+
+  .main-menu-primary {
+    gap: 7px;
+  }
+
+  .main-menu-primary .pixel-btn {
+    min-height: clamp(44px, 6.2dvh, 56px);
+    padding: 9px 12px;
+  }
+
+  .main-menu-secondary {
+    gap: 7px;
+  }
+
+  .main-menu-secondary .pixel-btn {
+    min-height: clamp(42px, 5.7dvh, 50px);
+    padding: 8px 8px;
+    font-size: clamp(9px, 2.7vw, 11px);
+    letter-spacing: 0.08em;
+  }
+
+  .pixel-btn .badge {
+    letter-spacing: 0.08em;
+  }
+
+  .main-menu-version {
+    font-size: 8px;
+    letter-spacing: 0.13em;
+  }
+}
+
+@media (max-width: 360px), (max-height: 720px) and (orientation: portrait) {
+  .main-menu-shell {
+    gap: 7px;
+    padding: 12px;
+  }
+
+  .main-menu-heading {
+    font-size: clamp(28px, 9vw, 36px);
+  }
+
+  .main-menu-title .pixel-subtitle {
+    font-size: 8px;
+    letter-spacing: 0.14em;
+  }
+
+  .main-menu-secondary .pixel-btn {
+    min-height: 38px;
+    font-size: 9px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .main-menu-shell {
+    width: min(820px, 100%);
+    min-height: auto;
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 16px);
+    display: grid;
+    grid-template-columns: minmax(180px, 0.8fr) minmax(360px, 1.2fr);
+    grid-template-areas:
+      "title status"
+      "title actions"
+      "version actions";
+    align-items: center;
+    gap: 10px 18px;
+    padding: 12px 16px;
+  }
+
+  .main-menu-crest {
+    display: none;
+  }
+
+  .main-menu-title {
+    grid-area: title;
+  }
+
+  .main-menu-status {
+    grid-area: status;
+  }
+
+  .main-menu-actions {
+    grid-area: actions;
+  }
+
+  .main-menu-version {
+    grid-area: version;
+  }
+
+  .main-menu-heading {
+    font-size: clamp(26px, 7.2vh, 36px);
+  }
+
+  .main-menu-primary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main-menu-secondary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .main-menu-primary .pixel-btn,
+  .main-menu-secondary .pixel-btn {
+    min-height: 38px;
+    padding: 7px 8px;
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-btn,
+  .pixel-panel,
+  .main-menu-shell {
+    transition: none;
+  }
+}
+
+/* Vessel select polish pass: readable character cards across phone, tablet, and desktop. */
+.archetype-screen {
+  gap: 14px;
+}
+
+.vessel-header {
+  width: min(980px, calc(100dvw - var(--safe-left) - var(--safe-right) - 32px));
+  margin-bottom: 0;
+}
+
+.vessel-intro {
+  max-width: 760px;
+  margin: 8px auto 0;
+  color: rgba(244, 210, 122, 0.82);
+  font-size: 12px;
+  line-height: 1.65;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vessel-grid {
+  width: min(1120px, calc(100dvw - var(--safe-left) - var(--safe-right) - 32px));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.vessel-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(244, 210, 122, 0.08), transparent 34%),
+    rgba(8, 5, 22, 0.94);
+}
+
+.vessel-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(108, 246, 229, 0.12), transparent 22%, transparent 78%, rgba(244, 210, 122, 0.1)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0, rgba(255, 255, 255, 0.025) 1px, transparent 1px, transparent 7px);
+  opacity: 0.52;
+}
+
+.vessel-card {
+  position: relative;
+  z-index: 1;
+  min-height: 568px;
+  gap: 10px;
+  outline: 1px solid transparent;
+  outline-offset: -4px;
+}
+
+.vessel-card:hover,
+.vessel-card:focus-visible,
+.vessel-card-focused {
+  outline-color: rgba(108, 246, 229, 0.82);
+}
+
+.vessel-portrait {
+  display: block;
+  width: 100%;
+  height: clamp(150px, 18vw, 198px);
+  margin: 0;
+  border: 1px solid rgba(244, 210, 122, 0.76);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 22px rgba(108, 246, 229, 0.12);
+  filter: brightness(1.08) contrast(1.16) saturate(1.14);
+  image-rendering: pixelated;
+}
+
+.vessel-card-magus .vessel-portrait {
+  box-shadow:
+    inset 0 0 0 1px rgba(108, 246, 229, 0.18),
+    inset 0 0 24px rgba(108, 246, 229, 0.08),
+    0 0 30px rgba(108, 246, 229, 0.2);
+}
+
+.vessel-card-hermit .vessel-portrait {
+  box-shadow:
+    inset 0 0 0 1px rgba(244, 210, 122, 0.18),
+    inset 0 0 24px rgba(244, 210, 122, 0.08),
+    0 0 30px rgba(244, 210, 122, 0.2);
+}
+
+.vessel-card-star .vessel-portrait {
+  box-shadow:
+    inset 0 0 0 1px rgba(199, 162, 255, 0.2),
+    inset 0 0 24px rgba(199, 162, 255, 0.08),
+    0 0 30px rgba(181, 140, 255, 0.22);
+}
+
+.vessel-copy {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vessel-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.vessel-card h3 {
+  margin: 0 0 6px;
+  font-size: clamp(17px, 2vw, 22px);
+  line-height: 1.05;
+  letter-spacing: 0.12em;
+}
+
+.vessel-subtitle {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+.vessel-role {
+  flex: 0 0 auto;
+  max-width: 112px;
+  border: 1px solid rgba(108, 246, 229, 0.42);
+  padding: 5px 6px;
+  color: rgba(108, 246, 229, 0.94);
+  background: rgba(4, 18, 28, 0.64);
+  font-size: 9px;
+  line-height: 1.35;
+  letter-spacing: 0.1em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.vessel-description {
+  margin: 0;
+  color: rgba(232, 224, 194, 0.88);
+  font-size: 11px;
+  line-height: 1.58;
+  letter-spacing: 0.05em;
+}
+
+.vessel-rhythm {
+  color: rgba(244, 210, 122, 0.88);
+  font-size: 10px;
+  line-height: 1.45;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vessel-strengths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.vessel-strengths span {
+  border: 1px solid rgba(244, 210, 122, 0.28);
+  padding: 4px 6px;
+  color: rgba(244, 210, 122, 0.92);
+  background: rgba(44, 25, 68, 0.54);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vessel-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin-top: 2px;
+}
+
+.vessel-stat {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.vessel-stat-label,
+.vessel-stat-value {
+  line-height: 1;
+}
+
+.vessel-stat-value {
+  text-align: right;
+}
+
+.vessel-stat-bar {
+  height: 6px;
+  border: 1px solid rgba(244, 210, 122, 0.28);
+  background: rgba(0, 0, 0, 0.38);
+  overflow: hidden;
+}
+
+.vessel-stat-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(108, 246, 229, 0.85), rgba(244, 210, 122, 0.88));
+}
+
+.vessel-relic {
+  margin-top: auto;
+  border-top: 1px solid rgba(244, 210, 122, 0.24);
+  padding-top: 8px;
+  font-size: 10px;
+  line-height: 1.45;
+  letter-spacing: 0.1em;
+}
+
+.vessel-relic-name {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.vessel-relic-description {
+  margin-top: 2px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.vessel-cta {
+  margin-top: 2px;
+}
+
+.vessel-cta span {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(108, 246, 229, 0.58);
+  color: #f4d27a;
+  background: rgba(13, 28, 45, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(244, 210, 122, 0.12);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.vessel-card-focused .vessel-cta span,
+.vessel-card:focus-visible .vessel-cta span,
+.vessel-card:hover .vessel-cta span {
+  color: #05030d;
+  background: linear-gradient(90deg, rgba(108, 246, 229, 0.94), rgba(244, 210, 122, 0.94));
+}
+
+@media (max-width: 940px) {
+  .vessel-grid {
+    gap: 10px;
+  }
+
+  .vessel-panel {
+    padding: 10px;
+  }
+
+  .vessel-card {
+    min-height: 514px;
+  }
+
+  .vessel-role {
+    max-width: 92px;
+    font-size: 8px;
+  }
+
+  .vessel-stats {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  .archetype-screen {
+    justify-content: center;
+    gap: 7px;
+    overflow: hidden;
+    padding-top: calc(9px + var(--safe-top));
+    padding-bottom: calc(9px + var(--safe-bottom));
+  }
+
+  .vessel-header {
+    width: min(100%, calc(100dvw - var(--safe-left) - var(--safe-right) - 24px));
+  }
+
+  .vessel-header .pixel-subtitle {
+    font-size: 8px;
+  }
+
+  .archetype-heading {
+    font-size: clamp(20px, 6.6vw, 28px);
+    margin: 1px 0;
+  }
+
+  .vessel-intro {
+    max-width: 350px;
+    margin-top: 4px;
+    font-size: 9px;
+    line-height: 1.42;
+    letter-spacing: 0.05em;
+    display: none;
+  }
+
+  .vessel-grid {
+    width: min(100%, calc(100dvw - var(--safe-left) - var(--safe-right) - 24px));
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .vessel-panel {
+    padding: 8px;
+    max-width: none !important;
+  }
+
+  .vessel-card {
+    min-height: 0;
+    height: clamp(172px, 24dvh, 206px);
+    display: grid;
+    grid-template-columns: clamp(84px, 25vw, 104px) minmax(0, 1fr);
+    gap: 7px 9px;
+    align-content: stretch;
+  }
+
+  .vessel-portrait {
+    grid-row: 1 / 2;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  .vessel-copy {
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .vessel-title-row {
+    gap: 6px;
+  }
+
+  .vessel-card h3 {
+    font-size: clamp(14px, 4vw, 17px);
+    margin-bottom: 3px;
+    letter-spacing: 0.08em;
+  }
+
+  .vessel-subtitle {
+    max-width: 160px;
+    overflow: hidden;
+    font-size: 7px;
+    letter-spacing: 0.07em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .vessel-role {
+    max-width: 78px;
+    padding: 3px 4px;
+    font-size: 7px;
+    letter-spacing: 0.06em;
+  }
+
+  .archetype-card .archetype-description,
+  .archetype-card .archetype-relic,
+  .archetype-card .archetype-cta,
+  .archetype-card .archetype-stat {
+    display: block;
+  }
+
+  .vessel-description {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 8px;
+    line-height: 1.32;
+    letter-spacing: 0.03em;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .vessel-rhythm {
+    display: none;
+  }
+
+  .vessel-strengths {
+    gap: 3px;
+  }
+
+  .vessel-strengths span {
+    padding: 3px 4px;
+    font-size: 7px;
+    letter-spacing: 0.04em;
+  }
+
+  .vessel-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px 6px;
+  }
+
+  .vessel-stat {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) 18px;
+    gap: 4px;
+    font-size: 7px;
+    letter-spacing: 0.04em;
+  }
+
+  .vessel-stat:nth-child(n + 5) {
+    display: none;
+  }
+
+  .vessel-stat-bar {
+    height: 5px;
+  }
+
+  .vessel-relic {
+    margin-top: 0;
+    padding-top: 3px;
+    border-top-color: rgba(244, 210, 122, 0.16);
+    font-size: 7px;
+    letter-spacing: 0.06em;
+  }
+
+  .vessel-relic-name {
+    margin-top: 1px;
+    overflow: hidden;
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .vessel-relic-description {
+    display: none;
+  }
+
+  .vessel-cta span {
+    min-height: 24px;
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+
+  .archetype-back {
+    width: min(100%, 190px);
+  }
+
+  .archetype-back .pixel-btn {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: 9px;
+  }
+}
+
+@media (orientation: portrait) and (max-height: 700px) {
+  .archetype-screen {
+    gap: 5px;
+    padding-top: calc(7px + var(--safe-top));
+    padding-bottom: calc(7px + var(--safe-bottom));
+  }
+
+  .vessel-intro {
+    display: none;
+  }
+
+  .vessel-grid {
+    gap: 5px;
+  }
+
+  .vessel-panel {
+    padding: 6px 7px;
+  }
+
+  .vessel-card {
+    height: clamp(140px, 21dvh, 151px);
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 5px 7px;
+  }
+
+  .vessel-title-row {
+    align-items: center;
+  }
+
+  .vessel-role {
+    display: none;
+  }
+
+  .vessel-description {
+    -webkit-line-clamp: 1;
+  }
+
+  .vessel-strengths span:nth-child(n + 3) {
+    display: none;
+  }
+
+  .vessel-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vessel-stat:nth-child(n + 5) {
+    display: none;
+  }
+
+  .vessel-relic {
+    display: none;
+  }
+
+  .vessel-cta span {
+    min-height: 23px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .archetype-screen {
+    justify-content: center;
+    gap: 7px;
+  }
+
+  .vessel-header {
+    display: none;
+  }
+
+  .vessel-grid {
+    width: min(100%, calc(100dvw - var(--safe-left) - var(--safe-right) - 28px));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .vessel-panel {
+    padding: 8px;
+  }
+
+  .vessel-card {
+    min-height: 0;
+    height: min(268px, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 68px));
+    gap: 5px;
+  }
+
+  .vessel-portrait {
+    height: clamp(68px, 22vh, 98px);
+  }
+
+  .vessel-card h3 {
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+
+  .vessel-role,
+  .vessel-rhythm,
+  .vessel-relic-description {
+    display: none;
+  }
+
+  .vessel-description {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 8px;
+    line-height: 1.28;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .vessel-strengths span {
+    padding: 3px 4px;
+    font-size: 7px;
+  }
+
+  .vessel-stats {
+    display: none;
+  }
+
+  .vessel-stat {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) 20px;
+    gap: 4px;
+    font-size: 7px;
+  }
+
+  .vessel-stat:nth-child(n + 5) {
+    display: none;
+  }
+
+  .vessel-relic {
+    display: block;
+    margin-top: auto;
+    padding-top: 3px;
+    font-size: 7px;
+  }
+
+  .vessel-relic-name {
+    overflow: hidden;
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .vessel-cta span {
+    min-height: 24px;
+    font-size: 7px;
+  }
+
+  .archetype-card .vessel-cta {
+    display: block;
+  }
+
+  .archetype-back {
+    margin-top: 0;
+    width: 160px;
+  }
+}
+
+@media (min-width: 941px) {
+  .vessel-header {
+    margin-top: -4px;
+  }
+
+  .vessel-intro {
+    margin-top: 5px;
+  }
+
+  .vessel-card {
+    min-height: 500px;
+    gap: 7px;
+  }
+
+  .vessel-portrait {
+    height: clamp(128px, 13vw, 158px);
+  }
+
+  .vessel-copy {
+    gap: 6px;
+  }
+
+  .vessel-description {
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .vessel-rhythm {
+    font-size: 9px;
+    line-height: 1.35;
+  }
+
+  .vessel-stats {
+    gap: 4px 10px;
+  }
+
+  .vessel-relic {
+    padding-top: 6px;
+  }
+
+  .vessel-cta span {
+    min-height: 32px;
+  }
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  .archetype-card .vessel-stat {
+    display: grid;
+  }
+
+  .archetype-card .vessel-relic,
+  .archetype-card .vessel-cta {
+    display: block;
+  }
+}
+
+@media (orientation: portrait) and (max-height: 700px) {
+  .archetype-card .vessel-stats {
+    display: none;
+  }
+
+  .archetype-card .vessel-relic {
+    display: block;
+    border-top: 1px solid rgba(244, 210, 122, 0.16);
+    padding-top: 2px;
+  }
+
+  .vessel-relic .glow-text,
+  .vessel-relic-description {
+    display: none;
+  }
+
+  .vessel-relic-name {
+    font-size: 8px;
+  }
+
+  .vessel-copy {
+    justify-content: space-between;
+  }
+}
+
+/* One-at-a-time vessel carousel: full-body art, swipe/tap arrows, keyboard, and controller parity. */
+.vessel-carousel {
+  width: min(980px, calc(100dvw - var(--safe-left) - var(--safe-right) - 32px));
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 12px;
+}
+
+.vessel-carousel-panel {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.vessel-carousel .vessel-card {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.74fr) minmax(320px, 1fr);
+  align-items: stretch;
+  gap: clamp(14px, 2.4vw, 24px);
+  cursor: grab;
+}
+
+.vessel-carousel .vessel-card:active {
+  cursor: grabbing;
+}
+
+.vessel-carousel .vessel-portrait {
+  width: 100%;
+  height: min(54dvh, 430px);
+  min-height: 330px;
+  max-height: 430px;
+  align-self: center;
+  border-color: rgba(244, 210, 122, 0.86);
+  background: #04020d;
+  touch-action: pan-y;
+}
+
+.vessel-carousel .vessel-copy {
+  justify-content: center;
+  gap: 10px;
+}
+
+.vessel-carousel .vessel-description {
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.vessel-carousel .vessel-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vessel-carousel .vessel-relic {
+  margin-top: 4px;
+}
+
+.vessel-select-button {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.vessel-arrow {
+  width: 54px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(108, 246, 229, 0.58);
+  color: #f4d27a;
+  background:
+    linear-gradient(180deg, rgba(32, 20, 54, 0.96), rgba(5, 8, 20, 0.98));
+  box-shadow:
+    inset 0 0 0 2px #000,
+    0 0 22px rgba(108, 246, 229, 0.13);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.vessel-arrow:hover,
+.vessel-arrow:focus-visible {
+  outline: 2px solid rgba(244, 210, 122, 0.76);
+  outline-offset: 2px;
+  color: #05030d;
+  background: linear-gradient(90deg, rgba(108, 246, 229, 0.96), rgba(244, 210, 122, 0.96));
+}
+
+.vessel-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: -4px;
+}
+
+.vessel-dots button {
+  width: 38px;
+  height: 8px;
+  border: 1px solid rgba(244, 210, 122, 0.5);
+  background: rgba(6, 3, 18, 0.92);
+  cursor: pointer;
+}
+
+.vessel-dots button.is-active {
+  background: linear-gradient(90deg, rgba(108, 246, 229, 0.95), rgba(244, 210, 122, 0.95));
+  box-shadow: 0 0 14px rgba(108, 246, 229, 0.28);
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .vessel-carousel {
+    width: min(100%, calc(100dvw - var(--safe-left) - var(--safe-right) - 22px));
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    gap: 5px;
+  }
+
+  .vessel-arrow {
+    width: 34px;
+    height: 62px;
+    font-size: 15px;
+  }
+
+  .vessel-carousel .vessel-panel {
+    padding: 9px;
+  }
+
+  .vessel-carousel .vessel-card {
+    height: auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .vessel-carousel .vessel-portrait {
+    width: min(54vw, 176px);
+    height: clamp(238px, 38dvh, 320px);
+    min-height: 0;
+    justify-self: center;
+  }
+
+  .vessel-carousel .vessel-copy {
+    gap: 6px;
+  }
+
+  .vessel-carousel .vessel-title-row {
+    align-items: center;
+  }
+
+  .vessel-carousel .vessel-role {
+    display: block;
+    max-width: 92px;
+  }
+
+  .vessel-carousel .vessel-description {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 9px;
+    line-height: 1.34;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .vessel-carousel .vessel-rhythm {
+    display: block;
+    font-size: 8px;
+    line-height: 1.3;
+  }
+
+  .vessel-carousel .vessel-strengths span {
+    font-size: 7px;
+  }
+
+  .vessel-carousel .vessel-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px 7px;
+  }
+
+  .vessel-carousel .vessel-stat {
+    display: grid;
+  }
+
+  .vessel-carousel .vessel-stat:nth-child(n + 5) {
+    display: none;
+  }
+
+  .vessel-carousel .vessel-relic {
+    display: block;
+    margin-top: 0;
+    padding-top: 4px;
+  }
+
+  .vessel-carousel .vessel-relic .glow-text {
+    display: inline;
+  }
+
+  .vessel-carousel .vessel-relic-description {
+    display: none;
+  }
+
+  .vessel-carousel .vessel-select-button {
+    min-height: 34px;
+    padding: 7px 8px;
+    font-size: 8px;
+  }
+
+  .vessel-dots {
+    margin-top: -2px;
+  }
+
+  .vessel-dots button {
+    width: 30px;
+  }
+}
+
+@media (orientation: portrait) and (max-height: 700px) {
+  .vessel-carousel .vessel-portrait {
+    width: min(43vw, 142px);
+    height: clamp(190px, 31dvh, 226px);
+  }
+
+  .vessel-carousel .vessel-description {
+    -webkit-line-clamp: 1;
+  }
+
+  .vessel-carousel .vessel-rhythm,
+  .vessel-carousel .vessel-stats,
+  .vessel-carousel .vessel-relic .glow-text {
+    display: none;
+  }
+
+  .vessel-carousel .vessel-relic {
+    border-top: 1px solid rgba(244, 210, 122, 0.16);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .vessel-carousel {
+    width: min(100%, calc(100dvw - var(--safe-left) - var(--safe-right) - 24px));
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    gap: 8px;
+  }
+
+  .vessel-arrow {
+    width: 42px;
+    height: 58px;
+    font-size: 16px;
+  }
+
+  .vessel-carousel .vessel-card {
+    height: min(264px, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 74px));
+    grid-template-columns: minmax(120px, 0.44fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .vessel-carousel .vessel-portrait {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .vessel-carousel .vessel-copy {
+    gap: 5px;
+  }
+
+  .vessel-carousel .vessel-description {
+    -webkit-line-clamp: 2;
+  }
+
+  .vessel-carousel .vessel-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vessel-carousel .vessel-relic {
+    margin-top: 0;
+  }
+}
+
+/* Expert polish pass: make the carousel read as a ritual character-select stage. */
+.vessel-carousel {
+  width: min(1040px, calc(100dvw - var(--safe-left) - var(--safe-right) - 32px));
+  grid-template-columns: 50px minmax(0, 1fr) 50px;
+  gap: 14px;
+}
+
+.vessel-carousel-panel {
+  background:
+    radial-gradient(circle at 28% 44%, rgba(108, 246, 229, 0.11), transparent 32%),
+    linear-gradient(90deg, rgba(10, 6, 25, 0.98), rgba(15, 8, 30, 0.94) 44%, rgba(6, 3, 18, 0.98));
+}
+
+.vessel-carousel .vessel-card {
+  grid-template-columns: minmax(248px, 0.78fr) minmax(340px, 1fr);
+  gap: clamp(16px, 2.6vw, 30px);
+  padding: 4px;
+}
+
+.vessel-stage {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, rgba(244, 210, 122, 0.08), transparent 22%),
+    radial-gradient(circle at 50% 78%, rgba(244, 210, 122, 0.16), transparent 34%),
+    rgba(3, 2, 10, 0.82);
+  border: 1px solid rgba(244, 210, 122, 0.46);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.82),
+    inset 0 0 36px rgba(108, 246, 229, 0.08);
+}
+
+.vessel-stage::before {
+  content: "";
+  position: absolute;
+  inset: 16px;
+  border: 1px solid rgba(108, 246, 229, 0.3);
+  pointer-events: none;
+}
+
+.vessel-stage::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 34px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(244, 210, 122, 0.74), transparent);
+  box-shadow: 0 0 18px rgba(244, 210, 122, 0.32);
+  pointer-events: none;
+}
+
+.vessel-stage-base {
+  position: absolute;
+  left: 25%;
+  right: 25%;
+  bottom: 22px;
+  height: 12px;
+  border: 1px solid rgba(244, 210, 122, 0.36);
+  background: rgba(6, 3, 18, 0.82);
+  pointer-events: none;
+}
+
+.vessel-carousel .vessel-portrait {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 300px);
+  height: min(56dvh, 430px);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.vessel-carousel .vessel-copy {
+  align-self: stretch;
+  justify-content: center;
+  gap: 11px;
+  padding: 4px 4px 4px 0;
+}
+
+.vessel-carousel .vessel-card h3 {
+  font-size: clamp(24px, 3vw, 36px);
+  letter-spacing: 0.14em;
+}
+
+.vessel-badges {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.vessel-index {
+  color: rgba(244, 210, 122, 0.78);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+.vessel-carousel .vessel-role {
+  max-width: 136px;
+  padding: 7px 8px;
+  text-align: right;
+}
+
+.vessel-carousel .vessel-description {
+  max-width: 620px;
+  color: rgba(248, 239, 211, 0.94);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vessel-carousel .vessel-rhythm {
+  color: #ffe28e;
+}
+
+.vessel-carousel .vessel-strengths span {
+  background: rgba(16, 10, 31, 0.88);
+  border-color: rgba(244, 210, 122, 0.46);
+}
+
+.vessel-carousel .vessel-relic {
+  border-top-color: rgba(244, 210, 122, 0.34);
+}
+
+.vessel-select-button {
+  min-height: 48px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+}
+
+.vessel-arrow {
+  position: relative;
+  width: 50px;
+  height: 92px;
+  border-color: rgba(244, 210, 122, 0.62);
+  color: #ffe28e;
+  background:
+    linear-gradient(180deg, rgba(28, 14, 50, 0.98), rgba(6, 4, 17, 0.98));
+}
+
+.vessel-arrow::before,
+.vessel-arrow::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  height: 1px;
+  background: rgba(108, 246, 229, 0.45);
+}
+
+.vessel-arrow::before { top: 12px; }
+.vessel-arrow::after { bottom: 12px; }
+
+.vessel-dots {
+  gap: 8px;
+  margin-top: -2px;
+}
+
+.vessel-dots button {
+  width: 34px;
+  height: 7px;
+  transform: skewX(-18deg);
+}
+
+.vessel-dots button.is-active {
+  border-color: rgba(244, 210, 122, 0.9);
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .vessel-carousel {
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    gap: 6px;
+  }
+
+  .vessel-carousel .vessel-panel {
+    padding: 8px;
+  }
+
+  .vessel-carousel .vessel-card {
+    height: auto;
+    grid-template-columns: 1fr;
+    padding: 0;
+    gap: 7px;
+  }
+
+  .vessel-stage {
+    width: 100%;
+    max-width: 214px;
+    justify-self: center;
+    padding: 8px;
+  }
+
+  .vessel-carousel .vessel-portrait {
+    width: min(47vw, 172px);
+    height: clamp(232px, 36dvh, 310px);
+  }
+
+  .vessel-carousel .vessel-copy {
+    padding: 0;
+  }
+
+  .vessel-carousel .vessel-card h3 {
+    font-size: clamp(17px, 5vw, 22px);
+  }
+
+  .vessel-badges {
+    gap: 4px;
+  }
+
+  .vessel-index {
+    display: none;
+  }
+
+  .vessel-carousel .vessel-role {
+    max-width: 96px;
+    padding: 5px 6px;
+  }
+
+  .vessel-carousel .vessel-description {
+    font-size: 9px;
+    line-height: 1.36;
+  }
+
+  .vessel-select-button {
+    min-height: 36px;
+  }
+}
+
+@media (orientation: portrait) and (max-height: 700px) {
+  .vessel-carousel .vessel-card {
+    height: auto;
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .vessel-stage {
+    max-width: 172px;
+    padding: 6px;
+  }
+
+  .vessel-carousel .vessel-portrait {
+    width: min(39vw, 138px);
+    height: clamp(186px, 29dvh, 218px);
+  }
+
+  .vessel-carousel .vessel-card h3 {
+    font-size: 16px;
+  }
+
+  .vessel-carousel .vessel-copy {
+    gap: 4px;
+  }
+
+  .vessel-carousel .vessel-select-button {
+    min-height: 32px;
+  }
+
+  .vessel-carousel .vessel-stage::after,
+  .vessel-carousel .vessel-stage-base {
+    display: none;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .vessel-carousel {
+    width: min(100%, calc(100dvw - var(--safe-left) - var(--safe-right) - 20px));
+    grid-template-columns: 38px minmax(0, 1fr) 38px;
+    gap: 8px;
+  }
+
+  .vessel-arrow {
+    width: 38px;
+    height: 64px;
+  }
+
+  .vessel-stage {
+    padding: 7px;
+  }
+
+  .vessel-carousel .vessel-portrait {
+    width: min(100%, 150px);
+    height: 100%;
+  }
+
+  .vessel-carousel .vessel-card h3 {
+    font-size: 18px;
+  }
+}
+
+/* Landscape-first vessel select: iPhone landscape gets its own wide composition. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .archetype-screen {
+    position: relative;
+    justify-content: center;
+    gap: 0;
+    overflow: hidden;
+    padding:
+      calc(7px + var(--safe-top))
+      calc(10px + var(--safe-right))
+      calc(7px + var(--safe-bottom))
+      calc(10px + var(--safe-left));
+  }
+
+  .vessel-header {
+    display: none;
+  }
+
+  .vessel-carousel {
+    width: calc(100dvw - var(--safe-left) - var(--safe-right) - 20px) !important;
+    max-width: none !important;
+    grid-template-columns: 38px minmax(0, 1fr) 38px;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .vessel-carousel-panel {
+    min-width: 0;
+    width: 100% !important;
+    max-width: none !important;
+    height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 18px);
+    padding: 7px;
+  }
+
+  .vessel-carousel .vessel-card {
+    height: 100%;
+    min-height: 0;
+    grid-template-columns: minmax(250px, 0.48fr) minmax(0, 1fr);
+    align-items: stretch;
+    gap: 10px;
+    padding: 0;
+  }
+
+  .vessel-stage {
+    max-width: none;
+    height: 100%;
+    padding: 7px 10px;
+  }
+
+  .vessel-stage::before {
+    inset: 10px;
+  }
+
+  .vessel-stage::after {
+    bottom: 18px;
+  }
+
+  .vessel-stage-base {
+    bottom: 9px;
+    height: 9px;
+  }
+
+  .vessel-carousel .vessel-portrait {
+    width: min(100%, 220px);
+    height: 100%;
+    max-height: none;
+  }
+
+  .vessel-carousel .vessel-copy {
+    min-height: 0;
+    justify-content: stretch;
+    gap: 5px;
+    padding: 18px 7px 7px 0;
+  }
+
+  .vessel-carousel .vessel-title-row {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .vessel-carousel .vessel-card h3 {
+    font-size: clamp(19px, 5.2vh, 28px);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .vessel-carousel .vessel-subtitle {
+    font-size: 11px;
+  }
+
+  .vessel-badges {
+    gap: 4px;
+  }
+
+  .vessel-index {
+    display: block;
+    font-size: 11px;
+  }
+
+  .vessel-carousel .vessel-role {
+    display: block;
+    max-width: 126px;
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+
+  .vessel-carousel .vessel-description {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 1.42;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .vessel-carousel .vessel-rhythm {
+    display: block;
+    font-size: 11px;
+    line-height: 1.32;
+  }
+
+  .vessel-carousel .vessel-strengths {
+    gap: 4px;
+  }
+
+  .vessel-carousel .vessel-strengths span {
+    padding: 3px 5px;
+    font-size: 11px;
+  }
+
+  .vessel-carousel .vessel-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px 12px;
+  }
+
+  .vessel-carousel .vessel-stat {
+    grid-template-columns: 32px minmax(0, 1fr) 28px;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .vessel-carousel .vessel-stat:nth-child(n + 5) {
+    display: grid;
+  }
+
+  .vessel-carousel .vessel-relic {
+    margin-top: 0;
+    padding-top: 4px;
+    font-size: 11px;
+  }
+
+  .vessel-carousel .vessel-relic-description {
+    display: block;
+    overflow: hidden;
+    font-size: 11px;
+    line-height: 1.35;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .vessel-carousel .vessel-select-button {
+    margin-top: auto;
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .vessel-arrow {
+    align-self: center;
+    width: 38px;
+    height: min(45vh, 112px);
+    min-height: 68px;
+  }
+
+  .vessel-dots {
+    position: absolute;
+    left: 50%;
+    bottom: calc(9px + var(--safe-bottom));
+    z-index: 6;
+    transform: translateX(-50%);
+    margin: 0;
+  }
+
+  .vessel-dots button {
+    width: 28px;
+    height: 6px;
+  }
+
+  .archetype-back {
+    position: absolute;
+    left: calc(12px + var(--safe-left));
+    top: calc(9px + var(--safe-top));
+    z-index: 7;
+    width: 116px;
+    margin: 0;
+  }
+
+  .archetype-back .pixel-btn {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+  }
+}
+
+/* iPhone landscape readability floor across menus. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .pixel-btn {
+    font-size: max(11px, 1em);
+  }
+
+  .pixel-subtitle,
+  .main-menu-status span,
+  .main-menu-version,
+  .pixel-btn .badge,
+  .help-text,
+  .settings-row,
+  .settings-value,
+  .settings-dropdown,
+  .settings-remap-btn,
+  .controller-test,
+  .codex-chapter-meta,
+  .cinematics-row-meta {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .main-menu-secondary .pixel-btn,
+  .main-menu-primary .pixel-btn {
+    min-height: 42px;
+    font-size: 11px;
+  }
+
+  .vessel-carousel .vessel-relic-name {
+    font-size: 11px;
+  }
+
+  .main-menu-status strong {
+    font-size: 15px;
+  }
+
+  .settings-row {
+    min-height: 42px;
   }
 }

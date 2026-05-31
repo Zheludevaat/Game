@@ -7,6 +7,7 @@ interface PixelButtonProps {
   disabled?: boolean;
   autoFocus?: boolean;
   focused?: boolean;
+  className?: string;
   style?: React.CSSProperties;
 }
 
@@ -14,7 +15,7 @@ export function PixelButton(props: PixelButtonProps): JSX.Element {
   return (
     <button
       type="button"
-      className={`pixel-btn${props.focused ? ' is-focused' : ''}`}
+      className={`pixel-btn${props.focused ? ' is-focused' : ''}${props.className ? ` ${props.className}` : ''}`}
       onClick={props.onClick}
       disabled={props.disabled}
       autoFocus={props.autoFocus}

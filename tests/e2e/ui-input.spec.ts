@@ -54,9 +54,47 @@ test('touch HUD controls can open pause and settings in a phone landscape viewpo
   await page.getByRole('button', { name: /new run/i }).click();
 
   await expect(page.locator('.archetype-card').first()).toBeVisible();
-  await page.locator('.archetype-card').first().click();
+  await page.getByRole('button', { name: /begin as magus/i }).click();
 
   await expect(page.getByRole('button', { name: /^pause$/i })).toBeVisible({ timeout: 15_000 });
+  const smallHudText = await page.evaluate(() => {
+    const selectors = [
+      '.hud-top-left .label',
+      '.hud-currency-row',
+      '.hud-currency-row *',
+      '.hud-top-right .violet-text',
+      '.hud-top-right .glow-text',
+      '.hud-top-right .pixel-tag',
+      '.hud-floor-label',
+      '.loadout-strip',
+      '.loadout-strip *',
+      '.touch-buttons button',
+      '.touch-cycle button',
+      '.touch-pause button',
+      '.hud-pause-btn',
+    ].join(',');
+    return Array.from(document.querySelectorAll(selectors)).flatMap((el) => {
+      const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+      const rect = el.getBoundingClientRect();
+      const size = parseFloat(getComputedStyle(el).fontSize || '0');
+      return text && rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.top <= window.innerHeight && size < 10.5
+        ? [{ text, size }]
+        : [];
+    });
+  });
+  expect(smallHudText).toEqual([]);
+
+  const floorBannerBox = await page.locator('.floor-banner').evaluateAll((banners) => banners.map((banner) => {
+    const rect = banner.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+  }));
+  for (const box of floorBannerBox) {
+    expect(box.left).toBeGreaterThanOrEqual(0);
+    expect(box.right).toBeLessThanOrEqual(844);
+    expect(box.top).toBeGreaterThanOrEqual(0);
+    expect(box.bottom).toBeLessThanOrEqual(390);
+  }
+
   const touchPause = page.locator('.touch-pause button[data-action="pause"]');
   if (await touchPause.count()) {
     await expect(page.locator('.touch-joystick-zone')).toBeVisible();

@@ -84,8 +84,8 @@ export function HUD({ hud, input }: Props): JSX.Element {
       </div>
 
       {hud.showFloorBanner && hud.floorBannerText && (
-        <div className="boss-banner" style={{ top: '40%' }}>
-          <div className="pixel-title" style={{ fontSize: 22, letterSpacing: '0.3em' }}>{hud.floorBannerText}</div>
+        <div className="boss-banner floor-banner">
+          <div className="pixel-title floor-banner-title">{hud.floorBannerText}</div>
         </div>
       )}
 

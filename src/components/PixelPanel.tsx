@@ -6,11 +6,12 @@ interface PixelPanelProps {
   subtitle?: string;
   width?: number | string;
   style?: React.CSSProperties;
+  className?: string;
 }
 
-export function PixelPanel({ children, title, subtitle, width, style }: PixelPanelProps): JSX.Element {
+export function PixelPanel({ children, title, subtitle, width, style, className }: PixelPanelProps): JSX.Element {
   return (
-    <div className="pixel-panel" style={{ width: width ?? 'auto', maxWidth: 'calc(100dvw - var(--panel-gutter, 64px))', ...style }}>
+    <div className={`pixel-panel${className ? ` ${className}` : ''}`} style={{ width: width ?? 'auto', maxWidth: 'calc(100dvw - var(--panel-gutter, 64px))', ...style }}>
       {(title || subtitle) && (
         <div style={{ textAlign: 'center', marginBottom: 6 }}>
           {subtitle && <div className="pixel-subtitle">{subtitle}</div>}

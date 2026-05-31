@@ -20,6 +20,7 @@ interface Props {
 
 export function MainMenu(p: Props): JSX.Element {
   const bgRef = useRef<HTMLCanvasElement | null>(null);
+
   useEffect(() => {
     const c = bgRef.current!;
     const ctx = c.getContext('2d')!;
@@ -27,6 +28,7 @@ export function MainMenu(p: Props): JSX.Element {
     let W = 0, H = 0;
     const stars: { x: number; y: number; z: number; t: number }[] = [];
     const N = 140;
+
     const init = (): void => {
       stars.length = 0;
       for (let i = 0; i < N; i++) {
@@ -38,6 +40,7 @@ export function MainMenu(p: Props): JSX.Element {
         });
       }
     };
+
     const resize = (): void => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       W = window.innerWidth;
@@ -53,13 +56,13 @@ export function MainMenu(p: Props): JSX.Element {
     const tick = (): void => {
       ctx.fillStyle = 'rgba(2, 1, 10, 0.42)';
       ctx.fillRect(0, 0, W, H);
-      // Parallax abyss glow
+
       const g = ctx.createRadialGradient(W / 2, H * 0.7, 40, W / 2, H * 0.7, H);
       g.addColorStop(0, 'rgba(80, 30, 140, 0.22)');
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
-      // Stars / dust
+
       const now = performance.now() / 1000;
       for (const s of stars) {
         s.t += 0.01;
@@ -69,14 +72,13 @@ export function MainMenu(p: Props): JSX.Element {
         s.y -= 0.2 * s.z;
         if (s.y < 0) { s.y = H; s.x = Math.random() * W; }
       }
-      // Seven lamps row — positioned well above the title block, never overlapping it
+
       const cx = W / 2;
       const cy = Math.max(48, H * 0.08);
       const spacing = Math.min(72, Math.max(40, W / 12));
       for (let i = 0; i < 7; i++) {
         const x = cx + (i - 3) * spacing;
         const flick = 0.7 + Math.sin(now * 3 + i * 0.9) * 0.3;
-        // halo
         const halo = ctx.createRadialGradient(x, cy, 1, x, cy, 22);
         halo.addColorStop(0, `rgba(255, 230, 163, ${0.55 * flick})`);
         halo.addColorStop(1, 'rgba(244, 210, 122, 0)');
@@ -84,17 +86,14 @@ export function MainMenu(p: Props): JSX.Element {
         ctx.beginPath();
         ctx.arc(x, cy, 22, 0, Math.PI * 2);
         ctx.fill();
-        // bracket
         ctx.fillStyle = '#3b265c';
         ctx.fillRect(x - 1, cy + 4, 2, 8);
         ctx.fillRect(x - 4, cy + 11, 8, 2);
-        // flame body
         const fh = 7 + Math.sin(now * 5 + i) * 1.2;
         ctx.fillStyle = `rgba(244, 210, 122, ${0.85 * flick})`;
         ctx.beginPath();
         ctx.ellipse(x, cy, 3.5, fh, 0, 0, Math.PI * 2);
         ctx.fill();
-        // hot core
         ctx.fillStyle = '#ffe6a3';
         ctx.beginPath();
         ctx.ellipse(x, cy + 1, 1.5, fh * 0.5, 0, 0, Math.PI * 2);
@@ -122,40 +121,53 @@ export function MainMenu(p: Props): JSX.Element {
     { onActivate: p.onHowTo },
   ];
   const focus = useMenuNav(items);
+  const codexLabel = `${p.codexUnlocked}/${p.codexTotal}`;
 
   return (
     <>
-      <canvas ref={bgRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 }} />
-      <div className="menu-screen main-menu-screen no-bg" style={{ zIndex: 5 }}>
-        <div className="main-menu-title">
-          <div className="pixel-subtitle">The Initiate Approaches</div>
-          <h1 className="pixel-title main-menu-heading">
-            Abyss of the<br />Seven Lamps
-          </h1>
-        </div>
-        <div className="main-menu-actions">
-          <PixelButton onClick={p.onNewRun} focused={focus === 0}>New Run</PixelButton>
-          <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 1}>
-            Continue {p.resumeAvailable ? '' : '(none)'}
-          </PixelButton>
-          <PixelButton onClick={p.onCodex} focused={focus === 2} badge={`☥ ${p.codexUnlocked}/${p.codexTotal}`}>
-            Codex Hermeticum
-          </PixelButton>
-          <PixelButton onClick={p.onCinematics} focused={focus === 3} badge="▶">
-            Cinematics
-          </PixelButton>
-          <PixelButton onClick={p.onMeta} focused={focus === 4} badge={`✦ ${p.essence}`}>
-            Meta Progression
-          </PixelButton>
-          <PixelButton onClick={p.onSettings} focused={focus === 5}>Settings</PixelButton>
-          <PixelButton onClick={p.onController} focused={focus === 6}>Controller Test</PixelButton>
-          <PixelButton onClick={p.onHowTo} focused={focus === 7}>How to Play</PixelButton>
-        </div>
-        <div className="main-menu-meta">
-          Best Floor: <span className="gold-text">{p.bestFloor}</span> &nbsp;·&nbsp; Essence: <span className="gold-text">{p.essence}</span>
-        </div>
-        <div className="main-menu-version">
-          A SOLITARY DESCENT &nbsp;·&nbsp; v0.1
+      <canvas ref={bgRef} className="main-menu-canvas" />
+      <div className="menu-screen main-menu-screen no-bg">
+        <div className="main-menu-shell">
+          <div className="main-menu-crest" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+
+          <div className="main-menu-title">
+            <div className="pixel-subtitle">The Initiate Approaches</div>
+            <h1 className="pixel-title main-menu-heading">
+              Abyss of the<br />Seven Lamps
+            </h1>
+          </div>
+
+          <div className="main-menu-status" aria-label="Run status">
+            <div><span>Best</span><strong>{p.bestFloor}</strong></div>
+            <div><span>Essence</span><strong>{p.essence}</strong></div>
+            <div><span>Codex</span><strong>{codexLabel}</strong></div>
+          </div>
+
+          <div className="main-menu-actions">
+            <div className="main-menu-primary">
+              <PixelButton onClick={p.onNewRun} focused={focus === 0} className="pixel-btn-primary">New Run</PixelButton>
+              <PixelButton onClick={p.onContinue} disabled={!p.resumeAvailable} focused={focus === 1} className="pixel-btn-quiet">
+                Continue {p.resumeAvailable ? '' : '(none)'}
+              </PixelButton>
+            </div>
+
+            <div className="main-menu-secondary">
+              <PixelButton onClick={p.onCodex} focused={focus === 2} badge={codexLabel}>Codex</PixelButton>
+              <PixelButton onClick={p.onCinematics} focused={focus === 3} badge="Play">Films</PixelButton>
+              <PixelButton onClick={p.onMeta} focused={focus === 4} badge={`${p.essence}`}>Boons</PixelButton>
+              <PixelButton onClick={p.onSettings} focused={focus === 5}>Settings</PixelButton>
+              <PixelButton onClick={p.onController} focused={focus === 6}>Pad Test</PixelButton>
+              <PixelButton onClick={p.onHowTo} focused={focus === 7}>Guide</PixelButton>
+            </div>
+          </div>
+
+          <div className="main-menu-version">
+            A Solitary Descent / v0.1
+          </div>
         </div>
       </div>
     </>
