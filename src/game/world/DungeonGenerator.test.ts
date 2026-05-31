@@ -36,28 +36,16 @@ describe('DungeonGenerator', () => {
     expect(sameLayout).toBe(false);
   });
 
-  it('warden boss floors have a normal dungeon layout with a boss room', () => {
+  it('first seven floors are Warden floors with a full dungeon and one boss room', () => {
     // Floors 1–7 use the random-walk generator (not buildBossFloor).
     for (let floorNo = 1; floorNo <= 7; floorNo++) {
       const floor = generateFloor({ floor: floorNo, seed: 42 });
       expect(floor.isBoss).toBe(true);
-      // Should have a boss room
       const bossRooms = floor.rooms.filter((r) => r.type === 'boss');
       expect(bossRooms).toHaveLength(1);
-      // Exit should point to the boss room
       expect(floor.exitRoomId).toBe(bossRooms[0]!.id);
-      // Should have more than 4 rooms (full random-walk, not buildBossFloor)
+      // Full random-walk dungeon, not the old 4-room linear layout
       expect(floor.rooms.length).toBeGreaterThan(4);
-    }
-  });
-
-  it('first seven floors each contain exactly one Warden boss room', () => {
-    for (let floorNo = 1; floorNo <= 7; floorNo++) {
-      const floor = generateFloor({ floor: floorNo, seed: 42 });
-      const bossRooms = floor.rooms.filter((room) => room.type === 'boss');
-      expect(floor.isBoss).toBe(true);
-      expect(bossRooms).toHaveLength(1);
-      expect(floor.exitRoomId).toBe(bossRooms[0]!.id);
     }
   });
 

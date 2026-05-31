@@ -10,7 +10,7 @@ interface PixelPanelProps {
 
 export function PixelPanel({ children, title, subtitle, width, style }: PixelPanelProps): JSX.Element {
   return (
-    <div className="pixel-panel" style={{ width: width ?? 'auto', maxWidth: 'calc(100vw - 64px)', ...style }}>
+    <div className="pixel-panel" style={{ width: width ?? 'auto', maxWidth: 'calc(100dvw - var(--panel-gutter, 64px))', ...style }}>
       {(title || subtitle) && (
         <div style={{ textAlign: 'center', marginBottom: 6 }}>
           {subtitle && <div className="pixel-subtitle">{subtitle}</div>}

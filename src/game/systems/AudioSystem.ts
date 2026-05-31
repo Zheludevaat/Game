@@ -326,7 +326,7 @@ export class AudioSystem {
       this.mix = createMixGraph(this.musicVolume, this.sfxVolume);
 
       // Meter for diagnostics — after limiter
-      this.meter = new Tone.Meter({ normalRange: false });
+      this.meter = new Tone.Meter({ normalRange: true });
       this.mix.limiter.connect(this.meter);
 
       // Insert compressor between master and limiter

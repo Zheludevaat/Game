@@ -167,58 +167,8 @@ export function generateFloor(opts: GenOptions): Floor {
   };
 }
 
-function buildBossFloor(floor: number, seed: number): Floor {
-  const rng = new RNG(seed);
-  const grid = new Map<string, Room>();
-  let nextId = 1;
-  const mk = (x: number, y: number, type: RoomType, name: string, cleared: boolean): Room => {
-    const room: Room = {
-      id: nextId++,
-      grid: { x, y },
-      type,
-      doors: { up: false, down: false, left: false, right: false },
-      discovered: false,
-      visited: false,
-      cleared,
-      enemiesSpawned: false,
-      hasChest: false,
-      chestLocked: false,
-      chestOpened: false,
-      hasShrine: false,
-      shrineUsed: false,
-      name,
-      seed: hashSeed(seed, x, y),
-    };
-    grid.set(keyOf(x, y), room);
-    return room;
-  };
-  const start = mk(0, 0, 'start', pickRoomName('start', rng), true);
-  const shrine = mk(1, 0, 'shrine', pickRoomName('shrine', rng), true);
-  shrine.hasShrine = true;
-  shrine.shrineKind = pickShrineKind(rng);
-  const treasure = mk(0, 1, 'treasure', pickRoomName('treasure', rng), true);
-  treasure.hasChest = true;
-  treasure.chestLocked = false;
-  const boss = mk(2, 0, 'boss', pickRoomName('boss', rng), false);
-  // doors
-  for (const r of grid.values()) {
-    const { x, y } = r.grid;
-    if (grid.has(keyOf(x, y - 1))) r.doors.up = true;
-    if (grid.has(keyOf(x, y + 1))) r.doors.down = true;
-    if (grid.has(keyOf(x - 1, y))) r.doors.left = true;
-    if (grid.has(keyOf(x + 1, y))) r.doors.right = true;
-  }
-  return {
-    number: floor,
-    seed,
-    rooms: [...grid.values()],
-    roomGrid: grid,
-    startRoomId: start.id,
-    exitRoomId: boss.id,
-    isBoss: true,
-    isMiniBoss: false,
-  };
-}
+/* buildBossFloor removed in favor of full random-walk warden floors.
+ * Preserve in git history if a linear boss-only layout is needed later. */
 
 function countNeighbours(grid: Map<string, Room>, x: number, y: number): number {
   let c = 0;

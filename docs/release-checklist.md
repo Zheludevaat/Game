@@ -4,6 +4,7 @@
 
 - `npm run typecheck`
 - `npm test`
+- `npm run e2e`
 - `npm run build`
 - `npm audit --omit=dev`
 

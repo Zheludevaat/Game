@@ -12,6 +12,7 @@ import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
 import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
 import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
+import { requiredWardenIdsBeforeOgdoad } from './progression/progressionRules';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
 import { DialogueChoice, NPCS, NPC_BY_ID, NpcDef, NpcPassive } from './data/npcs';
 import { generateFloor } from './world/DungeonGenerator';
@@ -669,7 +670,12 @@ export class GameEngine {
   }
 
   setDebugBossesDefeated(count: number): void {
-    this.summary.bossesDefeated = Math.max(0, count);
+    if (!this.player) {
+      this.initForTest();
+    }
+    const ids = requiredWardenIdsBeforeOgdoad().slice(0, Math.max(0, count));
+    this.defeatedWardenIds = ids;
+    this.summary.bossesDefeated = ids.length;
   }
 
   setDebugRngSeed(seed: number): void {
@@ -698,6 +704,13 @@ export class GameEngine {
       this.initForTest();
     }
     this.goToFloor(n);
+  }
+
+  applyResumeSnapshotForTest(snap: RunSnapshot): void {
+    if (!this.player) {
+      this.initForTest();
+    }
+    this.applyResumeSnapshot(snap);
   }
 
   private goToFloor(n: number): void {
@@ -745,7 +758,7 @@ export class GameEngine {
     }
     // Reaching the Eighth Sphere is the climactic moment.
     if (isOgdoadFloor(n)) {
-      const hasSevenLamps = canEnterOgdoad(this.summary.bossesDefeated);
+      const hasSevenLamps = canEnterOgdoad(this.defeatedWardenIds);
       if (!this.summary.ogdoadReached) {
         this.summary.ogdoadReached = true;
         this.unlockCodex('ogdoad.hymn');
@@ -769,6 +782,11 @@ export class GameEngine {
   private applyResumeSnapshot(snap: RunSnapshot): void {
     this.runSeed = snap.runSeed;
     this.initPlayer();
+
+    // Restore Warden progress before goToFloor(), because entering floor 8
+    // performs the Ogdoad ending gate immediately.
+    this.defeatedWardenIds = [...snap.defeatedWardenIds];
+    this.summary.bossesDefeated = snap.defeatedWardenIds.length;
 
     // Generate the saved floor from the deterministic seed
     this.goToFloor(snap.floor);
@@ -799,9 +817,6 @@ export class GameEngine {
     this.player.spells = [...snap.spells];
     this.player.spellIdx = 0;
     this.player.relics = [...snap.relics];
-
-    // Restore defeated-warden tracking
-    this.defeatedWardenIds = [...snap.defeatedWardenIds];
 
     // Restore summary counts so the UI shows correct progress
     this.summary.roomsCleared = snap.clearedRoomIds.length;
@@ -2168,8 +2183,8 @@ export class GameEngine {
       colour: e.isBoss ? '#ffd97a' : '#e23a4a', life: 0.9, maxLife: 0.9,
     });
     if (e.isBoss) {
-      this.defeatedWardenIds = recordBossDefeat(e.visualKey, this.defeatedWardenIds);
-      this.summary.bossesDefeated += 1;
+      this.defeatedWardenIds = recordBossDefeat(this.currentSphere.id, this.defeatedWardenIds);
+      this.summary.bossesDefeated = this.defeatedWardenIds.length;
       audio.sfx('bossDeath');
       audio.stopBossMusic();
       this.camera.shakeT = 1.0; this.camera.shakeMag = 6;

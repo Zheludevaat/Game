@@ -114,7 +114,6 @@ export function CinematicShort(p: CinematicShortProps): JSX.Element {
     const ctx = c.getContext('2d')!;
     let raf = 0;
     let W = 0, H = 0;
-    const LETTERBOX = 56; // px top + bottom — film bars
     const resize = (): void => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       W = window.innerWidth; H = window.innerHeight;
@@ -142,15 +141,17 @@ export function CinematicShort(p: CinematicShortProps): JSX.Element {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, W, H);
 
+      const letterbox = Math.min(56, Math.max(24, H * 0.075));
+
       // Clip the visible frame (between the letterbox bars) and render.
       ctx.save();
       ctx.beginPath();
-      ctx.rect(0, LETTERBOX, W, H - LETTERBOX * 2);
+      ctx.rect(0, letterbox, W, H - letterbox * 2);
       ctx.clip();
-      ctx.translate(0, LETTERBOX);
+      ctx.translate(0, letterbox);
       try {
         shot?.render({
-          ctx, width: W, height: H - LETTERBOX * 2,
+          ctx, width: W, height: H - letterbox * 2,
           t: tShot, duration: dur, total, outAlpha,
         });
       } catch { /* don't crash the film */ }
@@ -214,14 +215,14 @@ export function CinematicShort(p: CinematicShortProps): JSX.Element {
 
       <div className="cinematic-controls-hint">
         <span>{idx + 1} / {p.shots.length}</span>
-        <span style={{ opacity: 0.6 }}> · A skip shot · Start end</span>
+        <span className="cinematic-controls-copy"> &middot; Tap next &middot; Start end</span>
       </div>
 
       {/* Invisible tap target so phone users can tap anywhere to advance */}
       <div
         className="cinematic-tap-target"
-        onClick={next}
-        onTouchStart={(e) => { e.preventDefault(); next(); }}
+        onPointerDown={(e) => { e.preventDefault(); next(); }}
+        onContextMenu={(e) => e.preventDefault()}
       />
     </>
   );

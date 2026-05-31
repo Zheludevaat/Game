@@ -3,10 +3,12 @@ import { requiredWardenIdsBeforeOgdoad } from '../progression/progressionRules';
 // ── Ogdoad entry ────────────────────────────────────────────────────────────
 
 /**
- * Whether the player has defeated enough Wardens to enter the Ogdoad.
+ * Whether the player has defeated every planetary Warden required to enter
+ * the Ogdoad. Duplicates do not count as multiple lamps.
  */
-export function canEnterOgdoad(bossesDefeated: number): boolean {
-  return bossesDefeated >= requiredWardenIdsBeforeOgdoad().length;
+export function canEnterOgdoad(defeatedWardenIds: string[]): boolean {
+  const defeated = new Set(defeatedWardenIds);
+  return requiredWardenIdsBeforeOgdoad().every((id) => defeated.has(id));
 }
 
 // ── Boss intro ──────────────────────────────────────────────────────────────
@@ -26,6 +28,7 @@ export function shouldPlayBossIntro(sphereId: string, alreadyPlayed: boolean): b
  * Returns a new array (immutable update).
  */
 export function recordBossDefeat(sphereId: string, defeated: string[]): string[] {
+  if (defeated.includes(sphereId)) return defeated;
   return [...defeated, sphereId];
 }
 
