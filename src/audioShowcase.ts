@@ -11,14 +11,14 @@ interface Cue {
 }
 
 const spheres = [
-  ['moon', 'I - Moon', 'Selene: tidal, wistful, close to matter'],
-  ['mercury', 'II - Mercury', 'Hermes: quicksilver, metallic, agile'],
-  ['venus', 'III - Venus', 'Aphrodite: warm, longing, dangerous'],
-  ['sun', 'IV - Sun', 'Helios: luminous, proud, crowned'],
-  ['mars', 'V - Mars', 'Ares: martial, sharp, violent'],
-  ['jupiter', 'VI - Jupiter', 'Zeus: broad, heavy, ceremonial'],
-  ['saturn', 'VII - Saturn', 'Kronos: slow, cold, final'],
-  ['ogdoad', 'VIII - Ogdoad', 'The Eighth: open, bright, released'],
+  ['moon', 'I - Moon', 'Descending minor third, rising fourth answer — glass bell lead over tidal pads'],
+  ['mercury', 'II - Mercury', 'Rapid neighbor tone flurries — nimble plucked FM with delay-drenched shimmer'],
+  ['venus', 'III - Venus', 'Warm sixths and lyrical stepwise phrases — soft chorus on a bed of longing'],
+  ['sun', 'IV - Sun', 'Open-fifth fanfare, bright major lift — low brass-like pulse over Lydian glow'],
+  ['mars', 'V - Mars', 'Sharp minor-second stabs and chromatic fury — martial drums, aggressive bass'],
+  ['jupiter', 'VI - Jupiter', 'Broad fourths with regal dotted rhythm — deep choir pad and ceremonial timpani'],
+  ['saturn', 'VII - Saturn', 'Slow tritone resolution over clock-pulse tick — dark low strings, cold finality'],
+  ['ogdoad', 'VIII - Ogdoad', 'Transcendent Lydian release — luminous pad, rising arcs, boundless air'],
 ] as const;
 
 const moods = ['cosmos', 'descent', 'boss', 'ascent'] as CinematicMood[];
@@ -55,7 +55,7 @@ const cues: Cue[] = [
     id: `boss-${id}`,
     label: `Boss ${label}`,
     kind: 'boss',
-    note: 'Boss arrangement for this sphere. Phase buttons below can intensify it while it plays.',
+    note: 'Reuses sphere motif in forceful rhythm. Phase buttons add percussion, ostinato, then high countermelody with gain reduction.',
     play: () => audio.startBossMusic(id),
   })),
   ...moods.map<Cue>((mood) => ({

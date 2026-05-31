@@ -1,6 +1,8 @@
 import * as Tone from 'tone';
 import type { AudioDiagnosticsSnapshot } from '../audio/audioDiagnostics';
 import { peakToDb, CLIP_DB_THRESHOLD } from '../audio/audioDiagnostics';
+import { createMixGraph } from '../audio/mixGraph';
+import type { MixGraph } from '../audio/mixGraph';
 
 export type SfxName =
   | 'menu' | 'attack' | 'dash' | 'spell' | 'enemyHit' | 'playerHit'
@@ -38,36 +40,60 @@ const SPHERE_MUSIC: Record<string, SphereMusicConfig> = {
     bass: { root: 'A1', fifth: 'E2', rhythm: '1m', type: 'sine', vol: -16 },
     pad: { waveform: 'fatsine', spread: 10, vol: -14, filterLow: 400, filterHigh: 1500, lfoRate: 0.07, chorusWet: 0.4 },
     melody: [
-      { time:'4:0:0',note:'A4',dur:'4n',vel:0.10},{ time:'5:0:0',note:'G4',dur:'4n',vel:0.08},
-      { time:'6:0:0',note:'E4',dur:'2n',vel:0.09},{ time:'7:2:0',note:'D4',dur:'4n',vel:0.07},
-      { time:'8:0:0',note:'C4',dur:'2n.',vel:0.10},{ time:'10:0:0',note:'E4',dur:'4n',vel:0.08},
-      { time:'11:0:0',note:'G4',dur:'4n',vel:0.07},{ time:'12:0:0',note:'A4',dur:'2n',vel:0.09},
-      { time:'13:2:0',note:'C5',dur:'4n.',vel:0.10},{ time:'15:0:0',note:'A4',dur:'2n',vel:0.08},
-      { time:'17:0:0',note:'G4',dur:'4n',vel:0.07},{ time:'18:0:0',note:'E4',dur:'4n',vel:0.08},
-      { time:'19:0:0',note:'D4',dur:'1n',vel:0.10},{ time:'21:0:0',note:'E4',dur:'2n.',vel:0.08},
-      { time:'23:0:0',note:'A4',dur:'4n',vel:0.07},{ time:'24:0:0',note:'C5',dur:'2n',vel:0.10},
-      { time:'26:0:0',note:'A4',dur:'2n',vel:0.08},{ time:'28:0:0',note:'E4',dur:'2n.',vel:0.09},
+      // Arrival bars 0-7: sparse pedal hint
+      { time:'0:0:0',note:'E4',dur:'2n',vel:0.05},{ time:'2:0:0',note:'C4',dur:'2n.',vel:0.05},
+      // Answer bars 8-15: descending minor third + rising fourth
+      { time:'8:0:0',note:'A4',dur:'4n',vel:0.10},{ time:'8:2:0',note:'G4',dur:'4n',vel:0.08},
+      { time:'9:0:0',note:'E4',dur:'2n',vel:0.09},{ time:'10:2:0',note:'D4',dur:'4n',vel:0.07},
+      { time:'11:0:0',note:'E4',dur:'4n',vel:0.07},{ time:'11:2:0',note:'A4',dur:'4n',vel:0.09},
+      { time:'12:0:0',note:'C5',dur:'2n',vel:0.10},{ time:'14:0:0',note:'A4',dur:'2n',vel:0.08},
+      // Deepening bars 16-23: higher register with countermelody feel
+      { time:'16:0:0',note:'E5',dur:'2n',vel:0.08},{ time:'18:0:0',note:'A4',dur:'4n',vel:0.07},
+      { time:'18:2:0',note:'C5',dur:'4n',vel:0.08},{ time:'19:0:0',note:'E5',dur:'2n',vel:0.09},
+      { time:'21:0:0',note:'D5',dur:'2n',vel:0.07},{ time:'23:0:0',note:'A4',dur:'2n',vel:0.08},
+      // Return bars 24-31: thin back to closing motif tag
+      { time:'24:0:0',note:'A3',dur:'2n',vel:0.04},{ time:'26:0:0',note:'C4',dur:'2n',vel:0.04},
+      { time:'28:0:0',note:'A4',dur:'2n',vel:0.08},{ time:'29:2:0',note:'G4',dur:'4n',vel:0.06},
+      { time:'30:0:0',note:'E4',dur:'2n.',vel:0.07},
     ],
-    leadType: 'triangle', texture: 'pink-surf', character: 'Tidal, cyclical, wistful',
+    leadType: 'fm', texture: 'pink-surf', character: 'Tidal, cyclical, wistful — descending minor third, rising fourth, glass bell lead',
     getBPM: (b) => b,
   },
   mercury: {
-    key: 'Ephryg', bpm: 110, loopBars: 16,
+    key: 'Ephryg', bpm: 110, loopBars: 32,
     chordProg: [['E2','B2','E3','G#3'], ['F2','C3','F3','A3'], ['G#2','D#3','G#3','B3'], ['E2','B2','E3','G#3']],
     bass: { root: 'E1', rhythm: '4n', type: 'sine', vol: -18 },
     pad: { waveform: 'sine', spread: 4, vol: -18, filterLow: 600, filterHigh: 3000, lfoRate: 0.5, chorusWet: 0 },
     melody: [
-      { time:'1:0:0',note:'E5',dur:'8n',vel:0.09},{ time:'1:2:0',note:'F5',dur:'8n',vel:0.07},
-      { time:'2:0:0',note:'G#5',dur:'4n',vel:0.10},{ time:'3:0:0',note:'A5',dur:'8n',vel:0.08},
-      { time:'3:2:0',note:'B5',dur:'8n',vel:0.09},{ time:'4:2:0',note:'C6',dur:'4n',vel:0.08},
-      { time:'5:2:0',note:'B5',dur:'8n',vel:0.07},{ time:'6:0:0',note:'A5',dur:'8n',vel:0.06},
-      { time:'6:2:0',note:'G#5',dur:'8n',vel:0.08},{ time:'7:0:0',note:'F5',dur:'8n',vel:0.06},
-      { time:'7:2:0',note:'E5',dur:'4n',vel:0.09},{ time:'9:0:0',note:'G#5',dur:'8n',vel:0.08},
-      { time:'9:2:0',note:'B5',dur:'8n',vel:0.07},{ time:'10:2:0',note:'C6',dur:'4n',vel:0.10},
-      { time:'12:0:0',note:'B5',dur:'8n',vel:0.07},{ time:'12:2:0',note:'A5',dur:'8n',vel:0.06},
-      { time:'13:0:0',note:'G#5',dur:'8n',vel:0.08},{ time:'14:0:0',note:'E5',dur:'2n',vel:0.09},
+      // Arrival bars 0-7: quick arpeggiated entrance
+      { time:'0:0:0',note:'E5',dur:'8n',vel:0.07},{ time:'0:2:0',note:'B4',dur:'8n',vel:0.06},
+      { time:'1:0:0',note:'G#5',dur:'8n',vel:0.08},{ time:'1:2:0',note:'E5',dur:'8n',vel:0.06},
+      { time:'2:0:0',note:'B4',dur:'8n',vel:0.07},{ time:'2:2:0',note:'G#5',dur:'8n',vel:0.08},
+      // Answer bars 8-15: neighbor tone motif
+      { time:'8:0:0',note:'E5',dur:'8n',vel:0.09},{ time:'8:2:0',note:'F5',dur:'8n',vel:0.07},
+      { time:'9:0:0',note:'E5',dur:'8n',vel:0.08},{ time:'9:2:0',note:'G#5',dur:'4n',vel:0.10},
+      { time:'10:2:0',note:'A5',dur:'8n',vel:0.08},{ time:'11:0:0',note:'G#5',dur:'8n',vel:0.07},
+      { time:'11:2:0',note:'B5',dur:'8n',vel:0.09},{ time:'12:0:0',note:'A5',dur:'8n',vel:0.07},
+      { time:'12:2:0',note:'C6',dur:'4n',vel:0.10},{ time:'14:0:0',note:'B5',dur:'8n',vel:0.07},
+      { time:'14:2:0',note:'A5',dur:'8n',vel:0.06},{ time:'15:0:0',note:'G#5',dur:'8n',vel:0.08},
+      // Deepening bars 16-23: rapid ornamental flurries
+      { time:'16:0:0',note:'E5',dur:'8n',vel:0.08},{ time:'16:2:0',note:'F5',dur:'8n',vel:0.07},
+      { time:'17:0:0',note:'G#5',dur:'8n',vel:0.09},{ time:'17:2:0',note:'A5',dur:'8n',vel:0.07},
+      { time:'18:0:0',note:'B5',dur:'8n',vel:0.08},{ time:'18:2:0',note:'C6',dur:'8n',vel:0.09},
+      { time:'19:0:0',note:'B5',dur:'8n',vel:0.07},{ time:'19:2:0',note:'A5',dur:'8n',vel:0.06},
+      { time:'20:0:0',note:'G#5',dur:'8n',vel:0.08},{ time:'20:2:0',note:'F5',dur:'8n',vel:0.06},
+      { time:'21:0:0',note:'E5',dur:'4n',vel:0.09},{ time:'22:2:0',note:'G#5',dur:'8n',vel:0.07},
+      { time:'23:0:0',note:'B5',dur:'8n',vel:0.08},{ time:'23:2:0',note:'C6',dur:'8n',vel:0.07},
+      // Return bars 24-31: thinning to motif tag
+      { time:'24:0:0',note:'B5',dur:'8n',vel:0.06},{ time:'24:2:0',note:'A5',dur:'8n',vel:0.05},
+      { time:'25:0:0',note:'G#5',dur:'8n',vel:0.07},{ time:'25:2:0',note:'E5',dur:'4n',vel:0.08},
+      { time:'27:0:0',note:'F5',dur:'8n',vel:0.06},{ time:'27:2:0',note:'E5',dur:'8n',vel:0.05},
+      { time:'28:0:0',note:'G#5',dur:'8n',vel:0.07},{ time:'28:2:0',note:'A5',dur:'8n',vel:0.06},
+      { time:'29:0:0',note:'B5',dur:'8n',vel:0.08},{ time:'29:2:0',note:'A5',dur:'8n',vel:0.06},
+      { time:'30:0:0',note:'G#5',dur:'8n',vel:0.07},{ time:'30:2:0',note:'F5',dur:'8n',vel:0.05},
+      { time:'31:0:0',note:'E5',dur:'4n',vel:0.08},
     ],
-    leadType: 'fm', texture: 'high-shimmer', character: 'Quicksilver, deceptive, metallic',
+    leadType: 'fm', texture: 'high-shimmer', character: 'Quicksilver, agile, metallic — rapid neighbor tone flurries, delay-drenched plucked lead',
     getBPM: (b) => b,
   },
   venus: {
@@ -76,56 +102,103 @@ const SPHERE_MUSIC: Record<string, SphereMusicConfig> = {
     bass: { root: 'D2', fifth: 'F2', rhythm: '2n', type: 'sine', vol: -18 },
     pad: { waveform: 'fatsine', spread: 14, vol: -14, filterLow: 300, filterHigh: 2000, lfoRate: 0.05, chorusWet: 0.55 },
     melody: [
-      { time:'3:0:0',note:'D5',dur:'2n',vel:0.08},{ time:'5:0:0',note:'F5',dur:'2n',vel:0.09},
-      { time:'7:0:0',note:'A5',dur:'4n',vel:0.10},{ time:'8:0:0',note:'G5',dur:'2n',vel:0.08},
-      { time:'10:0:0',note:'F5',dur:'4n',vel:0.07},{ time:'11:0:0',note:'D5',dur:'2n.',vel:0.10},
-      { time:'14:0:0',note:'E5',dur:'4n',vel:0.08},{ time:'15:0:0',note:'C5',dur:'2n',vel:0.07},
+      // Arrival bars 0-7: warm pad intro with sparse sixth hints
+      { time:'0:0:0',note:'D4',dur:'2n',vel:0.05},{ time:'2:0:0',note:'F4',dur:'2n',vel:0.05},
+      { time:'4:0:0',note:'A4',dur:'2n',vel:0.06},
+      // Answer bars 8-15: lyrical stepwise in sixths
+      { time:'8:0:0',note:'D5',dur:'2n',vel:0.08},{ time:'10:0:0',note:'F5',dur:'2n',vel:0.09},
+      { time:'12:0:0',note:'A5',dur:'4n',vel:0.10},{ time:'12:2:0',note:'G5',dur:'4n',vel:0.08},
+      { time:'13:0:0',note:'F5',dur:'2n',vel:0.07},{ time:'14:2:0',note:'D5',dur:'2n.',vel:0.10},
+      // Deepening bars 16-23: ornamented sixth leaps
+      { time:'16:0:0',note:'E5',dur:'4n',vel:0.08},{ time:'16:2:0',note:'C5',dur:'4n',vel:0.07},
       { time:'17:0:0',note:'A4',dur:'2n',vel:0.08},{ time:'19:0:0',note:'C5',dur:'4n',vel:0.09},
-      { time:'20:0:0',note:'E5',dur:'2n',vel:0.10},{ time:'22:2:0',note:'D5',dur:'4n',vel:0.08},
-      { time:'23:2:0',note:'C5',dur:'2n',vel:0.07},{ time:'25:2:0',note:'A4',dur:'2n.',vel:0.09},
-      { time:'28:0:0',note:'C5',dur:'4n',vel:0.08},{ time:'29:0:0',note:'D5',dur:'2n.',vel:0.10},
+      { time:'19:2:0',note:'E5',dur:'4n',vel:0.08},{ time:'20:0:0',note:'D5',dur:'2n',vel:0.10},
+      { time:'22:0:0',note:'C5',dur:'2n',vel:0.07},{ time:'23:2:0',note:'A4',dur:'2n',vel:0.07},
+      // Return bars 24-31: soft closing phrase
+      { time:'24:0:0',note:'A4',dur:'2n',vel:0.07},{ time:'26:0:0',note:'C5',dur:'4n',vel:0.07},
+      { time:'26:2:0',note:'D5',dur:'4n',vel:0.08},{ time:'27:0:0',note:'F5',dur:'2n',vel:0.09},
+      { time:'28:2:0',note:'E5',dur:'4n',vel:0.07},{ time:'29:0:0',note:'D5',dur:'2n.',vel:0.10},
     ],
-    leadType: 'triangle', texture: 'pulse-sub', character: 'Seductive, longing, warm',
+    leadType: 'triangle', texture: 'pulse-sub', character: 'Warm, lyrical, longing — stepwise sixths, soft chorus bed, seductive phrasing',
     getBPM: (b) => b,
   },
   sun: {
-    key: 'CLydian', bpm: 88, loopBars: 16,
+    key: 'CLydian', bpm: 88, loopBars: 32,
     chordProg: [['C3','G3','E4','A4'], ['D3','A3','F4','C5'], ['E3','B3','G4','D5'], ['F#3','C#4','A4','E5']],
     bass: { root: 'C2', fifth: 'G2', rhythm: '4n', type: 'sawtooth', vol: -16 },
     pad: { waveform: 'fatsawtooth', spread: 8, vol: -14, filterLow: 1000, filterHigh: 3000, lfoRate: 0.06, chorusWet: 0.3 },
     melody: [
-      { time:'1:0:0',note:'C5',dur:'4n',vel:0.12},{ time:'1:2:0',note:'E5',dur:'4n',vel:0.10},
-      { time:'2:0:0',note:'G5',dur:'4n',vel:0.11},{ time:'2:2:0',note:'A5',dur:'4n',vel:0.09},
-      { time:'3:0:0',note:'B5',dur:'2n',vel:0.12},{ time:'4:0:0',note:'C6',dur:'4n',vel:0.13},
-      { time:'4:2:0',note:'D6',dur:'4n',vel:0.10},{ time:'5:0:0',note:'C6',dur:'4n',vel:0.11},
-      { time:'5:2:0',note:'B5',dur:'4n',vel:0.09},{ time:'6:0:0',note:'A5',dur:'4n',vel:0.08},
-      { time:'6:2:0',note:'G5',dur:'4n',vel:0.09},{ time:'7:0:0',note:'E5',dur:'4n',vel:0.07},
-      { time:'7:2:0',note:'C5',dur:'2n',vel:0.10},{ time:'9:0:0',note:'E5',dur:'4n',vel:0.09},
-      { time:'9:2:0',note:'G5',dur:'4n',vel:0.10},{ time:'10:0:0',note:'C6',dur:'2n',vel:0.12},
-      { time:'11:2:0',note:'B5',dur:'4n',vel:0.09},{ time:'12:0:0',note:'A5',dur:'2n',vel:0.08},
-      { time:'13:2:0',note:'G5',dur:'2n',vel:0.10},{ time:'15:0:0',note:'C5',dur:'2n',vel:0.11},
+      // Arrival bars 0-7: open fifth fanfare intro
+      { time:'0:0:0',note:'C4',dur:'2n',vel:0.06},{ time:'2:0:0',note:'G4',dur:'2n',vel:0.06},
+      { time:'4:0:0',note:'C5',dur:'2n',vel:0.08},
+      // Answer bars 8-15: bright major lift with open fifth leaps
+      { time:'8:0:0',note:'C5',dur:'4n',vel:0.12},{ time:'8:2:0',note:'E5',dur:'4n',vel:0.10},
+      { time:'9:0:0',note:'G5',dur:'4n',vel:0.11},{ time:'9:2:0',note:'A5',dur:'4n',vel:0.09},
+      { time:'10:0:0',note:'B5',dur:'2n',vel:0.12},{ time:'11:2:0',note:'C6',dur:'4n',vel:0.13},
+      { time:'12:0:0',note:'D6',dur:'4n',vel:0.10},{ time:'12:2:0',note:'C6',dur:'4n',vel:0.11},
+      { time:'13:0:0',note:'B5',dur:'4n',vel:0.09},{ time:'13:2:0',note:'A5',dur:'4n',vel:0.08},
+      { time:'14:0:0',note:'G5',dur:'4n',vel:0.09},{ time:'14:2:0',note:'E5',dur:'4n',vel:0.07},
+      { time:'15:0:0',note:'C5',dur:'2n',vel:0.10},
+      // Deepening bars 16-23: brass-like countermelody
+      { time:'16:0:0',note:'E5',dur:'4n',vel:0.09},{ time:'16:2:0',note:'G5',dur:'4n',vel:0.10},
+      { time:'17:0:0',note:'C6',dur:'2n',vel:0.12},{ time:'18:2:0',note:'B5',dur:'4n',vel:0.09},
+      { time:'19:0:0',note:'A5',dur:'2n',vel:0.08},{ time:'20:2:0',note:'G5',dur:'2n',vel:0.10},
+      { time:'22:0:0',note:'C5',dur:'2n',vel:0.08},{ time:'23:2:0',note:'G4',dur:'2n',vel:0.07},
+      // Return bars 24-31: triumphant final tag
+      { time:'24:0:0',note:'C5',dur:'4n',vel:0.10},{ time:'24:2:0',note:'E5',dur:'4n',vel:0.09},
+      { time:'25:0:0',note:'G5',dur:'4n',vel:0.11},{ time:'25:2:0',note:'C6',dur:'2n',vel:0.12},
+      { time:'27:0:0',note:'B5',dur:'4n',vel:0.09},{ time:'27:2:0',note:'A5',dur:'4n',vel:0.08},
+      { time:'28:0:0',note:'G5',dur:'2n',vel:0.10},{ time:'29:2:0',note:'E5',dur:'2n',vel:0.08},
+      { time:'31:0:0',note:'C5',dur:'4n',vel:0.10},
     ],
-    leadType: 'sawtooth', texture: 'marching', character: 'Majestic, bright, arrogant',
+    leadType: 'sawtooth', texture: 'marching', character: 'Luminous, proud, crowned — open-fifth fanfare, bright Lydian lift, marching brass pulse',
     getBPM: (b) => b,
   },
   mars: {
-    key: 'FharmMin', bpm: 120, loopBars: 16,
+    key: 'FharmMin', bpm: 120, loopBars: 32,
     chordProg: [['F2','C3','F3','G#3'], ['C3','G3','C4','Eb4'], ['F2','C3','F3','G#3'], ['Db3','Ab3','Db4','F4']],
     bass: { root: 'F1', rhythm: '8n', type: 'sawtooth', vol: -14 },
     pad: { waveform: 'sawtooth', spread: 4, vol: -16, filterLow: 200, filterHigh: 800, lfoRate: 0.6, chorusWet: 0 },
     melody: [
-      { time:'1:0:0',note:'F5',dur:'8n',vel:0.12},{ time:'1:1:0',note:'Eb5',dur:'8n',vel:0.10},
-      { time:'1:2:0',note:'Db5',dur:'8n',vel:0.11},{ time:'1:3:0',note:'C5',dur:'8n',vel:0.09},
-      { time:'2:0:0',note:'B4',dur:'4n',vel:0.10},{ time:'2:2:0',note:'C5',dur:'8n',vel:0.11},
-      { time:'2:3:0',note:'Db5',dur:'8n',vel:0.10},{ time:'3:0:0',note:'Eb5',dur:'8n',vel:0.09},
-      { time:'3:1:0',note:'F5',dur:'8n',vel:0.12},{ time:'3:2:0',note:'Gb5',dur:'8n',vel:0.10},
-      { time:'4:0:0',note:'F5',dur:'4n',vel:0.11},{ time:'4:3:0',note:'F5',dur:'16n',vel:0.08},
-      { time:'4:3:2',note:'Gb5',dur:'16n',vel:0.10},{ time:'5:0:0',note:'F5',dur:'8n',vel:0.12},
-      { time:'5:1:0',note:'Eb5',dur:'8n',vel:0.09},{ time:'5:2:0',note:'Db5',dur:'8n',vel:0.10},
-      { time:'6:0:0',note:'C5',dur:'4n',vel:0.11},{ time:'7:0:0',note:'F5',dur:'8n',vel:0.12},
-      { time:'7:1:0',note:'Ab5',dur:'8n',vel:0.10},{ time:'8:0:0',note:'F5',dur:'2n',vel:0.12},
+      // Arrival bars 0-7: ominous low drone with sharp edge
+      { time:'0:0:0',note:'F3',dur:'2n',vel:0.06},{ time:'1:0:0',note:'G3',dur:'4n',vel:0.08},
+      { time:'1:2:0',note:'F3',dur:'4n',vel:0.07},{ time:'2:0:0',note:'Eb3',dur:'2n',vel:0.06},
+      // Answer bars 8-15: sharp minor second motif
+      { time:'8:0:0',note:'F5',dur:'8n',vel:0.12},{ time:'8:1:0',note:'Gb5',dur:'8n',vel:0.10},
+      { time:'8:2:0',note:'F5',dur:'8n',vel:0.11},{ time:'8:3:0',note:'Eb5',dur:'8n',vel:0.09},
+      { time:'9:0:0',note:'Db5',dur:'8n',vel:0.10},{ time:'9:1:0',note:'C5',dur:'8n',vel:0.11},
+      { time:'9:2:0',note:'Db5',dur:'8n',vel:0.10},{ time:'9:3:0',note:'C5',dur:'8n',vel:0.09},
+      { time:'10:0:0',note:'B4',dur:'4n',vel:0.10},{ time:'10:2:0',note:'C5',dur:'8n',vel:0.11},
+      { time:'10:3:0',note:'Db5',dur:'8n',vel:0.10},{ time:'11:0:0',note:'Eb5',dur:'8n',vel:0.09},
+      { time:'11:1:0',note:'F5',dur:'8n',vel:0.12},{ time:'11:2:0',note:'Gb5',dur:'8n',vel:0.10},
+      { time:'12:0:0',note:'F5',dur:'4n',vel:0.11},{ time:'12:3:0',note:'F5',dur:'16n',vel:0.08},
+      { time:'12:3:2',note:'Gb5',dur:'16n',vel:0.10},{ time:'13:0:0',note:'F5',dur:'8n',vel:0.12},
+      { time:'13:1:0',note:'Eb5',dur:'8n',vel:0.09},{ time:'13:2:0',note:'Db5',dur:'8n',vel:0.10},
+      { time:'14:0:0',note:'C5',dur:'4n',vel:0.11},{ time:'15:0:0',note:'F5',dur:'8n',vel:0.12},
+      { time:'15:1:0',note:'Ab5',dur:'8n',vel:0.10},{ time:'15:2:0',note:'F5',dur:'4n',vel:0.12},
+      // Deepening bars 16-23: aggressive ostinato with chromatic runs
+      { time:'16:0:0',note:'F5',dur:'8n',vel:0.11},{ time:'16:1:0',note:'Gb5',dur:'8n',vel:0.09},
+      { time:'16:2:0',note:'F5',dur:'8n',vel:0.10},{ time:'16:3:0',note:'Eb5',dur:'8n',vel:0.08},
+      { time:'17:0:0',note:'Db5',dur:'8n',vel:0.10},{ time:'17:1:0',note:'C5',dur:'8n',vel:0.09},
+      { time:'17:2:0',note:'B4',dur:'8n',vel:0.08},{ time:'17:3:0',note:'C5',dur:'8n',vel:0.10},
+      { time:'18:0:0',note:'F5',dur:'4n',vel:0.12},{ time:'18:2:0',note:'Gb5',dur:'8n',vel:0.10},
+      { time:'18:3:0',note:'F5',dur:'8n',vel:0.11},{ time:'19:0:0',note:'Eb5',dur:'4n',vel:0.09},
+      { time:'19:2:0',note:'F5',dur:'8n',vel:0.12},{ time:'19:3:0',note:'Ab5',dur:'8n',vel:0.10},
+      { time:'20:0:0',note:'F5',dur:'2n',vel:0.12},{ time:'21:2:0',note:'Gb5',dur:'8n',vel:0.10},
+      { time:'21:3:0',note:'F5',dur:'8n',vel:0.11},{ time:'22:0:0',note:'Eb5',dur:'4n',vel:0.09},
+      { time:'22:2:0',note:'Db5',dur:'8n',vel:0.10},{ time:'22:3:0',note:'C5',dur:'8n',vel:0.08},
+      { time:'23:0:0',note:'F5',dur:'4n',vel:0.12},
+      // Return bars 24-31: forceful resolution with final stabs
+      { time:'24:0:0',note:'F5',dur:'8n',vel:0.10},{ time:'24:1:0',note:'Eb5',dur:'8n',vel:0.08},
+      { time:'24:2:0',note:'Db5',dur:'8n',vel:0.09},{ time:'24:3:0',note:'C5',dur:'8n',vel:0.07},
+      { time:'25:0:0',note:'B4',dur:'8n',vel:0.09},{ time:'25:1:0',note:'C5',dur:'8n',vel:0.10},
+      { time:'25:2:0',note:'Db5',dur:'8n',vel:0.08},{ time:'25:3:0',note:'Eb5',dur:'8n',vel:0.09},
+      { time:'26:0:0',note:'F5',dur:'4n',vel:0.12},{ time:'26:2:0',note:'Gb5',dur:'8n',vel:0.10},
+      { time:'27:0:0',note:'F5',dur:'4n',vel:0.11},{ time:'27:2:0',note:'Ab5',dur:'8n',vel:0.10},
+      { time:'28:0:0',note:'F5',dur:'2n',vel:0.12},{ time:'30:0:0',note:'F5',dur:'4n',vel:0.10},
+      { time:'30:2:0',note:'Eb5',dur:'4n',vel:0.08},{ time:'31:0:0',note:'F5',dur:'2n',vel:0.12},
     ],
-    leadType: 'square', texture: 'war-drums', character: 'Aggressive, martial, violent',
+    leadType: 'square', texture: 'war-drums', character: 'Martial, sharp, violent — minor-second stabs, chromatic fury, war drums',
     getBPM: (b) => b,
   },
   jupiter: {
@@ -134,18 +207,28 @@ const SPHERE_MUSIC: Record<string, SphereMusicConfig> = {
     bass: { root: 'G1', fifth: 'D2', rhythm: '1m', type: 'sine', vol: -14 },
     pad: { waveform: 'fatsawtooth', spread: 16, vol: -12, filterLow: 200, filterHigh: 2000, lfoRate: 0.04, chorusWet: 0.35 },
     melody: [
-      { time:'4:0:0',note:'G4',dur:'4n',vel:0.09},{ time:'5:0:0',note:'B4',dur:'4n',vel:0.08},
-      { time:'6:0:0',note:'D5',dur:'2n',vel:0.10},{ time:'7:2:0',note:'F5',dur:'4n',vel:0.09},
-      { time:'8:0:0',note:'G5',dur:'2n',vel:0.12},{ time:'9:2:0',note:'A5',dur:'4n',vel:0.10},
-      { time:'10:0:0',note:'G5',dur:'4n',vel:0.08},{ time:'11:0:0',note:'F5',dur:'4n',vel:0.09},
-      { time:'12:0:0',note:'D5',dur:'2n',vel:0.10},{ time:'14:0:0',note:'B4',dur:'4n',vel:0.07},
-      { time:'15:0:0',note:'G4',dur:'2n',vel:0.09},{ time:'17:0:0',note:'D5',dur:'2n',vel:0.08},
-      { time:'19:0:0',note:'G5',dur:'4n',vel:0.10},{ time:'20:0:0',note:'A5',dur:'4n',vel:0.09},
-      { time:'21:0:0',note:'G5',dur:'2n',vel:0.11},{ time:'23:0:0',note:'F5',dur:'2n',vel:0.08},
-      { time:'25:0:0',note:'D5',dur:'2n',vel:0.09},{ time:'27:0:0',note:'B4',dur:'2n',vel:0.07},
-      { time:'29:0:0',note:'G4',dur:'2n.',vel:0.10},
+      // Arrival bars 0-7: regal pad intro with broad fourth hint
+      { time:'0:0:0',note:'G3',dur:'2n',vel:0.05},{ time:'2:0:0',note:'D4',dur:'2n',vel:0.05},
+      { time:'4:0:0',note:'G4',dur:'2n',vel:0.06},
+      // Answer bars 8-15: broad fourths with dotted rhythm feel
+      { time:'8:0:0',note:'G4',dur:'4n',vel:0.09},{ time:'8:2:0',note:'C5',dur:'4n',vel:0.08},
+      { time:'9:0:0',note:'D5',dur:'4n.',vel:0.10},{ time:'9:3:0',note:'G5',dur:'8n',vel:0.09},
+      { time:'10:0:0',note:'F5',dur:'4n.',vel:0.12},{ time:'10:3:0',note:'G5',dur:'8n',vel:0.10},
+      { time:'11:0:0',note:'A5',dur:'4n',vel:0.10},{ time:'11:2:0',note:'G5',dur:'4n',vel:0.08},
+      { time:'12:0:0',note:'F5',dur:'4n.',vel:0.09},{ time:'12:3:0',note:'D5',dur:'8n',vel:0.07},
+      { time:'13:0:0',note:'B4',dur:'2n',vel:0.07},{ time:'14:2:0',note:'G4',dur:'2n',vel:0.09},
+      // Deepening bars 16-23: grand countermelody with choir pad swell
+      { time:'16:0:0',note:'D5',dur:'2n',vel:0.08},{ time:'18:0:0',note:'G5',dur:'4n',vel:0.10},
+      { time:'18:2:0',note:'A5',dur:'4n',vel:0.09},{ time:'19:0:0',note:'G5',dur:'2n',vel:0.11},
+      { time:'20:2:0',note:'F5',dur:'2n',vel:0.08},{ time:'22:0:0',note:'D5',dur:'2n',vel:0.09},
+      { time:'23:2:0',note:'B4',dur:'2n',vel:0.07},
+      // Return bars 24-31: majestic final phrase
+      { time:'24:0:0',note:'G4',dur:'4n',vel:0.08},{ time:'24:2:0',note:'B4',dur:'4n',vel:0.08},
+      { time:'25:0:0',note:'D5',dur:'2n',vel:0.10},{ time:'26:2:0',note:'F5',dur:'4n',vel:0.09},
+      { time:'27:0:0',note:'G5',dur:'2n',vel:0.12},{ time:'28:2:0',note:'F5',dur:'4n',vel:0.08},
+      { time:'29:0:0',note:'D5',dur:'2n',vel:0.09},{ time:'30:2:0',note:'G4',dur:'2n.',vel:0.10},
     ],
-    leadType: 'sawtooth', texture: 'timpani', character: 'Expansive, grandiose, overwhelming',
+    leadType: 'sawtooth', texture: 'timpani', character: 'Grandiose, regal, ceremonial — broad fourths, dotted fanfare, deep choir pad and timpani',
     getBPM: (b) => b,
   },
   saturn: {
@@ -154,15 +237,21 @@ const SPHERE_MUSIC: Record<string, SphereMusicConfig> = {
     bass: { root: 'B0', rhythm: '2n', type: 'square', vol: -18 },
     pad: { waveform: 'square', spread: 3, vol: -16, filterLow: 80, filterHigh: 400, lfoRate: 0.03, chorusWet: 0 },
     melody: [
-      { time:'4:0:0',note:'B4',dur:'2n',vel:0.08},{ time:'6:0:0',note:'Bb4',dur:'2n',vel:0.07},
-      { time:'8:0:0',note:'A4',dur:'2n',vel:0.07},{ time:'10:0:0',note:'Ab4',dur:'2n',vel:0.06},
-      { time:'12:0:0',note:'G4',dur:'2n',vel:0.08},{ time:'14:0:0',note:'F#4',dur:'2n',vel:0.07},
-      { time:'16:0:0',note:'F4',dur:'2n',vel:0.06},{ time:'18:0:0',note:'E4',dur:'2n',vel:0.07},
-      { time:'20:0:0',note:'Eb4',dur:'2n',vel:0.06},{ time:'22:0:0',note:'D4',dur:'2n',vel:0.07},
-      { time:'24:0:0',note:'C#4',dur:'2n',vel:0.05},{ time:'26:0:0',note:'C4',dur:'2n',vel:0.06},
-      { time:'28:0:0',note:'B3',dur:'4n',vel:0.07},
+      // Arrival bars 0-7: dark drone with tritone anchor
+      { time:'0:0:0',note:'B3',dur:'2n',vel:0.05},{ time:'2:0:0',note:'F4',dur:'2n',vel:0.05},
+      { time:'4:0:0',note:'B4',dur:'2n',vel:0.06},
+      // Answer bars 8-15: slow tritone descent
+      { time:'8:0:0',note:'B4',dur:'2n',vel:0.08},{ time:'10:0:0',note:'Bb4',dur:'2n',vel:0.07},
+      { time:'12:0:0',note:'A4',dur:'2n',vel:0.07},{ time:'14:0:0',note:'Ab4',dur:'2n',vel:0.06},
+      { time:'16:0:0',note:'G4',dur:'2n',vel:0.08},{ time:'18:0:0',note:'F#4',dur:'2n',vel:0.07},
+      // Deepening bars 16-23: resolving tension through tritone
+      { time:'20:0:0',note:'F4',dur:'2n',vel:0.06},{ time:'22:0:0',note:'E4',dur:'2n',vel:0.07},
+      { time:'24:0:0',note:'Eb4',dur:'2n',vel:0.06},{ time:'26:0:0',note:'D4',dur:'2n',vel:0.07},
+      // Return bars 24-31: cold final rest
+      { time:'28:0:0',note:'C#4',dur:'2n',vel:0.05},{ time:'30:0:0',note:'C4',dur:'2n',vel:0.06},
+      { time:'31:2:0',note:'B3',dur:'4n',vel:0.07},
     ],
-    leadType: 'fm', texture: 'clock', character: 'Heavy, temporal, final',
+    leadType: 'fm', texture: 'clock', character: 'Heavy, temporal, final — slow tritone descent, clock-pulse tick, dark low strings',
     getBPM: (b) => b,
   },
   ogdoad: {
@@ -191,13 +280,8 @@ export class AudioSystem {
   private sfxVolume = 0.7;
 
   // Shared signal chain
-  private master!: Tone.Gain;
-  private musicGain!: Tone.Gain;
-  private musicStateGain!: Tone.Gain;
-  private musicContentGain!: Tone.Gain;
-  private sfxGain!: Tone.Gain;
+  private mix!: MixGraph;
   private compressor!: Tone.Compressor;
-  private limiter!: Tone.Limiter;
   private reverb!: Tone.Reverb;
   private chamberReverb!: Tone.Reverb;
   private pingPongDelay!: Tone.PingPongDelay;
@@ -238,28 +322,32 @@ export class AudioSystem {
     try {
       void Tone.start();
 
-      this.limiter = new Tone.Limiter(-1).toDestination();
+      // Create the basic mix bus graph
+      this.mix = createMixGraph(this.musicVolume, this.sfxVolume);
+
+      // Meter for diagnostics — after limiter
       this.meter = new Tone.Meter({ normalRange: false });
-      this.limiter.connect(this.meter);
+      this.mix.limiter.connect(this.meter);
+
+      // Insert compressor between master and limiter
+      // (mixGraph connects master → limiter directly)
+      this.mix.master.disconnect();
       this.compressor = new Tone.Compressor({
         threshold: -14,
         ratio: 2.5,
         attack: 0.01,
         release: 0.18,
-      }).connect(this.limiter);
-      this.master = new Tone.Gain(0.82).connect(this.compressor);
-      this.musicGain = new Tone.Gain(this.musicVolume).connect(this.master);
-      this.musicStateGain = new Tone.Gain(1).connect(this.musicGain);
-      this.musicContentGain = new Tone.Gain(1).connect(this.musicStateGain);
-      this.sfxGain = new Tone.Gain(this.sfxVolume).connect(this.master);
+      }).connect(this.mix.limiter);
+      this.mix.master.connect(this.compressor);
+      this.mix.master.gain.value = 0.82;
 
       // Cathedral reverb, sized for mobile WebAudio headroom.
       this.reverb = new Tone.Reverb({ decay: 4.8, preDelay: 0.08, wet: 1 });
-      this.reverb.connect(this.musicContentGain);
+      this.reverb.connect(this.mix.musicContentGain);
 
       // Chamber reverb, tighter and cheaper for contrast and texture sends.
       this.chamberReverb = new Tone.Reverb({ decay: 2.2, preDelay: 0.035, wet: 1 });
-      this.chamberReverb.connect(this.musicContentGain);
+      this.chamberReverb.connect(this.mix.musicContentGain);
 
       // Ping-pong delay for stereo width — feeds the cathedral verb.
       this.pingPongDelay = new Tone.PingPongDelay({ delayTime: '4n.', feedback: 0.18, wet: 0.28 });
@@ -283,29 +371,29 @@ export class AudioSystem {
 
   setMusicVolume(v: number): void {
     this.musicVolume = Math.max(0, Math.min(1, v));
-    if (this.musicGain) this.musicGain.gain.value = this.musicVolume;
+    if (this.mix?.musicGain) this.mix.musicGain.gain.value = this.musicVolume;
   }
   setSfxVolume(v: number): void {
     this.sfxVolume = Math.max(0, Math.min(1, v));
-    if (this.sfxGain) this.sfxGain.gain.value = this.sfxVolume;
+    if (this.mix?.sfxGain) this.mix.sfxGain.gain.value = this.sfxVolume;
   }
   getMusicVolume(): number { return this.musicVolume; }
   getSfxVolume(): number { return this.sfxVolume; }
 
   duckMusic(): void {
-    if (!this.musicStateGain || this.ducked) return;
+    if (!this.mix?.musicStateGain || this.ducked) return;
     this.ducked = true;
-    this.musicStateGain.gain.linearRampToValueAtTime(0.3, Tone.now() + 0.3);
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(0.3, Tone.now() + 0.3);
   }
   unduckMusic(): void {
-    if (!this.musicStateGain || !this.ducked) return;
+    if (!this.mix?.musicStateGain || !this.ducked) return;
     this.ducked = false;
-    this.musicStateGain.gain.linearRampToValueAtTime(1, Tone.now() + 0.5);
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(1, Tone.now() + 0.5);
   }
 
   crossfadeOut(duration = 0.5): void {
-    if (!this.musicStateGain) return;
-    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + duration);
+    if (!this.mix?.musicStateGain) return;
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + duration);
   }
 
   /** Ramp musicGain back up after a stop-fade.
@@ -321,16 +409,16 @@ export class AudioSystem {
    *  because it defines a trajectory from the previous ramp's endpoint
    *  (0.001 at stop.now+0.4) to the target volume at the later time. */
   private restoreMusicGain(duration = 0.5): void {
-    if (!this.musicStateGain) return;
+    if (!this.mix?.musicStateGain) return;
     const now = Tone.now();
-    this.musicStateGain.gain.linearRampToValueAtTime(1, now + 0.45 + duration);
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(1, now + 0.45 + duration);
   }
 
   private resetMusicContentGain(value = 1): void {
-    if (!this.musicContentGain) return;
+    if (!this.mix?.musicContentGain) return;
     const now = Tone.now();
-    this.musicContentGain.gain.cancelScheduledValues(now);
-    this.musicContentGain.gain.setValueAtTime(value, now);
+    this.mix.musicContentGain.gain.cancelScheduledValues(now);
+    this.mix.musicContentGain.gain.setValueAtTime(value, now);
   }
 
   // ── Menu Hum ─────────────────────────────────────────────────────
@@ -364,11 +452,11 @@ export class AudioSystem {
 
     // ── Per-channel gain nodes for structural arc ──────────────────
     // Initial values are the Intro section (bars 0-1): drone only.
-    const padAGain = new Tone.Gain(Tone.dbToGain(-26)).connect(this.musicContentGain);
-    const padBGain = new Tone.Gain(Tone.dbToGain(-27)).connect(this.musicContentGain);
-    const padCGain = new Tone.Gain(Tone.dbToGain(-32)).connect(this.musicContentGain);
-    const leadGain = new Tone.Gain(Tone.dbToGain(-40)).connect(this.musicContentGain);
-    const bellGain = new Tone.Gain(Tone.dbToGain(-30)).connect(this.musicContentGain);
+    const padAGain = new Tone.Gain(Tone.dbToGain(-26)).connect(this.mix.musicContentGain);
+    const padBGain = new Tone.Gain(Tone.dbToGain(-27)).connect(this.mix.musicContentGain);
+    const padCGain = new Tone.Gain(Tone.dbToGain(-32)).connect(this.mix.musicContentGain);
+    const leadGain = new Tone.Gain(Tone.dbToGain(-40)).connect(this.mix.musicContentGain);
+    const bellGain = new Tone.Gain(Tone.dbToGain(-30)).connect(this.mix.musicContentGain);
     const hbGain = new Tone.Gain(0).connect(this.reverb);
     this.menuDisposables.push(padAGain, padBGain, padCGain, leadGain, bellGain, hbGain);
 
@@ -378,7 +466,7 @@ export class AudioSystem {
       envelope: { attack: 3.0, decay: 0.5, sustain: 0.8, release: 5.0 },
     });
     drone1.volume.value = -16;
-    drone1.connect(this.musicContentGain);
+    drone1.connect(this.mix.musicContentGain);
     drone1.triggerAttack('C2');
     this.menuDisposables.push(drone1);
 
@@ -387,7 +475,7 @@ export class AudioSystem {
       envelope: { attack: 2.5, decay: 0.4, sustain: 0.7, release: 4.0 },
     });
     drone2.volume.value = -20;
-    drone2.connect(this.musicContentGain);
+    drone2.connect(this.mix.musicContentGain);
     drone2.triggerAttack('G2');
     this.menuDisposables.push(drone2);
 
@@ -396,7 +484,7 @@ export class AudioSystem {
       envelope: { attack: 2.0, decay: 0.3, sustain: 0.6, release: 3.0 },
     });
     drone3.volume.value = -22;
-    drone3.connect(this.musicContentGain);
+    drone3.connect(this.mix.musicContentGain);
     drone3.triggerAttack('C3');
     this.menuDisposables.push(drone3);
 
@@ -596,7 +684,7 @@ export class AudioSystem {
     const noiseGain = new Tone.Gain(0.010);
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(this.musicContentGain);
+    noiseGain.connect(this.mix.musicContentGain);
     noise.start();
     this.menuDisposables.push(noise, noiseFilter, noiseLfo, noiseGain);
 
@@ -612,7 +700,7 @@ export class AudioSystem {
     ];
     const arcPart = new Tone.Part((time, s: Record<string, number>) => {
       const ramp = barSec * 1.5;
-      this.musicContentGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.master), time + ramp);
+      this.mix.musicContentGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.master), time + ramp);
       padAGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.padA), time + ramp);
       padBGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.padB), time + ramp);
       padCGain.gain.linearRampToValueAtTime(Tone.dbToGain(s.padC), time + ramp);
@@ -626,7 +714,7 @@ export class AudioSystem {
     this.menuDisposables.push(arcPart as unknown as Disposable);
 
     // Ramp into Intro level so transitions are smooth.
-    this.musicContentGain.gain.linearRampToValueAtTime(Tone.dbToGain(-18), Tone.now() + 0.3);
+    this.mix.musicContentGain.gain.linearRampToValueAtTime(Tone.dbToGain(-18), Tone.now() + 0.3);
 
     Tone.Transport.start();
   }
@@ -640,7 +728,7 @@ export class AudioSystem {
 
     // Crossfade: ramp musicGain down before disposing so the next
     // music state can ramp it back up over the same bus.
-    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
 
     const clean = () => {
       if (this.transportGeneration === generation) {
@@ -718,7 +806,7 @@ export class AudioSystem {
     lead.volume.value = -20;
     const leadSend = new Tone.Gain(0.16);
     const leadVerbSend = new Tone.Gain(0.18);
-    lead.connect(this.musicContentGain);
+    lead.connect(this.mix.musicContentGain);
     lead.connect(leadVerbSend);
     leadVerbSend.connect(this.reverb);
     lead.connect(leadSend);
@@ -745,7 +833,7 @@ export class AudioSystem {
     padChorus.start();
     pad.connect(padChorus);
     padChorus.connect(padFilter);
-    padFilter.connect(this.musicContentGain);
+    padFilter.connect(this.mix.musicContentGain);
     const padReverbSend = new Tone.Gain(0.22);
     padFilter.connect(padReverbSend);
     padReverbSend.connect(this.reverb);
@@ -771,7 +859,7 @@ export class AudioSystem {
       envelope: { attack: 0.02, decay: 0.4, sustain: 0.5, release: 1.0 },
     });
     bassSynth.volume.value = cfg.bass.vol - 2;
-    bassSynth.connect(this.musicContentGain);
+    bassSynth.connect(this.mix.musicContentGain);
     this.ambienceDisposables.push(bassSynth);
 
     let bassOnRoot = true;
@@ -850,14 +938,20 @@ export class AudioSystem {
     ornamentPart.start(0);
     this.ambienceDisposables.push(ornament, ornamentPart as unknown as Disposable);
 
+    // Four-section 32-bar arc: arrival → answer → deepening → return
     let sectionCycle = 0;
     const sectionLoop = new Tone.Loop((time) => {
       const section = sectionCycle % 4;
-      lead.volume.linearRampToValueAtTime([-20.5, -19.5, -18.2, -21.2][section], time + 0.4);
-      counter.volume.linearRampToValueAtTime([-29, -27, -25.5, -28][section], time + 0.6);
-      padReverbSend.gain.linearRampToValueAtTime([0.18, 0.22, 0.28, 0.16][section], time + 0.8);
-      leadSend.gain.linearRampToValueAtTime([0.12, 0.16, 0.24, 0.10][section], time + 0.6);
-      bassSynth.volume.linearRampToValueAtTime([cfg.bass.vol - 1, cfg.bass.vol, cfg.bass.vol + 1, cfg.bass.vol - 2][section], time + 0.35);
+      // Arrival (0): sparse pad + bass, motif hinted quietly
+      // Answer  (1): motif enters with presence, delay adds depth
+      // Deepening (2): countermelody + ornament active, pad swells
+      // Return  (3): thin back to pad, final motif tag fades
+      lead.volume.linearRampToValueAtTime([-21.5, -19.5, -18.0, -22.0][section], time + 0.4);
+      counter.volume.linearRampToValueAtTime([-30, -27, -24.5, -29][section], time + 0.6);
+      padReverbSend.gain.linearRampToValueAtTime([0.16, 0.22, 0.30, 0.14][section], time + 0.8);
+      leadSend.gain.linearRampToValueAtTime([0.10, 0.16, 0.26, 0.08][section], time + 0.6);
+      bassSynth.volume.linearRampToValueAtTime([cfg.bass.vol - 2, cfg.bass.vol, cfg.bass.vol + 2, cfg.bass.vol - 3][section], time + 0.35);
+      this.mix.musicContentGain.gain.linearRampToValueAtTime([0.82, 0.92, 1.0, 0.78][section], time + 0.6);
       sectionCycle++;
     }, `${Math.max(4, cfg.loopBars / 4)}m`).start(0);
     this.ambienceDisposables.push(sectionLoop as unknown as Disposable);
@@ -873,7 +967,7 @@ export class AudioSystem {
         const surfGain = new Tone.Gain(0.007);
         surfNoise.connect(surfFilter);
         surfFilter.connect(surfGain);
-        surfGain.connect(this.musicContentGain);
+        surfGain.connect(this.mix.musicContentGain);
         surfNoise.start();
         this.ambienceDisposables.push(surfNoise, surfFilter, surfLfo, surfGain);
         break;
@@ -907,7 +1001,7 @@ export class AudioSystem {
         const marchEnv = new Tone.Gain(0);
         marchNoise.connect(marchFilter);
         marchFilter.connect(marchEnv);
-        marchEnv.connect(this.musicContentGain);
+        marchEnv.connect(this.mix.musicContentGain);
         marchNoise.start();
         const marchLoop = new Tone.Loop((time) => {
           marchEnv.gain.setValueAtTime(0.018, time);
@@ -922,7 +1016,7 @@ export class AudioSystem {
         const drumEnv = new Tone.Gain(0);
         drumNoise.connect(drumFilter);
         drumFilter.connect(drumEnv);
-        drumEnv.connect(this.musicContentGain);
+        drumEnv.connect(this.mix.musicContentGain);
         drumNoise.start();
         // Aggressive 8th-note pattern with accents
         const drumLoop = new Tone.Loop((time) => {
@@ -977,7 +1071,7 @@ export class AudioSystem {
     }
 
     // Crossfade in
-    this.musicStateGain.gain.linearRampToValueAtTime(1, Tone.now() + 0.6);
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(1, Tone.now() + 0.6);
     Tone.Transport.start();
   }
 
@@ -987,7 +1081,7 @@ export class AudioSystem {
     const generation = this.transportGeneration;
     const disposables = this.ambienceDisposables;
     this.ambienceDisposables = [];
-    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.4);
 
     const clean = () => {
       if (this.transportGeneration === generation) {
@@ -1010,7 +1104,7 @@ export class AudioSystem {
     const now = Tone.now();
     const d: Disposable[] = [];
     const dur = 28; // seconds for the arc
-    const cinematicGain = new Tone.Gain(0.78).connect(this.musicContentGain);
+    const cinematicGain = new Tone.Gain(0.78).connect(this.mix.musicContentGain);
     const cinematicVerbSend = new Tone.Gain(0.62).connect(this.reverb);
     d.push(cinematicGain, cinematicVerbSend);
 
@@ -1194,7 +1288,7 @@ export class AudioSystem {
       envelope: { attack: 0.005, decay: 0.3, sustain: 0, release: 0.15 },
     });
     chime1.volume.value = -10;
-    chime1.connect(this.sfxGain);
+    chime1.connect(this.mix.sfxGain);
     chime1.triggerAttackRelease('A5', '32n', now);
 
     const chime2 = new Tone.Synth({
@@ -1202,7 +1296,7 @@ export class AudioSystem {
       envelope: { attack: 0.005, decay: 0.25, sustain: 0, release: 0.1 },
     });
     chime2.volume.value = -14;
-    chime2.connect(this.sfxGain);
+    chime2.connect(this.mix.sfxGain);
     chime2.triggerAttackRelease('E6', '32n', now + 0.03);
 
     setTimeout(() => { chime1.dispose(); chime2.dispose(); }, 600);
@@ -1244,7 +1338,7 @@ export class AudioSystem {
     bossChorus.start();
     pad.connect(bossChorus);
     bossChorus.connect(padFilter);
-    padFilter.connect(this.musicContentGain);
+    padFilter.connect(this.mix.musicContentGain);
     this.bossMusicDisposables.push(pad, bossChorus, padFilter, padLfo);
 
     // Chord loop
@@ -1265,7 +1359,7 @@ export class AudioSystem {
       envelope: { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.8 },
     });
     bassSynth.volume.value = cfg.bass.vol;
-    bassSynth.connect(this.musicContentGain);
+    bassSynth.connect(this.mix.musicContentGain);
     this.bossMusicDisposables.push(bassSynth);
 
     let bassOnRoot = true;
@@ -1315,7 +1409,7 @@ export class AudioSystem {
     const kickN = new Tone.Noise('brown');
     const kickF = new Tone.Filter({ frequency: 140, type: 'lowpass', rolloff: -24 });
     const kickG = new Tone.Gain(0);
-    kickN.connect(kickF); kickF.connect(kickG); kickG.connect(this.musicContentGain);
+    kickN.connect(kickF); kickF.connect(kickG); kickG.connect(this.mix.musicContentGain);
     kickN.start();
     const kickLoop = new Tone.Loop((time) => {
         kickG.gain.setValueAtTime(0.024, time);
@@ -1333,7 +1427,7 @@ export class AudioSystem {
     const generation = this.transportGeneration;
     const disposables = this.bossMusicDisposables;
     this.bossMusicDisposables = [];
-    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.3);
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.3);
 
     const clean = () => {
       if (this.transportGeneration === generation) {
@@ -1357,35 +1451,55 @@ export class AudioSystem {
     const now = Tone.now();
 
     if (phase >= 2 && previousPhase < 2) {
-      // Intensify — boost music gain, faster LFO
-      this.musicContentGain.gain.linearRampToValueAtTime(0.95, now + 0.3);
-      // Add snare layer on backbeats
+      // Phase 2: add percussion on backbeats + rhythmic ostinato
+      this.mix.musicContentGain.gain.linearRampToValueAtTime(0.92, now + 0.3);
+      // Snare on backbeats
       const snareN = new Tone.Noise('white');
       const snareF = new Tone.Filter({ frequency: 800, type: 'bandpass', rolloff: -24, Q: 1.5 });
       const snareG = new Tone.Gain(0);
-      snareN.connect(snareF); snareF.connect(snareG); snareG.connect(this.musicContentGain);
+      snareN.connect(snareF); snareF.connect(snareG); snareG.connect(this.mix.musicContentGain);
       snareN.start();
       const snareLoop = new Tone.Loop((time) => {
-        snareG.gain.setValueAtTime(0.015, time);
+        snareG.gain.setValueAtTime(0.018, time);
         snareG.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
       }, '2n').start(Tone.Time('4n').toSeconds());
       this.bossMusicDisposables.push(snareN, snareF, snareG, snareLoop as unknown as Disposable);
+      // Rhythmic ostinato — fast arpeggiated 8th-note pattern
+      const ostinato = new Tone.Synth({
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.005, decay: 0.12, sustain: 0, release: 0.05 },
+      });
+      ostinato.volume.value = -24;
+      ostinato.connect(this.chamberReverb);
+      const ostNotes = ['C5', 'E5', 'G5', 'C6', 'G5', 'E5'];
+      let ostStep = 0;
+      const ostLoop = new Tone.Loop((time) => {
+        ostinato.triggerAttackRelease(ostNotes[ostStep % ostNotes.length], '16n', time, 0.018);
+        ostStep++;
+      }, '8n').start(0);
+      this.bossMusicDisposables.push(ostinato, ostLoop as unknown as Disposable);
     }
 
     if (phase >= 3 && previousPhase < 3) {
-      // Maximum intensity — boost gain further
-      this.musicContentGain.gain.linearRampToValueAtTime(1.08, now + 0.3);
-      // Double-time percussion feel
-      const hatN = new Tone.Noise('white');
-      const hatF = new Tone.Filter({ frequency: 3000, type: 'highpass', rolloff: -12 });
-      const hatG = new Tone.Gain(0);
-      hatN.connect(hatF); hatF.connect(hatG); hatG.connect(this.musicContentGain);
-      hatN.start();
-      const hatLoop = new Tone.Loop((time) => {
-        hatG.gain.setValueAtTime(0.009, time);
-        hatG.gain.exponentialRampToValueAtTime(0.001, time + 0.02);
-      }, '8n').start(0);
-      this.bossMusicDisposables.push(hatN, hatF, hatG, hatLoop as unknown as Disposable);
+      // Phase 3: add high countermelody layer, reduce gain 1-2dB to avoid clipping
+      this.mix.musicContentGain.gain.linearRampToValueAtTime(0.76, now + 0.3); // ~-2.4dB reduction
+      // Bright countermelody — sine synth playing chord tones an octave up
+      const highLayer = new Tone.Synth({
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.4, decay: 0.3, sustain: 0.2, release: 1.2 },
+      });
+      highLayer.volume.value = -18;
+      const highReverb = new Tone.Gain(0.25);
+      highLayer.connect(highReverb);
+      highReverb.connect(this.reverb);
+      highLayer.connect(this.mix.musicContentGain);
+      const highNotes = ['F5', 'A5', 'C6', 'E6', 'C6', 'A5', 'G5', 'E6'];
+      let highStep = 0;
+      const highLoop = new Tone.Loop((time) => {
+        highLayer.triggerAttackRelease(highNotes[highStep % highNotes.length], '4n', time, 0.022);
+        highStep++;
+      }, '2n').start(0);
+      this.bossMusicDisposables.push(highLayer, highReverb, highLoop as unknown as Disposable);
     }
   }
 
@@ -1443,7 +1557,7 @@ export class AudioSystem {
       envelope: { attack: 3.0, decay: 0.5, sustain: 0.6, release: 5.0 },
     });
     sub.volume.value = -26;
-    sub.connect(this.musicContentGain);
+    sub.connect(this.mix.musicContentGain);
     sub.triggerAttack('A1');
     this.screenDisposables.push(sub);
 
@@ -1455,7 +1569,7 @@ export class AudioSystem {
     const generation = this.transportGeneration;
     const disposables = this.screenDisposables;
     this.screenDisposables = [];
-    this.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.35);
+    this.mix.musicStateGain.gain.linearRampToValueAtTime(0.001, Tone.now() + 0.35);
     setTimeout(() => {
       for (const d of disposables) {
         try { d.dispose(); } catch { /* */ }
@@ -1618,7 +1732,7 @@ export class AudioSystem {
       envelope: { attack: 2.0, decay: 0.5, sustain: 0.5, release: 3.0 },
     });
     dr1.volume.value = -28;
-    dr1.connect(this.musicContentGain);
+    dr1.connect(this.mix.musicContentGain);
     dr1.triggerAttack('G2');
     this.screenDisposables.push(dr1);
 
@@ -1654,7 +1768,7 @@ export class AudioSystem {
         envelope: { attack, decay, sustain: 0.01, release: decay * 0.3 },
       });
       synth.volume.value = Tone.gainToDb(peak);
-      synth.connect(this.sfxGain);
+      synth.connect(this.mix.sfxGain);
       synth.triggerAttackRelease(hzToNote(freq), attack + decay, now);
       setTimeout(() => synth.dispose(), (attack + decay + 0.2) * 1000);
     };
@@ -1674,7 +1788,7 @@ export class AudioSystem {
           modulationEnvelope: { attack: 0.005, decay: 0.2, sustain: 0, release: 0.1 },
         });
         s.volume.value = -12;
-        s.connect(this.sfxGain);
+        s.connect(this.mix.sfxGain);
         s.triggerAttackRelease('F5', '8n', now);
         setTimeout(() => s.dispose(), 600);
         break;
@@ -1731,7 +1845,7 @@ export class AudioSystem {
           envelope: { attack: 0.05, decay: 0.8, sustain: 0, release: 0.3 },
         });
         d.volume.value = -10;
-        d.connect(this.sfxGain);
+        d.connect(this.mix.sfxGain);
         d.frequency.setValueAtTime(220, now);
         d.frequency.exponentialRampToValueAtTime(55, now + 0.8);
         d.triggerAttackRelease('A3', '4n', now);
@@ -1750,7 +1864,7 @@ export class AudioSystem {
           modulationEnvelope: { attack: 0.01, decay: 0.8, sustain: 0, release: 0.3 },
         });
         bd.volume.value = -8;
-        bd.connect(this.sfxGain);
+        bd.connect(this.mix.sfxGain);
         bd.frequency.setValueAtTime(600, now);
         bd.frequency.exponentialRampToValueAtTime(80, now + 1.2);
         bd.triggerAttackRelease('C5', '2n', now);
@@ -1769,7 +1883,7 @@ export class AudioSystem {
           envelope: { attack: 0.005, decay: 0.12, sustain: 0, release: 0.05 },
         });
         m.volume.value = -18;
-        m.connect(this.sfxGain);
+        m.connect(this.mix.sfxGain);
         m.triggerAttackRelease('E5', '32n', now);
         setTimeout(() => m.dispose(), 200);
         break;
@@ -1796,6 +1910,13 @@ export class AudioSystem {
 
     Tone.Transport.cancel();
     Tone.Transport.stop();
+  }
+
+  dispose(): void {
+    this.stopAll();
+    this.mix?.dispose();
+    [this.compressor, this.meter, this.reverb, this.chamberReverb,
+     this.pingPongDelay, this.darkDelay, this.darkFilter].forEach(n => n?.dispose());
   }
 
   // ── Diagnostics ───────────────────────────────────────────────────
