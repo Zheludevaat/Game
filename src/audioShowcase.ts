@@ -193,6 +193,19 @@ style.textContent = `
   .cue strong { display: block; color: var(--ink); font-size: 15px; line-height: 1.15; }
   .cue span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.25; }
   .cue.active { border-color: var(--teal); background: rgba(108, 246, 229, 0.13); }
+  #audio-diagnostics {
+    margin-top: 16px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+    white-space: pre;
+    overflow-x: auto;
+  }
   @media (max-width: 760px) {
     .masthead { align-items: flex-start; flex-direction: column; }
     .groups { grid-template-columns: 1fr; }
@@ -311,3 +324,14 @@ musicSlider.addEventListener('input', () => audio.setMusicVolume(musicSlider.val
 sfxSlider.addEventListener('input', () => audio.setSfxVolume(sfxSlider.valueAsNumber / 100));
 
 renderButtons();
+
+// ── Diagnostics panel ──────────────────────────────────────────────
+
+const diagnosticsEl = document.createElement('pre');
+diagnosticsEl.id = 'audio-diagnostics';
+root.appendChild(diagnosticsEl);
+
+setInterval(() => {
+  const d = audio.getDiagnostics();
+  diagnosticsEl.textContent = JSON.stringify(d, null, 2);
+}, 250);
