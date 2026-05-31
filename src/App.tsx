@@ -18,13 +18,16 @@ import { GameOverScreen } from './components/GameOver';
 import { MetaProgression } from './components/MetaProgression';
 import { TouchControls } from './components/TouchControls';
 import { RotateDeviceOverlay } from './components/RotateDeviceOverlay';
-import { ArchetypeId, MetaState, SettingsState } from './game/GameTypes';
+import { ActiveDialogueState, ArchetypeId, MetaState, SettingsState } from './game/GameTypes';
 import { MapOverlay } from './components/MapOverlay';
 import { CodexScreen } from './components/CodexScreen';
 import { CinematicsScreen } from './components/CinematicsScreen';
 import { Prologue } from './components/Prologue';
 import { Epilogue } from './components/Epilogue';
 import { CinematicShort } from './components/CinematicShort';
+import { DialoguePanel } from './components/DialoguePanel';
+import { getDialogueView } from './game/systems/dialogue';
+import { NPC_BY_ID } from './game/data/npcs';
 import { CODEX } from './game/data/codex';
 import { TABULA_CINEMATIC } from './game/data/cinematicTabula';
 import { NEW_GAME_CINEMATIC } from './game/data/cinematicNewGame';
@@ -65,6 +68,8 @@ export function App(): JSX.Element {
   const [pendingBossIntro, setPendingBossIntro] = useState<string | null>(null);
   // Archetype + run options stashed when a new-run cinematic is queued.
   const [pendingRunStart, setPendingRunStart] = useState<{ id: ArchetypeId; floor?: number; runSeed?: number } | null>(null);
+  // Active NPC dialogue state, if any.
+  const [dialogue, setDialogue] = useState<ActiveDialogueState | null>(null);
 
   // --- Loading screen timer ---
   // First-load goes through the Tabula opening film instead of straight to
@@ -274,6 +279,8 @@ export function App(): JSX.Element {
           setPendingBossIntro(sphereId);
           go('bossIntro');
         },
+        onDialogueOpen: (d) => setDialogue(d),
+        onDialogueClose: () => setDialogue(null),
       });
       engineRef.current = engine;
       audio.unlock();
@@ -406,6 +413,25 @@ export function App(): JSX.Element {
         (hud.inputMethod === 'touch' || (isTouchDevice && hud.inputMethod !== 'controller')) && (
         <TouchControls input={inputRef.current} />
       )}
+
+      {screen === 'game' && dialogue && (() => {
+        const npcDef = NPC_BY_ID[dialogue.npcId];
+        if (!npcDef || !npcDef.dialogue) return null;
+        const view = getDialogueView(npcDef, dialogue.lineIndex);
+        if (!view) return null;
+        return (
+          <DialoguePanel
+            speaker={view.speaker}
+            text={view.text}
+            onAdvance={() => engineRef.current?.advanceDialogue()}
+            choices={view.choices.map((c, i) => ({
+              label: c.label,
+              cost: c.cost,
+              onChoose: () => engineRef.current?.chooseDialogueOption(i),
+            }))}
+          />
+        );
+      })()}
 
       {screen === 'pause' && (
         <PauseMenu
@@ -562,7 +588,7 @@ export function App(): JSX.Element {
         );
       })()}
 
-      {isPortrait && <RotateDeviceOverlay />}
+      {isPortrait && screen === 'game' && <RotateDeviceOverlay />}
     </>
   );
 }

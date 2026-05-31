@@ -214,3 +214,9 @@ export interface RunStats {
   weaponsFound: WeaponId[];
   spellsFound: SpellId[];
 }
+
+export interface ActiveDialogueState {
+  npcId: string;
+  lineIndex: number;
+  choicesVisible: boolean;
+}

@@ -1,8 +1,14 @@
+interface ChoiceDisplay {
+  label: string;
+  onChoose: () => void;
+  cost?: { kind: 'coins' | 'essence'; amount: number };
+}
+
 interface Props {
   speaker: string;
   text: string;
   onAdvance: () => void;
-  choices?: { label: string; onChoose: () => void }[];
+  choices?: ChoiceDisplay[];
 }
 
 export function DialoguePanel({ speaker, text, onAdvance, choices }: Props): JSX.Element {
@@ -32,7 +38,14 @@ export function DialoguePanel({ speaker, text, onAdvance, choices }: Props): JSX
                 background: 'rgba(20,12,38,0.8)', color: 'var(--gold-1)',
                 fontFamily: 'inherit', fontSize: 11, cursor: 'pointer',
                 letterSpacing: '0.12em', textTransform: 'uppercase',
-              }}>{c.label}</button>
+              }}>
+                {c.label}
+                {c.cost && (
+                  <span style={{ marginLeft: 8, opacity: 0.7, fontSize: 9 }}>
+                    ({c.cost.amount} {c.cost.kind})
+                  </span>
+                )}
+              </button>
             ))}
           </div>
         )}

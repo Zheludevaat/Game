@@ -2,7 +2,7 @@ import { PALETTE, ROOM_H, ROOM_W, TILE, VIRTUAL_H, VIRTUAL_W } from './constants
 import { RNG, hashSeed } from './math/rng';
 import { clamp, dist, lerp, norm } from './math/vec2';
 import {
-  ArchetypeDef, Floor, MetaState, RelicId, Room, RoomDoorState, RoomType, ShrineKind,
+  ActiveDialogueState, ArchetypeDef, Floor, MetaState, RelicId, Room, RoomDoorState, RoomType, ShrineKind,
   SpellId, WeaponId,
 } from './GameTypes';
 import { getArchetype } from './data/archetypes';
@@ -13,7 +13,7 @@ import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
 import { requiredWardenIdsBeforeOgdoad } from './progression/progressionRules';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
-import { NPCS, NPC_BY_ID, NpcDef, NpcPassive } from './data/npcs';
+import { DialogueChoice, NPCS, NPC_BY_ID, NpcDef, NpcPassive } from './data/npcs';
 import { generateFloor } from './world/DungeonGenerator';
 import { ParticleSystem } from './rendering/Particles';
 import { InputManager } from './input/InputManager';
@@ -69,6 +69,10 @@ export interface EngineCallbacks {
   /** Player entered a boss room for the first time this run. Host plays the
    * sphere's boss-intro film, then resumes the game. */
   onBossRoomEntered?: (sphereId: string) => void;
+  /** Dialogue was opened. Host should render DialoguePanel. */
+  onDialogueOpen?: (state: ActiveDialogueState) => void;
+  /** Dialogue was closed. Host should hide DialoguePanel. */
+  onDialogueClose?: () => void;
 }
 
 export interface RunSummary {
@@ -363,6 +367,8 @@ export class GameEngine {
   // Boss telegraphs — wind-up actions render their own marker for the
   // duration, then fire() once the timer elapses.
   private delayedActions: DelayedAction[] = [];
+  // Active dialogue state — non-null while the player is talking to an NPC.
+  private activeDialogue: ActiveDialogueState | null = null;
   // Death sequence: when the player dies, hold the camera on the body
   // for ~1.6s of "lamp extinguishing" before onGameOver fires. The
   // engine keeps drawing the world; only player input + damage are
@@ -1429,6 +1435,15 @@ export class GameEngine {
       const cx = ROOM_W / 2, cy = ROOM_H / 2 - 8;
       if (dist(p.pos, { x: cx, y: cy }) < 28) {
         this.beginShrine(room.shrineKind!);
+      }
+    }
+    // NPC dialogue
+    for (const npc of this.npcs) {
+      if (npc.def.dialogue && dist(p.pos, npc.pos) < 30) {
+        this.activeDialogue = { npcId: npc.def.id, lineIndex: 0, choicesVisible: false };
+        this.setPaused(true);
+        this.cbs.onDialogueOpen?.(this.activeDialogue);
+        return;
       }
     }
   }
@@ -2511,6 +2526,10 @@ export class GameEngine {
             npc.passiveAccum -= interval;
             if (npc.def.passive.kind === 'heal') {
               this.healPlayer(1);
+            } else if (npc.def.passive.kind === 'mp') {
+              this.player.mp = Math.min(this.player.maxMp, this.player.mp + 1);
+            } else if (npc.def.passive.kind === 'essence') {
+              this.player.essence += 1;
             }
           }
         }
@@ -2676,6 +2695,13 @@ export class GameEngine {
       const d = dist(p.pos, { x: ROOM_W / 2, y: ROOM_H / 2 - 8 });
       if (d < 28) prompts.push('Press Interact to commune');
     }
+    // NPC interaction prompt
+    for (const npc of this.npcs) {
+      if (npc.def.dialogue && dist(p.pos, npc.pos) < 30) {
+        prompts.push('Press Interact to speak');
+        break;
+      }
+    }
 
     const roomCells = this.floor.rooms.map((r) => ({
       gx: r.grid.x,
@@ -2735,4 +2761,77 @@ export class GameEngine {
 
   getSummary(): RunSummary { return this.summary; }
   isDead(): boolean { return this.dead; }
+
+  /** Advance to the next dialogue line. No-op if dialogue is not active. */
+  advanceDialogue(): void {
+    if (!this.activeDialogue) return;
+    this.activeDialogue.lineIndex++;
+    this.activeDialogue.choicesVisible = false;
+    this.cbs.onDialogueOpen?.(this.activeDialogue);
+  }
+
+  /** Choose a dialogue option by its index in the current NPC's choice list.
+   *  Handles cost checks, effects, line gating, and dialogue closing. */
+  chooseDialogueOption(choiceIndex: number): void {
+    if (!this.activeDialogue) return;
+    const npc = this.npcs.find((n) => n.def.id === this.activeDialogue!.npcId);
+    if (!npc) return;
+    const choices = npc.def.dialogue?.choices;
+    if (!choices || choiceIndex >= choices.length) return;
+    const choice = choices[choiceIndex];
+
+    // Cost check — silently reject if unaffordable
+    if (choice.cost) {
+      if (choice.cost.kind === 'coins' && this.player.coins < choice.cost.amount) return;
+      if (choice.cost.kind === 'essence' && this.player.essence < choice.cost.amount) return;
+      // Deduct
+      if (choice.cost.kind === 'coins') this.player.coins -= choice.cost.amount;
+      if (choice.cost.kind === 'essence') this.player.essence -= choice.cost.amount;
+    }
+
+    // Resolve effect
+    if (choice.effect) {
+      switch (choice.effect) {
+        case 'upgradeWeapon':
+          this.player.damageMul += 0.15;
+          this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, 'WEAPON UP', '#f4d27a');
+          audio.sfx('shrine');
+          break;
+        case 'revealBoss':
+          this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, 'WARDEN REVEALED', '#9b6cff');
+          audio.sfx('shrine');
+          break;
+        case 'restoreLamp':
+          this.healPlayer(30);
+          this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, 'LAMP KINDLED', '#ffe6a3');
+          audio.sfx('shrine');
+          break;
+        case 'healFull':
+          this.healPlayer(this.player.maxHp);
+          this.spawnDamageNumber(this.player.pos.x, this.player.pos.y - 18, 'FULL HEAL', '#4ade80');
+          audio.sfx('shrine');
+          break;
+      }
+    }
+
+    // Gate to another line
+    if (choice.gotoLine !== undefined) {
+      this.activeDialogue.lineIndex = choice.gotoLine;
+      this.cbs.onDialogueOpen?.(this.activeDialogue);
+      return;
+    }
+
+    // Close dialogue
+    if (choice.closesDialogue) {
+      this.closeDialogue();
+    }
+  }
+
+  /** Force-close the dialogue (e.g. when the UI signals close). Also called
+   *  via the public chooseDialogueOption path when closesDialogue is set. */
+  private closeDialogue(): void {
+    this.activeDialogue = null;
+    this.setPaused(false);
+    this.cbs.onDialogueClose?.();
+  }
 }
