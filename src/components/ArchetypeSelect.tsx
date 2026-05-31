@@ -24,43 +24,43 @@ export function ArchetypeSelect({ onSelect, onBack, lastArchetype }: Props): JSX
   }, [lastArchetype]);
 
   return (
-    <div className="menu-screen with-bg" style={{ overflow: 'auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+    <div className="menu-screen archetype-screen with-bg">
+      <div className="archetype-header">
         <div className="pixel-subtitle">Choose Your Vessel</div>
-        <h2 className="pixel-title" style={{ fontSize: 28, margin: 4 }}>Initiation</h2>
+        <h2 className="pixel-title archetype-heading">Initiation</h2>
       </div>
       <div className="archetype-grid">
         {ARCHETYPES.map((a, i) => (
-          <PixelPanel key={a.id}>
+          <PixelPanel key={a.id} style={{ height: '100%' }}>
             <div className="archetype-card" onClick={() => onSelect(a.id)}>
               <ArchetypeArt id={a.id} />
               <h3>{a.name}</h3>
               <div className="pixel-tag" style={{ alignSelf: 'flex-start' }}>{a.subtitle}</div>
-              <div className="help-text" style={{ margin: '4px 0 6px' }}>{a.description}</div>
+              <div className="help-text archetype-description" style={{ margin: '4px 0 6px' }}>{a.description}</div>
               <div className="pixel-divider" />
-              <div className="stat-line"><span>HP</span><span className="gold-text">{a.stats.maxHp}</span></div>
-              <div className="stat-line"><span>MP</span><span className="gold-text">{a.stats.maxMp}</span></div>
-              <div className="stat-line"><span>ATK</span><span className="gold-text">{a.stats.attack}</span></div>
-              <div className="stat-line"><span>SPL</span><span className="gold-text">{a.stats.spellPower}</span></div>
-              <div className="stat-line"><span>SPD</span><span className="gold-text">{a.stats.speed}</span></div>
-              <div className="stat-line"><span>ARM</span><span className="gold-text">{a.stats.armor}</span></div>
-              <div className="stat-line"><span>LCK</span><span className="gold-text">{a.stats.luck}</span></div>
+              <div className="stat-line archetype-stat"><span>HP</span><span className="gold-text">{a.stats.maxHp}</span></div>
+              <div className="stat-line archetype-stat"><span>MP</span><span className="gold-text">{a.stats.maxMp}</span></div>
+              <div className="stat-line archetype-stat"><span>ATK</span><span className="gold-text">{a.stats.attack}</span></div>
+              <div className="stat-line archetype-stat"><span>SPL</span><span className="gold-text">{a.stats.spellPower}</span></div>
+              <div className="stat-line archetype-stat"><span>SPD</span><span className="gold-text">{a.stats.speed}</span></div>
+              <div className="stat-line archetype-stat"><span>ARM</span><span className="gold-text">{a.stats.armor}</span></div>
+              <div className="stat-line archetype-stat"><span>LCK</span><span className="gold-text">{a.stats.luck}</span></div>
               <div className="pixel-divider" />
-              <div style={{ fontSize: 11, letterSpacing: '0.12em' }}>
+              <div className="archetype-relic" style={{ fontSize: 11, letterSpacing: '0.12em' }}>
                 <span className="glow-text">Starting Relic</span>
                 <div className="gold-text" style={{ fontSize: 12 }}>
                   {RELICS[a.startingRelic].glyph} {RELICS[a.startingRelic].name}
                 </div>
                 <div className="help-text" style={{ fontSize: 10 }}>{RELICS[a.startingRelic].description}</div>
               </div>
-              <div style={{ marginTop: 'auto' }}>
+              <div className="archetype-cta" style={{ marginTop: 'auto' }}>
                 <PixelButton onClick={() => onSelect(a.id)} focused={focus === i}>Begin</PixelButton>
               </div>
             </div>
           </PixelPanel>
         ))}
       </div>
-      <div style={{ marginTop: 16 }}>
+      <div className="archetype-back">
         <PixelButton onClick={onBack}>Back</PixelButton>
       </div>
     </div>

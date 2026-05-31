@@ -146,6 +146,30 @@ export interface CameraState {
   shakeT: number; shakeMag: number;
 }
 
+export interface ViewportTransform {
+  scale: number;
+  offX: number;
+  offY: number;
+  width: number;
+  height: number;
+}
+
+export function computeViewportTransform(canvasWidth: number, canvasHeight: number): ViewportTransform {
+  const sx = canvasWidth / VIRTUAL_W;
+  const sy = canvasHeight / VIRTUAL_H;
+  const scale = Math.max(0.1, Math.min(sx, sy));
+  const width = VIRTUAL_W * scale;
+  const height = VIRTUAL_H * scale;
+
+  return {
+    scale,
+    width,
+    height,
+    offX: Math.floor((canvasWidth - width) / 2),
+    offY: Math.floor((canvasHeight - height) / 2),
+  };
+}
+
 /** Everything the Renderer needs to draw a frame. */
 export interface RenderState {
   camera: CameraState;
@@ -203,11 +227,7 @@ export class Renderer {
     ctx.imageSmoothingEnabled = false;
 
     const canvas = ctx.canvas;
-    const sx = canvas.width / VIRTUAL_W;
-    const sy = canvas.height / VIRTUAL_H;
-    const scale = Math.max(1, Math.max(sx, sy));
-    const offX = Math.floor((canvas.width - VIRTUAL_W * scale) / 2);
-    const offY = Math.floor((canvas.height - VIRTUAL_H * scale) / 2);
+    const { scale, offX, offY } = computeViewportTransform(canvas.width, canvas.height);
 
     ctx.fillStyle = '#02010a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);

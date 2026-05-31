@@ -304,17 +304,35 @@
   z-index: 7;
 }
 
+.touch-joystick-zone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: min(56vw, 520px);
+  pointer-events: auto;
+  touch-action: none;
+}
+
 .touch-joystick {
   position: absolute;
-  left: calc(20px + var(--safe-left));
-  bottom: calc(20px + var(--safe-bottom));
+  left: calc(80px + var(--safe-left));
+  top: calc(100dvh - var(--safe-bottom) - 80px);
   width: clamp(110px, 22vh, 160px);
   height: clamp(110px, 22vh, 160px);
   border-radius: 50%;
   background: radial-gradient(circle, rgba(60, 40, 100, 0.35) 0%, rgba(0,0,0,0.4) 70%);
   border: 2px solid rgba(244, 210, 122, 0.6);
-  pointer-events: auto;
+  pointer-events: none;
   touch-action: none;
+  transform: translate(-50%, -50%) scale(0.92);
+  opacity: 0.32;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.touch-joystick.is-active {
+  opacity: 0.86;
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .touch-joystick .stick {
@@ -595,6 +613,20 @@
   grid-template-columns: repeat(3, minmax(220px, 280px));
   gap: 18px;
   max-width: 100%;
+}
+
+.archetype-header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.archetype-heading {
+  font-size: 28px;
+  margin: 4px;
+}
+
+.archetype-back {
+  margin-top: 16px;
 }
 
 @media (max-width: 880px) {
@@ -1031,4 +1063,653 @@
     padding-bottom: 4px;
   }
   .codex-chapter-btn { min-width: 140px; flex-shrink: 0; }
+}
+
+/* iPhone / touch-first shell -------------------------------------------------
+ * The desktop UI is intentionally ornate. On iPhone the job changes:
+ * preserve the playfield, respect the notch/home indicator, and make every
+ * control large enough to hit while moving.
+ */
+.main-menu-title {
+  text-align: center;
+  margin-bottom: 18px;
+}
+.main-menu-heading {
+  font-size: 48px;
+  margin: 8px 0 0;
+  letter-spacing: 0.18em;
+}
+.main-menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.main-menu-meta {
+  margin-top: 24px;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--teal);
+  text-align: center;
+}
+.main-menu-version {
+  position: absolute;
+  bottom: calc(14px + var(--safe-bottom));
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: rgba(231,227,215,0.5);
+  text-align: center;
+}
+.hud-location-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.hud-floor-label {
+  letter-spacing: 0.3em;
+  color: var(--gold-1);
+}
+.hud-currency-row {
+  margin-top: 8px;
+  font-size: 10px;
+}
+.hud-minimap-wrap {
+  margin-top: 8px;
+}
+.relic-strip {
+  margin-top: 8px;
+}
+.hud-bottom-right {
+  max-width: 360px;
+}
+.loadout-strip {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.loadout-copy {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--bone);
+}
+.loadout-hint {
+  opacity: 0.7;
+}
+.shrine-prompt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  width: min(420px, calc(100dvw - var(--safe-left) - var(--safe-right) - 32px));
+}
+.shrine-prompt-panel {
+  min-width: 0;
+  text-align: center;
+}
+
+@media (hover: none) and (pointer: coarse), (max-width: 932px) {
+  :root {
+    --panel-gutter: calc(28px + var(--safe-left) + var(--safe-right));
+  }
+
+  button {
+    touch-action: manipulation;
+  }
+
+  .menu-screen {
+    justify-content: flex-start;
+    align-items: center;
+    overflow-y: auto;
+    gap: 12px;
+    padding:
+      calc(14px + var(--safe-top))
+      calc(14px + var(--safe-right))
+      calc(18px + var(--safe-bottom))
+      calc(14px + var(--safe-left));
+  }
+
+  .pixel-panel {
+    width: min(100%, 620px);
+    padding: 14px 16px;
+  }
+
+  .pixel-panel::before,
+  .pixel-panel::after {
+    width: 10px;
+    height: 10px;
+  }
+
+  .pixel-subtitle {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+  }
+
+  .pixel-title {
+    letter-spacing: 0.08em;
+  }
+
+  .pixel-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+  }
+
+  .pixel-btn .badge {
+    font-size: 9px;
+    letter-spacing: 0.16em;
+  }
+
+  .main-menu-screen {
+    justify-content: center;
+    overflow: hidden;
+    padding-bottom: calc(34px + var(--safe-bottom));
+  }
+
+  .main-menu-title {
+    margin-bottom: 12px;
+  }
+
+  .main-menu-heading {
+    font-size: clamp(30px, 9.5vw, 42px);
+    letter-spacing: 0.08em;
+    line-height: 0.96;
+  }
+
+  .main-menu-actions {
+    width: min(100%, 360px);
+    gap: 8px;
+  }
+
+  .main-menu-meta {
+    margin-top: 14px;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+  }
+
+  .main-menu-version {
+    left: calc(14px + var(--safe-left));
+    right: calc(14px + var(--safe-right));
+    bottom: calc(8px + var(--safe-bottom));
+    font-size: 8px;
+    letter-spacing: 0.18em;
+  }
+
+  .cinematic-chapter {
+    top: calc(10px + var(--safe-top));
+    width: calc(100dvw - var(--safe-left) - var(--safe-right) - 24px);
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    text-align: center;
+  }
+
+  .cinematic-subtitle-band {
+    bottom: calc(44px + var(--safe-bottom));
+    padding: 0 calc(12px + var(--safe-right)) 0 calc(12px + var(--safe-left));
+  }
+
+  .cinematic-subtitle {
+    max-width: calc(100dvw - var(--safe-left) - var(--safe-right) - 28px);
+    padding: 7px 10px;
+    font-size: clamp(14px, 4vw, 18px);
+    line-height: 1.32;
+  }
+
+  .cinematic-source {
+    font-size: 8px;
+    letter-spacing: 0.18em;
+  }
+
+  .cinematic-controls-hint {
+    left: calc(10px + var(--safe-left));
+    right: calc(10px + var(--safe-right));
+    bottom: calc(8px + var(--safe-bottom));
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-align: center;
+    line-height: 1.35;
+    white-space: normal;
+  }
+
+  .cinematic-controls-copy {
+    opacity: 0.62;
+  }
+
+  .rotate-overlay {
+    padding:
+      calc(24px + var(--safe-top))
+      calc(24px + var(--safe-right))
+      calc(24px + var(--safe-bottom))
+      calc(24px + var(--safe-left));
+  }
+
+  .rotate-overlay .glyph {
+    font-size: 52px;
+  }
+
+  .hud-top-left,
+  .hud-top-right,
+  .hud-bottom-left,
+  .hud-bottom-right {
+    padding: 0;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .hud-top-left {
+    top: calc(8px + var(--safe-top));
+    left: calc(8px + var(--safe-left));
+    max-width: 48vw;
+  }
+
+  .hud-top-right {
+    top: calc(8px + var(--safe-top));
+    right: calc(8px + var(--safe-right));
+    max-width: 42vw;
+  }
+
+  .bar {
+    width: min(42vw, 168px);
+    height: 12px;
+  }
+
+  .bar .label {
+    font-size: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  .hud-currency-row {
+    margin-top: 5px;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+
+  .hud-floor-label {
+    letter-spacing: 0.12em;
+    font-size: 10px;
+  }
+
+  .hud-top-right .violet-text,
+  .hud-top-right .glow-text,
+  .hud-top-right .pixel-tag {
+    font-size: 8px !important;
+    letter-spacing: 0.1em !important;
+  }
+
+  .hud-minimap-wrap,
+  .relic-strip,
+  .hud-bottom-left,
+  .loadout-copy {
+    display: none;
+  }
+
+  .loadout-strip {
+    flex-direction: row;
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .loadout-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+
+  .hud-bottom-right {
+    right: calc(10px + var(--safe-right));
+    bottom: calc(152px + var(--safe-bottom));
+    width: min(42vw, 260px);
+    max-width: min(42vw, 260px);
+    font-size: 9px;
+  }
+
+  .boss-banner {
+    top: 22%;
+    width: calc(100dvw - var(--safe-left) - var(--safe-right) - 32px);
+  }
+
+  .boss-banner .title {
+    font-size: clamp(18px, 5vw, 24px);
+    letter-spacing: 0.18em;
+  }
+
+  .boss-bar {
+    width: min(78vw, 520px);
+  }
+
+  .touch-joystick {
+    left: calc(68px + var(--safe-left));
+    top: calc(100dvh - var(--safe-bottom) - 68px);
+    width: clamp(96px, 27vw, 132px);
+    height: clamp(96px, 27vw, 132px);
+    border-width: 1px;
+    background:
+      radial-gradient(circle, rgba(244, 210, 122, 0.18) 0 2px, transparent 3px),
+      radial-gradient(circle, rgba(60, 40, 100, 0.34) 0%, rgba(0,0,0,0.34) 72%);
+    box-shadow: inset 0 0 18px rgba(108, 246, 229, 0.08);
+  }
+
+  .touch-joystick .stick {
+    width: clamp(38px, 10vw, 52px);
+    height: clamp(38px, 10vw, 52px);
+  }
+
+  .touch-joystick-zone {
+    width: min(54vw, 430px);
+  }
+
+  .touch-buttons {
+    right: calc(14px + var(--safe-right));
+    bottom: calc(14px + var(--safe-bottom));
+    grid-template-columns: repeat(2, clamp(54px, 14vw, 68px));
+    grid-template-rows: repeat(2, clamp(54px, 14vw, 68px));
+    gap: clamp(8px, 2vw, 12px);
+  }
+
+  .touch-buttons button,
+  .touch-cycle button {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .touch-buttons button {
+    border-width: 1px;
+    font-size: clamp(8px, 2.4vw, 11px);
+    letter-spacing: 0.08em;
+  }
+
+  .touch-cycle {
+    right: calc(18px + var(--safe-right));
+    bottom: calc(140px + var(--safe-bottom));
+    gap: 8px;
+  }
+
+  .touch-cycle button {
+    width: clamp(42px, 10vw, 52px);
+    height: clamp(42px, 10vw, 52px);
+    border-width: 1px;
+    font-size: 10px;
+  }
+
+  .touch-pause {
+    left: 50%;
+    transform: translateX(-50%);
+    top: calc(8px + var(--safe-top));
+  }
+
+  .touch-pause button,
+  .hud-pause-btn {
+    width: 42px;
+    height: 34px;
+    border-radius: 4px;
+  }
+
+  .archetype-grid {
+    grid-template-columns: 1fr;
+    width: min(100%, 380px);
+    gap: 8px;
+  }
+
+  .archetype-screen {
+    justify-content: center;
+    overflow: hidden;
+    gap: 8px;
+  }
+
+  .archetype-header {
+    margin-bottom: 2px;
+  }
+
+  .archetype-heading {
+    font-size: 22px;
+    margin: 2px;
+  }
+
+  .archetype-screen .pixel-panel {
+    padding: 8px 10px;
+  }
+
+  .archetype-card {
+    min-height: 0;
+    height: 108px;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    grid-auto-rows: min-content;
+    align-content: center;
+    gap: 3px 9px;
+  }
+
+  .archetype-card h3 {
+    font-size: 15px;
+    margin: 0;
+    align-self: end;
+  }
+
+  .archetype-portrait {
+    grid-row: 1 / 5;
+    width: 68px;
+    height: 76px;
+    align-self: center;
+  }
+
+  .archetype-card .pixel-tag {
+    align-self: start !important;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+
+  .archetype-description,
+  .archetype-stat,
+  .archetype-relic,
+  .archetype-cta,
+  .archetype-card .pixel-divider {
+    display: none;
+  }
+
+  .archetype-back {
+    margin-top: 0;
+    width: min(100%, 220px);
+  }
+
+  .settings-row {
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+
+  .settings-row input[type="range"] {
+    width: min(42vw, 170px);
+  }
+
+  .settings-remap-btn {
+    min-width: 96px;
+  }
+
+  .scroll-area,
+  .cinematics-list {
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 170px);
+  }
+
+  .gameover-grid,
+  .controller-test {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .codex-layout {
+    min-height: 0;
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 170px);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (orientation: landscape) and (max-height: 500px),
+       (max-width: 932px) and (orientation: landscape) and (max-height: 500px) {
+  .menu-screen {
+    justify-content: flex-start;
+    padding-top: calc(8px + var(--safe-top));
+    padding-bottom: calc(8px + var(--safe-bottom));
+  }
+
+  .main-menu-screen {
+    justify-content: center;
+  }
+
+  .main-menu-heading {
+    font-size: clamp(24px, 7vh, 34px);
+    line-height: 0.92;
+  }
+
+  .main-menu-title {
+    margin-bottom: 8px;
+  }
+
+  .main-menu-actions {
+    width: min(620px, calc(100dvw - var(--safe-left) - var(--safe-right) - 36px));
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .main-menu-actions .pixel-btn {
+    min-height: 38px;
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+
+  .main-menu-meta {
+    margin-top: 8px;
+  }
+
+  .main-menu-version {
+    display: none;
+  }
+
+  .pixel-panel {
+    padding: 10px 12px;
+  }
+
+  .pixel-divider {
+    margin: 8px 0;
+  }
+
+  .archetype-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: min(100%, calc(100dvw - var(--safe-left) - var(--safe-right) - 28px));
+    gap: 8px;
+  }
+
+  .archetype-card {
+    min-height: 0;
+    height: 146px;
+    gap: 4px;
+  }
+
+  .archetype-description,
+  .archetype-relic,
+  .archetype-cta {
+    display: none;
+  }
+
+  .archetype-card .pixel-divider {
+    margin: 4px 0;
+  }
+
+  .archetype-stat {
+    font-size: 8px;
+    letter-spacing: 0.08em;
+  }
+
+  .archetype-portrait {
+    height: 62px;
+  }
+
+  .touch-joystick {
+    width: clamp(92px, 25vh, 112px);
+    height: clamp(92px, 25vh, 112px);
+  }
+
+  .touch-buttons {
+    grid-template-columns: repeat(2, clamp(50px, 15vh, 62px));
+    grid-template-rows: repeat(2, clamp(50px, 15vh, 62px));
+  }
+
+  .touch-cycle {
+    bottom: calc(132px + var(--safe-bottom));
+  }
+
+  .hud-bottom-right {
+    bottom: calc(128px + var(--safe-bottom));
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (max-height: 700px),
+       (max-width: 932px) and (max-height: 700px) {
+  .main-menu-screen {
+    gap: 7px;
+    padding-top: calc(8px + var(--safe-top));
+    padding-bottom: calc(8px + var(--safe-bottom));
+  }
+
+  .main-menu-title {
+    margin-bottom: 4px;
+  }
+
+  .main-menu-heading {
+    font-size: clamp(24px, 8vw, 32px);
+    line-height: 0.9;
+    margin-top: 4px;
+  }
+
+  .main-menu-actions {
+    width: min(100%, 312px);
+    gap: 5px;
+  }
+
+  .main-menu-actions .pixel-btn {
+    min-height: 36px;
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+
+  .main-menu-meta {
+    margin-top: 4px;
+    font-size: 9px;
+  }
+
+  .main-menu-version {
+    display: none;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+  .main-menu-screen {
+    justify-content: center;
+  }
+
+  .main-menu-actions {
+    width: min(100%, 340px);
+  }
+
+  .cinematic-controls-hint {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .touch-controls {
+    display: none;
+  }
 }

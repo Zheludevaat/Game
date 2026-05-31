@@ -25,7 +25,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
           <div className="fill" style={{ transform: `scaleX(${Math.max(0, mpFrac)})` }} />
           <div className="label">MP {Math.round(hud.mp)} / {hud.maxMp}</div>
         </div>
-        <div style={{ marginTop: 8, fontSize: 10 }}>
+        <div className="hud-currency-row">
           <span className="gold-text">✦ {hud.essence}</span> &nbsp;·&nbsp;
           <span className="gold-text">$ {hud.coins}</span> &nbsp;·&nbsp;
           <span className="gold-text">⚷ {hud.keys}</span>
@@ -35,7 +35,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
       </div>
 
       <div className="hud-top-right">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+        <div className="hud-location-row">
           <button
             type="button"
             className="hud-pause-btn"
@@ -44,7 +44,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
             onClick={onPauseTap}
             onTouchStart={(e) => { e.preventDefault(); onPauseTap(); }}
           >☰</button>
-          <div style={{ letterSpacing: '0.3em', color: 'var(--gold-1)' }}>
+          <div className="hud-floor-label">
             {hud.sphereGlyph} Floor {hud.floor}
           </div>
         </div>
@@ -53,8 +53,10 @@ export function HUD({ hud, input }: Props): JSX.Element {
         </div>
         <div className="glow-text" style={{ fontSize: 10, marginTop: 2 }}>{hud.roomName}</div>
         <div className="pixel-tag" style={{ marginTop: 6 }}>{hud.roomType?.toUpperCase()}</div>
-        <Minimap rooms={hud.rooms} />
-        <div className="relic-strip" style={{ marginTop: 8 }}>
+        <div className="hud-minimap-wrap">
+          <Minimap rooms={hud.rooms} />
+        </div>
+        <div className="relic-strip">
           {hud.relics.map((id) => (
             <div key={id} className="relic-icon" title={RELICS[id].name} data-name={RELICS[id].name}>
               {RELICS[id].glyph}
@@ -74,7 +76,7 @@ export function HUD({ hud, input }: Props): JSX.Element {
         )}
       </div>
 
-      <div className="hud-bottom-right" style={{ maxWidth: 360 }}>
+      <div className="hud-bottom-right">
         {hud.prompts.map((t) => (
           <div key={t} className="glow-text" style={{ fontSize: 11, marginBottom: 4 }}>{t}</div>
         ))}
@@ -188,15 +190,15 @@ function LoadoutStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
   const w = WEAPONS[hud.currentWeapon];
   const s = SPELLS[hud.currentSpell];
   return (
-    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div className="loadout-strip">
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <div className="loadout-icon" title={w?.name} style={{ borderColor: w?.swingColour }}>
           <span style={{ color: w?.swingColour }}>{w?.glyph ?? '?'}</span>
         </div>
-        <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--bone)' }}>
+        <div className="loadout-copy">
           <div className="gold-text" style={{ fontSize: 10 }}>{w?.name ?? 'No weapon'}</div>
           {hud.weapons.length > 1 && (
-            <div style={{ opacity: 0.7 }}>[Q] cycle ({hud.weapons.indexOf(hud.currentWeapon) + 1}/{hud.weapons.length})</div>
+            <div className="loadout-hint">[Q] cycle ({hud.weapons.indexOf(hud.currentWeapon) + 1}/{hud.weapons.length})</div>
           )}
         </div>
       </div>
@@ -204,10 +206,10 @@ function LoadoutStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
         <div className="loadout-icon" title={s?.name} style={{ borderColor: s?.projColour }}>
           <span style={{ color: s?.projColour }}>{s?.glyph ?? '?'}</span>
         </div>
-        <div style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--bone)' }}>
+        <div className="loadout-copy">
           <div className="violet-text" style={{ fontSize: 10 }}>{s?.name ?? 'No spell'}</div>
           {hud.spells.length > 1 && (
-            <div style={{ opacity: 0.7 }}>[R] cycle ({hud.spells.indexOf(hud.currentSpell) + 1}/{hud.spells.length})</div>
+            <div className="loadout-hint">[R] cycle ({hud.spells.indexOf(hud.currentSpell) + 1}/{hud.spells.length})</div>
           )}
         </div>
       </div>
@@ -217,13 +219,8 @@ function LoadoutStrip({ hud }: { hud: HudSnapshot }): JSX.Element {
 
 function ShrinePrompt({ name, effect, downside }: { name: string; effect: string; downside: string }): JSX.Element {
   return (
-    <div style={{
-      position: 'absolute',
-      left: '50%', top: '50%',
-      transform: 'translate(-50%, -50%)',
-      pointerEvents: 'auto',
-    }}>
-      <div className="pixel-panel" style={{ minWidth: 320, textAlign: 'center' }}>
+    <div className="shrine-prompt">
+      <div className="pixel-panel shrine-prompt-panel">
         <div className="pixel-subtitle">A shrine of {name.toLowerCase()}</div>
         <div className="pixel-title" style={{ fontSize: 22, margin: '4px 0' }}>{name}</div>
         <div className="pixel-divider" />
