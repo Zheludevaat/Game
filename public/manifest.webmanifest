@@ -4,10 +4,10 @@
   "description": "A Hermetic infinite dungeon crawler designed for iPad.",
   "start_url": "./",
   "scope": "./",
-  "display": "fullscreen",
+  "display": "standalone",
   "orientation": "any",
-  "background_color": "#000000",
-  "theme_color": "#05020d",
+  "background_color": "#05060a",
+  "theme_color": "#05060a",
   "icons": [
     {
       "src": "./icon-192.png",

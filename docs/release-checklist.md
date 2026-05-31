@@ -20,6 +20,13 @@
 - Audio: menu, dungeon, boss, game over, prologue, epilogue, codex, all SFX.
 - Long session: 20 minute run without audio crackle, growing lag, or console errors.
 
+## PWA
+
+- `manifest.webmanifest` has correct `display: standalone`, `start_url: "./"`, `scope: "./"`, theme and background color `#05060a`.
+- Service worker caches the app shell (`./`, `./index.html`, `./manifest.webmanifest`, icons).
+- Service worker uses network-first for HTML navigations (avoids stale index.html serving 404 chunk URLs) and cache-first for hashed assets.
+- Registration runs only in production builds (skipped in dev).
+
 ## Music Acceptance
 
 - Menu cue has a memorable theme within the first 20 seconds.
