@@ -311,6 +311,13 @@ export class GameEngine {
    *  the same outcomes. Visual-only Math.random() calls are left
    *  alone — determinism matters for gameplay, not particles. */
   private rng!: RNG;
+
+  // ── Seeded RNG helpers ───────────────────────────────────────
+  private rand(): number { return this.rng.next(); }
+  private randInt(min: number, max: number): number { return this.rng.int(min, max); }
+  private randChance(probability: number): boolean { return this.rng.chance(probability); }
+  private randPick<T>(items: readonly T[]): T { return items[this.randInt(0, items.length)]; }
+
   /** Cached sphere data for the current floor — updated once per frame
    *  in update() so all render paths read a single ref instead of calling
    *  sphereForFloor() 14+ times per frame. */
@@ -634,6 +641,14 @@ export class GameEngine {
 
   setDebugBossesDefeated(count: number): void {
     this.summary.bossesDefeated = Math.max(0, count);
+  }
+
+  setDebugRngSeed(seed: number): void {
+    this.rng = new RNG(seed);
+  }
+
+  getDebugRngState(): number {
+    return this.rng.state;
   }
 
   goToFloorForTest(n: number): void {
@@ -1094,11 +1109,11 @@ export class GameEngine {
       // smear opposite the dash heading.
       if (!this.reducedParticles) {
         for (let i = 0; i < 10; i++) {
-          const sp = 50 + Math.random() * 40;
+          const sp = 50 + this.rand() * 40;
           this.particles.emit({
             x: p.pos.x, y: p.pos.y - 4,
-            vx: -dir.x * sp + (Math.random() - 0.5) * 30,
-            vy: -dir.y * sp + (Math.random() - 0.5) * 30,
+            vx: -dir.x * sp + (this.rand() - 0.5) * 30,
+            vy: -dir.y * sp + (this.rand() - 0.5) * 30,
             life: 0.32, maxLife: 0.32, size: 1.4,
             colour: i % 2 ? '#9ad4ff' : '#ffffff', drag: 0.86,
           });
@@ -1221,10 +1236,10 @@ export class GameEngine {
       if (stepNow > stepPrev) {
         const p = this.player;
         for (let i = 0; i < 6; i++) {
-          const a = -Math.PI / 2 + (Math.random() - 0.5) * 0.9;
-          const sp = 30 + Math.random() * 30;
+          const a = -Math.PI / 2 + (this.rand() - 0.5) * 0.9;
+          const sp = 30 + this.rand() * 30;
           this.particles.emit({
-            x: p.pos.x + (Math.random() - 0.5) * 6,
+            x: p.pos.x + (this.rand() - 0.5) * 6,
             y: p.pos.y - 6,
             vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
             life: 0.6, maxLife: 0.6, size: 1.2,
@@ -1307,8 +1322,8 @@ export class GameEngine {
           this.particles.emit({
             x: p.pos.x + ux * (8 + i * 2),
             y: p.pos.y + uy * (8 + i * 2),
-            vx: ux * 60 + (Math.random() - 0.5) * 20,
-            vy: uy * 60 + (Math.random() - 0.5) * 20,
+            vx: ux * 60 + (this.rand() - 0.5) * 20,
+            vy: uy * 60 + (this.rand() - 0.5) * 20,
             life: 0.22, maxLife: 0.22,
             size: 1.2, colour: palette[i % 2]!, drag: 0.9,
           });
@@ -1316,7 +1331,7 @@ export class GameEngine {
       } else {
         // arc / thrust / flurry — fanned sparks
         for (let i = 0; i < 6; i++) {
-          const a = baseAngle + (Math.random() - 0.5) * w.arcHalf * 2;
+          const a = baseAngle + (this.rand() - 0.5) * w.arcHalf * 2;
           this.particles.emit({
             x: cx, y: cy,
             vx: Math.cos(a) * 70, vy: Math.sin(a) * 70,
@@ -1397,7 +1412,7 @@ export class GameEngine {
       const cx = ROOM_W / 2, cy = ROOM_H / 2 + 4;
       if (dist(p.pos, { x: cx, y: cy }) < 30) {
         if (room.chestLocked) {
-          const consume = !(p.relics.includes('keyOfTheGate') && Math.random() < 0.35);
+          const consume = !(p.relics.includes('keyOfTheGate') && this.randChance(0.35));
           if (p.keys <= 0) return;
           if (consume) p.keys -= 1;
         }
@@ -1421,12 +1436,12 @@ export class GameEngine {
 
   private openChestLoot(x: number, y: number): void {
     audio.sfx('chest');
-    const r = Math.random();
+    const r = this.rand();
     // 12% weapon, 12% spell, 14% relic, rest is gold/essence
     if (r < 0.12) {
       const pool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
       if (pool.length > 0) {
-        const id = pool[Math.floor(Math.random() * pool.length)];
+        const id = this.randPick(pool);
         this.pickups.push({ id: nid(), pos: { x, y }, kind: 'weapon', value: 0, weapon: id, life: 30 });
         return;
       }
@@ -1434,7 +1449,7 @@ export class GameEngine {
     if (r < 0.24) {
       const pool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
       if (pool.length > 0) {
-        const id = pool[Math.floor(Math.random() * pool.length)];
+        const id = this.randPick(pool);
         this.pickups.push({ id: nid(), pos: { x, y }, kind: 'spell', value: 0, spell: id, life: 30 });
         return;
       }
@@ -1444,7 +1459,7 @@ export class GameEngine {
       const owned = new Set(this.player.relics);
       const pool = RELIC_IDS.filter((id) => !owned.has(id));
       if (pool.length > 0) {
-        const id = pool[Math.floor(Math.random() * pool.length)];
+        const id = this.randPick(pool);
         this.pickups.push({ id: nid(), pos: { x, y }, kind: 'relic', value: 0, relic: id, life: 20 });
         return;
       }
@@ -1452,11 +1467,11 @@ export class GameEngine {
     // Coins + essence + possible pickups
     const luck = 1 + this.player.luck * 0.05;
     const coinBoost = this.player.relics.includes('solarCoin') ? 1.5 : 1;
-    const coins = Math.round((6 + Math.random() * 10) * luck * coinBoost);
-    const ess = Math.round((2 + Math.random() * 5) * coinBoost);
+    const coins = Math.round((6 + this.rand() * 10) * luck * coinBoost);
+    const ess = Math.round((2 + this.rand() * 5) * coinBoost);
     for (let i = 0; i < coins / 2; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const d = 8 + Math.random() * 16;
+      const a = this.rand() * Math.PI * 2;
+      const d = 8 + this.rand() * 16;
       this.pickups.push({
         id: nid(),
         pos: { x: x + Math.cos(a) * d, y: y + Math.sin(a) * d },
@@ -1464,21 +1479,21 @@ export class GameEngine {
       });
     }
     for (let i = 0; i < ess; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const d = 8 + Math.random() * 14;
+      const a = this.rand() * Math.PI * 2;
+      const d = 8 + this.rand() * 14;
       this.pickups.push({
         id: nid(),
         pos: { x: x + Math.cos(a) * d, y: y + Math.sin(a) * d },
         kind: 'essence', value: 1, life: 18,
       });
     }
-    if (Math.random() < 0.45) {
+    if (this.randChance(0.45)) {
       this.pickups.push({ id: nid(), pos: { x: x - 12, y: y + 4 }, kind: 'hp', value: 18, life: 18 });
     }
-    if (Math.random() < 0.45) {
+    if (this.randChance(0.45)) {
       this.pickups.push({ id: nid(), pos: { x: x + 12, y: y + 4 }, kind: 'mp', value: 25, life: 18 });
     }
-    if (Math.random() < 0.18) {
+    if (this.randChance(0.18)) {
       this.pickups.push({ id: nid(), pos: { x, y: y + 18 }, kind: 'key', value: 1, life: 22 });
     }
     this.particles.burst(x, y, 30, { colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.9 });
@@ -1516,12 +1531,12 @@ export class GameEngine {
           break;
         case 'conjunction': {
           const pool = RELIC_IDS.filter((id) => !p.relics.includes(id));
-          if (pool.length) this.grantRelic(pool[Math.floor(Math.random() * pool.length)]);
+          if (pool.length) this.grantRelic(this.randPick(pool));
           // spawn extra shades
           for (let i = 0; i < 3; i++) {
             this.spawnEnemy('lesserShade', {
-              x: ROOM_W * 0.3 + Math.random() * ROOM_W * 0.4,
-              y: ROOM_H * 0.3 + Math.random() * ROOM_H * 0.4,
+              x: ROOM_W * 0.3 + this.rand() * ROOM_W * 0.4,
+              y: ROOM_H * 0.3 + this.rand() * ROOM_H * 0.4,
             }, this.floor.number);
           }
           // Need to lock doors since enemies appeared
@@ -1568,9 +1583,9 @@ export class GameEngine {
           if (!e.ai) e.ai = {};
           e.ai.jitterTimer = (e.ai.jitterTimer ?? 0) - dt;
           if (e.ai.jitterTimer <= 0) {
-            const a = Math.atan2(n.y, n.x) + (Math.random() - 0.5) * 1.6;
+            const a = Math.atan2(n.y, n.x) + (this.rand() - 0.5) * 1.6;
             e.ai.jitterDir = { x: Math.cos(a), y: Math.sin(a) };
-            e.ai.jitterTimer = 0.18 + Math.random() * 0.25;
+            e.ai.jitterTimer = 0.18 + this.rand() * 0.25;
           }
           this.moveTowards(e, e.ai.jitterDir!, e.speed, dt);
           break;
@@ -1795,8 +1810,8 @@ export class GameEngine {
       fire: () => {
         // Teleport — pick a point at least 100 away from player
         for (let attempt = 0; attempt < 6; attempt++) {
-          const nx = ROOM_MARGIN + 24 + Math.random() * (ROOM_W - ROOM_MARGIN * 2 - 48);
-          const ny = ROOM_MARGIN + 24 + Math.random() * (ROOM_H - ROOM_MARGIN * 2 - 48);
+          const nx = ROOM_MARGIN + 24 + this.rand() * (ROOM_W - ROOM_MARGIN * 2 - 48);
+          const ny = ROOM_MARGIN + 24 + this.rand() * (ROOM_H - ROOM_MARGIN * 2 - 48);
           const d = Math.hypot(this.player.pos.x - nx, this.player.pos.y - ny);
           if (d > 100) { e.pos.x = nx; e.pos.y = ny; break; }
         }
@@ -1952,8 +1967,8 @@ export class GameEngine {
   private zeusWrathOfHeaven(_e: Enemy): void {
     const n = (this.enemies.find((x) => x.isBoss)?.phase ?? 1) >= 2 ? 6 : 5;
     for (let i = 0; i < n; i++) {
-      const ang = (i / n) * Math.PI * 2 + Math.random() * 0.4;
-      const r = 50 + Math.random() * 80;
+      const ang = (i / n) * Math.PI * 2 + this.rand() * 0.4;
+      const r = 50 + this.rand() * 80;
       const sx = clamp(this.player.pos.x + Math.cos(ang) * r, ROOM_MARGIN + 12, ROOM_W - ROOM_MARGIN - 12);
       const sy = clamp(this.player.pos.y + Math.sin(ang) * r, ROOM_MARGIN + 12, ROOM_H - ROOM_MARGIN - 12);
       this.sigils.push({
@@ -2004,8 +2019,8 @@ export class GameEngine {
     const n = 2 + (this.enemies.find((x) => x.isBoss)?.phase ?? 1);
     for (let i = 0; i < n; i++) {
       this.spawnEnemy('lesserShade', {
-        x: ROOM_W * 0.25 + Math.random() * ROOM_W * 0.5,
-        y: ROOM_H * 0.25 + Math.random() * ROOM_H * 0.5,
+        x: ROOM_W * 0.25 + this.rand() * ROOM_W * 0.5,
+        y: ROOM_H * 0.25 + this.rand() * ROOM_H * 0.5,
       }, this.floor.number);
     }
     audio.sfx('bossWarn');
@@ -2016,8 +2031,8 @@ export class GameEngine {
     for (let i = 0; i < n; i++) {
       this.sigils.push({
         pos: {
-          x: ROOM_W * 0.2 + Math.random() * ROOM_W * 0.6,
-          y: ROOM_H * 0.2 + Math.random() * ROOM_H * 0.6,
+          x: ROOM_W * 0.2 + this.rand() * ROOM_W * 0.6,
+          y: ROOM_H * 0.2 + this.rand() * ROOM_H * 0.6,
         },
         delay: 1.0,
         timer: 0,
@@ -2067,7 +2082,7 @@ export class GameEngine {
       // drop relic and lots of essence
       const pool = RELIC_IDS.filter((id) => !this.player.relics.includes(id));
       if (pool.length) {
-        const id = pool[Math.floor(Math.random() * pool.length)];
+        const id = this.randPick(pool);
         this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'relic', value: 0, relic: id, life: 30 });
       }
       // Every boss drops either a weapon or a spell the player doesn't own yet.
@@ -2076,31 +2091,31 @@ export class GameEngine {
       if (giveWeapon) {
         const wPool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
         if (wPool.length) {
-          const id = wPool[Math.floor(Math.random() * wPool.length)];
+          const id = this.randPick(wPool);
           this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'weapon', value: 0, weapon: id, life: 60 });
         } else {
           const sPool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
           if (sPool.length) {
-            const id = sPool[Math.floor(Math.random() * sPool.length)];
+            const id = this.randPick(sPool);
             this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'spell', value: 0, spell: id, life: 60 });
           }
         }
       } else {
         const sPool = SPELL_LOOT_POOL.filter((id) => !this.player.spells.includes(id));
         if (sPool.length) {
-          const id = sPool[Math.floor(Math.random() * sPool.length)];
+          const id = this.randPick(sPool);
           this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'spell', value: 0, spell: id, life: 60 });
         } else {
           const wPool = WEAPON_LOOT_POOL.filter((id) => !this.player.weapons.includes(id));
           if (wPool.length) {
-            const id = wPool[Math.floor(Math.random() * wPool.length)];
+            const id = this.randPick(wPool);
             this.pickups.push({ id: nid(), pos: { x: e.pos.x + 16, y: e.pos.y }, kind: 'weapon', value: 0, weapon: id, life: 60 });
           }
         }
       }
       for (let i = 0; i < 20; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const d = 20 + Math.random() * 40;
+        const a = this.rand() * Math.PI * 2;
+        const d = 20 + this.rand() * 40;
         this.pickups.push({
           id: nid(),
           pos: { x: e.pos.x + Math.cos(a) * d, y: e.pos.y + Math.sin(a) * d },
@@ -2116,30 +2131,30 @@ export class GameEngine {
   private dropLoot(e: Enemy): void {
     const luck = 1 + this.player.luck * 0.05;
     const coinBoost = this.player.relics.includes('solarCoin') ? 1.6 : 1;
-    if (Math.random() < 0.85 * luck) {
-      const coins = 1 + Math.floor(Math.random() * (e.isMiniBoss ? 8 : 3));
+    if (this.randChance(0.85 * luck)) {
+      const coins = 1 + this.randInt(0, e.isMiniBoss ? 8 : 3);
       for (let i = 0; i < coins; i++) {
         this.pickups.push({
           id: nid(),
-          pos: { x: e.pos.x + (Math.random() - 0.5) * 12, y: e.pos.y + (Math.random() - 0.5) * 12 },
+          pos: { x: e.pos.x + (this.rand() - 0.5) * 12, y: e.pos.y + (this.rand() - 0.5) * 12 },
           kind: 'coin', value: 1, life: 12,
         });
       }
     }
-    if (Math.random() < (e.isMiniBoss ? 1 : 0.4) * coinBoost) {
+    if (this.randChance((e.isMiniBoss ? 1 : 0.4) * coinBoost)) {
       this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'essence', value: 1, life: 12 });
     }
-    if (e.isMiniBoss && Math.random() < 0.5) {
+    if (e.isMiniBoss && this.randChance(0.5)) {
       const pool = RELIC_IDS.filter((id) => !this.player.relics.includes(id));
       if (pool.length) {
-        const id = pool[Math.floor(Math.random() * pool.length)];
+        const id = this.randPick(pool);
         this.pickups.push({ id: nid(), pos: { x: e.pos.x, y: e.pos.y - 6 }, kind: 'relic', value: 0, relic: id, life: 20 });
       }
     }
-    if (Math.random() < 0.08) {
+    if (this.randChance(0.08)) {
       this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'hp', value: 12, life: 12 });
     }
-    if (Math.random() < 0.06) {
+    if (this.randChance(0.06)) {
       this.pickups.push({ id: nid(), pos: { ...e.pos }, kind: 'mp', value: 16, life: 12 });
     }
   }
@@ -2154,7 +2169,7 @@ export class GameEngine {
       colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.92,
     });
     // Crown Spark heal chance
-    if (this.player.relics.includes('crownSpark') && Math.random() < 0.25) {
+    if (this.player.relics.includes('crownSpark') && this.randChance(0.25)) {
       this.healPlayer(Math.floor(this.player.maxHp * 0.08));
     }
   }
@@ -2190,7 +2205,7 @@ export class GameEngine {
       for (let i = 0; i < 4; i++) {
         this.particles.emit({
           x: e.pos.x, y: e.pos.y,
-          vx: (Math.random() - 0.5) * 80, vy: (Math.random() - 0.5) * 80,
+          vx: (this.rand() - 0.5) * 80, vy: (this.rand() - 0.5) * 80,
           life: 0.3, maxLife: 0.3, size: 1.5, colour: '#e23a4a', drag: 0.9,
         });
       }
@@ -2198,8 +2213,8 @@ export class GameEngine {
       // the current floor's hue, layered over the gore so the room
       // theme bleeds into combat feedback.
       for (let i = 0; i < 4; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const sp = 60 + Math.random() * 40;
+        const a = this.rand() * Math.PI * 2;
+        const sp = 60 + this.rand() * 40;
         this.particles.emit({
           x: e.pos.x, y: e.pos.y,
           vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
@@ -2229,8 +2244,8 @@ export class GameEngine {
           const side = i % 2 === 0 ? 1 : -1;
           this.particles.emit({
             x: prevX, y: prevY,
-            vx: perpX * side * (30 + Math.random() * 30) - nx * 10,
-            vy: perpY * side * (30 + Math.random() * 30) - ny * 10,
+            vx: perpX * side * (30 + this.rand() * 30) - nx * 10,
+            vy: perpY * side * (30 + this.rand() * 30) - ny * 10,
             life: 0.32, maxLife: 0.32, size: 1.3, colour: accent, drag: 0.86,
           });
         }
@@ -2313,7 +2328,7 @@ export class GameEngine {
         }
       } else {
         // Reflect chance via lunar mirror
-        if (this.player.relics.includes('lunarMirror') && Math.random() < 0.005) {
+        if (this.player.relics.includes('lunarMirror') && this.randChance(0.005)) {
           pr.fromPlayer = true;
           pr.vel.x *= -1; pr.vel.y *= -1;
           pr.colour = '#6cf6e5';
@@ -2358,7 +2373,7 @@ export class GameEngine {
         const lastSlot = Math.floor((this.timeAlive - dt + phase) / period);
         if (slot !== lastSlot) {
           const col = this.pickupSparkleColour(pk.kind);
-          const a = Math.random() * Math.PI * 2;
+          const a = this.rand() * Math.PI * 2;
           this.particles.emit({
             x: pk.pos.x + Math.cos(a) * 4,
             y: pk.pos.y + Math.sin(a) * 4 - 2,
@@ -2522,7 +2537,7 @@ export class GameEngine {
     if (!next) return;
     // Locked rooms cost a key
     if (next.type === 'locked' && !next.visited) {
-      const useKey = !(this.player.relics.includes('keyOfTheGate') && Math.random() < 0.35);
+      const useKey = !(this.player.relics.includes('keyOfTheGate') && this.randChance(0.35));
       if (this.player.keys <= 0) {
         // Push back
         this.player.pos.x = clamp(p.x, ROOM_MARGIN + 4, ROOM_W - ROOM_MARGIN - 4);
@@ -2559,8 +2574,8 @@ export class GameEngine {
     this.damageNumbers.push({
       id: nid(),
       x, y,
-      vx: (Math.random() - 0.5) * 20,
-      vy: -30 - Math.random() * 20,
+      vx: (this.rand() - 0.5) * 20,
+      vy: -30 - this.rand() * 20,
       life: 0.8, maxLife: 0.8,
       value: Number(value.replace(/[^\d-]/g, '')) || 0,
       colour,
