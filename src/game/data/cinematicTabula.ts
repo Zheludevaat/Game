@@ -321,8 +321,7 @@ function shotWalk(a: ShotArgs): void {
   a.ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
   a.ctx.fillRect(px - 7 * scale, py + 2, 14 * scale, 4);
 
-  drawInitiateProfile(a.ctx, px - 8 * scale, py - 24 * scale, scale, phase, false);
-
+  drawInitiateProfile(a.ctx, px - 8 * scale, py - 24 * scale, scale, phase, false, 'cosmic');
   // Faint cloak trail — small particles behind the Initiate
   for (let i = 0; i < 5; i++) {
     const fade = 1 - i / 5;
@@ -361,7 +360,7 @@ function shotHero(a: ShotArgs): void {
   const sX = baseScale + p * 1.1;
   const cx = a.width / 2;
   const cy = a.height * 0.62;
-  drawInitiateFace(a.ctx, cx - 14 * sX, cy - 14 * sX, sX, 0.35 + p * 0.65);
+  drawInitiateFace(a.ctx, cx - 14 * sX, cy - 14 * sX, sX, 0.35 + p * 0.65, 'cosmic');
 
   // The distant lamp (background, rim-light source) becomes visible
   const lampAlpha = easeOut(clamp01(p * 1.4));
@@ -433,7 +432,7 @@ function shotTitle(a: ShotArgs): void {
   const initiateScale = Math.min(5, Math.max(3, a.height / 130));
   const ix = cx - 8 * initiateScale;
   const iy = groundY - 24 * initiateScale;
-  drawInitiateMeditating(a.ctx, ix, iy, initiateScale, a.total);
+  drawInitiateMeditating(a.ctx, ix, iy, initiateScale, a.total, 'cosmic');
   // Shadow puddle under feet
   a.ctx.fillStyle = 'rgba(0,0,0,0.45)';
   a.ctx.fillRect(ix + 6 * initiateScale, groundY + 1, 12 * initiateScale, 3);

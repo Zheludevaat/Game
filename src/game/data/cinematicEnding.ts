@@ -243,9 +243,9 @@ function shotHymned(a: ShotArgs): void {
     a.ctx.save();
     a.ctx.globalAlpha = matP;
     if (armsRaise > 0) {
-      drawInitiateArmsRaised(a.ctx, ix, iy, scale, 0.7 + p * 0.3);
+      drawInitiateArmsRaised(a.ctx, ix, iy, scale, 0.7 + p * 0.3, 'cosmic');
     } else {
-      drawInitiateHeroic(a.ctx, ix, iy, scale, 0.7 + p * 0.3);
+      drawInitiateHeroic(a.ctx, ix, iy, scale, 0.7 + p * 0.3, 'cosmic');
     }
     a.ctx.restore();
   }
@@ -290,7 +290,7 @@ function shotHymn(a: ShotArgs): void {
   a.ctx.save();
   // Outline by drawing slightly larger black, then erasing centre with
   // the bright halo (the bloom already in place provides this effect).
-  drawInitiateHeroic(a.ctx, ix, iy, scale, 1);
+  drawInitiateHeroic(a.ctx, ix, iy, scale, 1, 'cosmic');
   a.ctx.restore();
 
   // Four lines of the Hymn — fade in at relative points; hold all
