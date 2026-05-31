@@ -648,11 +648,14 @@ export class GameEngine {
     }
     // Reaching the Eighth Sphere is the climactic moment.
     if (isOgdoadFloor(n)) {
+      const hasSevenLamps = this.summary.bossesDefeated >= 7;
       if (!this.summary.ogdoadReached) {
         this.summary.ogdoadReached = true;
         this.unlockCodex('ogdoad.hymn');
         this.unlockCodex('ogdoad.alone');
-        this.cbs.onOgdoadReached?.();
+        if (hasSevenLamps) {
+          this.cbs.onOgdoadReached?.();
+        }
       }
     }
 

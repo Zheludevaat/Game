@@ -1,6 +1,7 @@
 import { RNG, hashSeed } from '../math/rng';
 import { Floor, Room, RoomType } from '../GameTypes';
 import { pickRoomName } from '../data/roomNames';
+import { isPlanetaryWardenFloor } from '../progression/progressionRules';
 
 interface GenOptions {
   floor: number;
@@ -15,14 +16,13 @@ export function generateFloor(opts: GenOptions): Floor {
   const { floor, seed } = opts;
   const rng = new RNG(seed);
 
-  const isBoss = floor > 0 && floor % 10 === 0;
+  const isBoss = isPlanetaryWardenFloor(floor);
   const isMiniBoss = !isBoss && floor > 0 && floor % 5 === 0;
 
-  // Boss floor: minimal layout (start -> corridor -> boss)
-  if (isBoss) {
-    return buildBossFloor(floor, seed);
-  }
-
+  // Planetary Warden floors use the random-walk generator with the farthest
+  // room turned into a boss room. The fixed buildBossFloor layout is kept
+  // as a fallback for debug or endless mode if needed.
+  //
   // Otherwise: random-walk dungeon
   const target = Math.min(7 + Math.floor(floor * 1.5), 16);
   const grid = new Map<string, Room>();
@@ -93,8 +93,8 @@ export function generateFloor(opts: GenOptions): Floor {
     if (d > farthest.d) farthest = { key: k, d };
   }
   const exitRoom = grid.get(farthest.key)!;
-  exitRoom.type = 'exit';
-  exitRoom.name = pickRoomName('exit', rng);
+  exitRoom.type = isBoss ? 'boss' : 'exit';
+  exitRoom.name = pickRoomName(exitRoom.type, rng);
   exitRoom.cleared = false;
   exitRoom.enemiesSpawned = false;
 

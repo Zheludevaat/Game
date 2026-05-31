@@ -133,20 +133,21 @@ export const SPHERE_BY_ID: Record<SphereId, SphereDef> =
 
 /**
  * Map a floor number to a sphere. Floors 1–7 → planetary spheres in order
- * (Moon → Saturn); floor 8 → the Ogdoad; floor 9+ cycles back through the
- * planetary spheres (each turn is a new, deeper ascent).
+ * (Moon → Saturn); floor 8 → the Ogdoad; floor 9+ cycles through the same
+ * 8-floor block (each turn is a new, deeper ascent).
  *
  * Floor 1 is the FIRST sphere reached by the player (the closest to matter),
- * so the array index = floor - 1.
+ * so the array index = floor - 1 within each 8-floor block.
  */
 export function sphereForFloor(floor: number): SphereDef {
   if (floor < 1) return SPHERES[0]!;
-  if (floor === 8) return SPHERE_BY_ID.ogdoad;
-  const idx = (floor - 1) % 7;
-  return SPHERES[idx]!;
+  const local = ((floor - 1) % 8) + 1;
+  if (local === 8) return SPHERE_BY_ID.ogdoad;
+  return SPHERES[local - 1]!;
 }
 
-/** True only the first time the player ever stands in the Eighth Sphere. */
+/** True when the floor number is the Ogdoad (every 8th floor). */
 export function isOgdoadFloor(floor: number): boolean {
-  return floor === 8;
+  if (floor < 1) return false;
+  return ((floor - 1) % 8) + 1 === 8;
 }

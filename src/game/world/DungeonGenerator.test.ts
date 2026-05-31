@@ -36,25 +36,39 @@ describe('DungeonGenerator', () => {
     expect(sameLayout).toBe(false);
   });
 
-  it('regular floors have more rooms than boss floors', () => {
-    const floor1 = generateFloor({ floor: 1, seed: 42 });
-    const floor10 = generateFloor({ floor: 10, seed: 42 });
-    // Floor 10 is a boss floor which has a fixed small layout (4 rooms)
-    expect(floor10.rooms.length).toBe(4);
-    // Floor 1 is a regular floor with random-walk generation
-    expect(floor1.rooms.length).toBeGreaterThan(4);
+  it('warden boss floors have a normal dungeon layout with a boss room', () => {
+    // Floors 1–7 use the random-walk generator (not buildBossFloor).
+    for (let floorNo = 1; floorNo <= 7; floorNo++) {
+      const floor = generateFloor({ floor: floorNo, seed: 42 });
+      expect(floor.isBoss).toBe(true);
+      // Should have a boss room
+      const bossRooms = floor.rooms.filter((r) => r.type === 'boss');
+      expect(bossRooms).toHaveLength(1);
+      // Exit should point to the boss room
+      expect(floor.exitRoomId).toBe(bossRooms[0]!.id);
+      // Should have more than 4 rooms (full random-walk, not buildBossFloor)
+      expect(floor.rooms.length).toBeGreaterThan(4);
+    }
   });
 
-  it('boss floors have 4 rooms (start, shrine, treasure, boss)', () => {
-    const floor = generateFloor({ floor: 10, seed: 42 });
-    expect(floor.isBoss).toBe(true);
-    expect(floor.rooms.length).toBe(4);
-    const types = floor.rooms.map((r) => r.type).sort();
-    expect(types).toEqual(['boss', 'shrine', 'start', 'treasure']);
+  it('first seven floors each contain exactly one Warden boss room', () => {
+    for (let floorNo = 1; floorNo <= 7; floorNo++) {
+      const floor = generateFloor({ floor: floorNo, seed: 42 });
+      const bossRooms = floor.rooms.filter((room) => room.type === 'boss');
+      expect(floor.isBoss).toBe(true);
+      expect(bossRooms).toHaveLength(1);
+      expect(floor.exitRoomId).toBe(bossRooms[0]!.id);
+    }
+  });
+
+  it('floor 8 is the Ogdoad transition, not a Warden boss room', () => {
+    const floor = generateFloor({ floor: 8, seed: 42 });
+    expect(floor.isBoss).toBe(false);
+    expect(floor.rooms.some((room) => room.type === 'boss')).toBe(false);
   });
 
   it('exit room is always reachable on boss floors', () => {
-    const floor = generateFloor({ floor: 10, seed: 42 });
+    const floor = generateFloor({ floor: 1, seed: 42 });
     const startRoom = floor.rooms.find((r) => r.id === floor.startRoomId)!;
     const exitRoom = floor.rooms.find((r) => r.id === floor.exitRoomId)!;
     const reachable = bfsReachable(floor.rooms, startRoom.grid, exitRoom.grid);
@@ -62,7 +76,8 @@ describe('DungeonGenerator', () => {
   });
 
   it('non-boss floors contain a variety of room types', () => {
-    const floor = generateFloor({ floor: 5, seed: 42 });
+    // Floor 8 is the Ogdoad, a non-boss floor
+    const floor = generateFloor({ floor: 8, seed: 42 });
     const types = new Set(floor.rooms.map((r) => r.type));
     expect(types.has('start')).toBe(true);
     expect(types.has('exit')).toBe(true);
