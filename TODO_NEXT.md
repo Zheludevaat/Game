@@ -1,13 +1,8 @@
 # Next Tasks
 
-Highest-priority items at the top — pick the first unchecked when continuing.
+Pick the first unchecked task unless the user gives a newer priority.
 
-- [ ] Manual gameplay session on a touch device to validate joystick comfort and button reachability.
-- [ ] Add a "Lamp of …" relic counter that grows with each boss defeated (currently bosses just drop a relic).
-- [ ] Polish boss intro: brief cinematic camera pan to the seven lamps before health bar appears.
-- [ ] Add per-floor music variation (currently same drone for all dungeon floors).
-- [ ] Persist mid-floor room state for true Continue resume (optional per spec).
-- [ ] Add 1 more enemy variant for floors 8+ (e.g. Salt Banshee that splits on death).
-- [ ] Improve mini-boss arc patterns for Serpent of Brass (segment trail).
-- [ ] Add a visible "press button to bind" countdown to controller remapping.
-- [ ] Add unit tests for `DungeonGenerator` (reachability of exit, room counts).
+- [ ] Finish any failing release gate from `docs/release-checklist.md`.
+- [ ] Complete manual iPhone Safari QA in `docs/mobile-qa.md`.
+- [ ] Complete long-session audio QA in `audio-showcase.html`.
+- [ ] Clear remaining P0/P1 issues in `docs/known-gaps.md`.

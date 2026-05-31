@@ -3,7 +3,7 @@
 ## Overall
 Playable vertical slice. `npm run build` succeeds, app boots, controller/keyboard/touch input work, dungeons generate, combat/loot/shrines/bosses/floor descent all functional. Auto-deploys to GitHub Pages on every push (see `.github/workflows/deploy.yml`). Touch UI + HUD scale responsively from iPad down to iPhone landscape.
 
-## What is complete
+## What is implemented
 - Vite + React + TypeScript scaffold, strict mode, `npm run build` and `npm run typecheck` pass with zero errors.
 - PWA: web app manifest, icons (192/512/180), service worker with offline shell cache, Apple meta tags, safe-area insets, full-screen landscape, rotate overlay (device-agnostic copy).
 - **GitHub Actions deploy**: `.github/workflows/deploy.yml` builds `dist/` and publishes to GitHub Pages on every push to the working branch. User just needs to flip Pages → Source = GitHub Actions in repo settings.
@@ -20,16 +20,15 @@ Playable vertical slice. `npm run build` succeeds, app boots, controller/keyboar
 - Input: unified `InputManager` with keyboard, gamepad (Gamepad API, polling, dead-zones, button edge detection, D-pad), touch (virtual stick + 4 buttons). Method auto-detected and displayed in HUD with gamepad name when known.
 
 ## Partially complete
-- "Continue" run resumes from the last floor and seed, but does NOT serialise full per-room state (mid-floor progress is lost). The task description allows this as an acceptable simplification.
 - Controller remapping has live "press to bind" but no per-button validation/conflict warning. Functional but minimal.
 
 ## Broken
-- None known.
+- No confirmed regressions during development. Manual QA gates in `docs/release-checklist.md` (desktop Chrome, keyboard, gamepad, audio) remain unverified; see `docs/known-gaps.md`.
 
 ## What remains
 - Optional: deeper boss variants per cycle (floor 20, 30 use same boss with scaled HP — task explicitly allows that).
 - Optional: more enemy variety past floor 5+.
-- Optional: per-room mid-floor resume (intentionally out of scope per spec).
+- Polish items in `docs/known-gaps.md` (P2/P3).
 
 ## Current validation results
 - `npm install` — clean
@@ -38,4 +37,4 @@ Playable vertical slice. `npm run build` succeeds, app boots, controller/keyboar
 - Manual smoke test via `vite preview`: HTML served, JS bundle 200 OK, manifest served, icons + service worker present in `dist/`.
 
 ## Next recommended task
-- Manual gameplay polish pass on bigger devices, optionally add a third procedural enemy art variant for floors 7+.
+- Close remaining P1 gaps in `docs/known-gaps.md`, then run the full release checklist in `docs/release-checklist.md`.

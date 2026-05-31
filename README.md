@@ -75,4 +75,4 @@ src/
 public/             manifest.webmanifest, service-worker.js, icons
 ```
 
-See `PROJECT_STATUS.md`, `ACCEPTANCE_AUDIT.md`, `POLISH_AUDIT.md`, and `TODO_NEXT.md` for detailed status.
+See `PROJECT_STATUS.md`, `ACCEPTANCE_AUDIT.md`, `POLISH_AUDIT.md`, `docs/known-gaps.md`, and `TODO_NEXT.md` for detailed status.

@@ -74,4 +74,4 @@
 - ✅ HUD throttled to ~20Hz to avoid React thrash.
 
 ## Bugs
-- None known. Reported issues: 0.
+- No confirmed regressions during development. Full manual QA across desktop Chrome, keyboard, gamepad, and audio scenarios has not been completed (see `docs/known-gaps.md` for remaining gates).

@@ -161,4 +161,4 @@ All ✅ — see POLISH_AUDIT.md.
 - 🟡 No automated test suite (none required by spec).
 
 ## Net status
-No ❌ items.
+All acceptance criteria from the original spec are implemented (no red items). Manual release-checklist gates and long-session audio QA remain unverified — see `docs/known-gaps.md`.
