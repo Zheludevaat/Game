@@ -1,6 +1,7 @@
 import { STORAGE_KEYS } from '../constants';
 import { ArchetypeId, MetaState, SettingsState } from '../GameTypes';
 import { DEFAULT_GAMEPAD_MAP } from '../input/controlMappings';
+import { RunSnapshot } from './runSnapshot';
 
 const DEFAULT_SETTINGS: SettingsState = {
   musicVolume: 0.4,
@@ -118,4 +119,20 @@ export function saveResume(r: ResumeState | null): void {
     if (r) localStorage.setItem(STORAGE_KEYS.resume, JSON.stringify(r));
     else localStorage.removeItem(STORAGE_KEYS.resume);
   } catch (e) { console.warn('[SaveSystem] failed to save resume', e); }
+}
+
+export function saveRunSnapshot(snapshot: RunSnapshot): void {
+  safeSave(STORAGE_KEYS.runSnapshot, snapshot);
+}
+
+export function loadRunSnapshot(): RunSnapshot | null {
+  const parsed = safeLoad<RunSnapshot | null>(STORAGE_KEYS.runSnapshot, null);
+  if (!parsed || !parsed.version) return null;
+  return parsed;
+}
+
+export function clearRunSnapshot(): void {
+  try { localStorage.removeItem(STORAGE_KEYS.runSnapshot); } catch (e) {
+    console.warn('[SaveSystem] failed to clear run snapshot', e);
+  }
 }

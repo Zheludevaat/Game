@@ -20,6 +20,7 @@ import { ParticleSystem } from './rendering/Particles';
 import { InputManager } from './input/InputManager';
 import { audio } from './systems/AudioSystem';
 import { Renderer, RenderState, CameraState } from './rendering/Renderer';
+import { RunSnapshot, RUN_SNAPSHOT_VERSION } from './systems/runSnapshot';
 
 export interface HudSnapshot {
   hp: number; maxHp: number;
@@ -74,6 +75,10 @@ export interface EngineCallbacks {
   onDialogueOpen?: (state: ActiveDialogueState) => void;
   /** Dialogue was closed. Host should hide DialoguePanel. */
   onDialogueClose?: () => void;
+  /** The engine has reached a stable checkpoint and a RunSnapshot is available
+   * for the host to persist to localStorage. Fired on floor entry, room clear,
+   * chest open, shrine use, boss defeat, and pause. */
+  onAutoSave?: (snapshot: RunSnapshot) => void;
 }
 
 export interface RunSummary {
@@ -220,6 +225,8 @@ export interface EngineConfig {
   meta: MetaState;
   reducedParticles?: boolean;
   runSeed?: number;
+  /** When set, mount restores the run from a snapshot instead of a fresh start. */
+  resumeSnapshot?: RunSnapshot;
 }
 
 const ROOM_MARGIN = 18;
@@ -335,6 +342,7 @@ export class GameEngine {
   private floor!: Floor;
   private currentRoom!: Room;
   private player!: PlayerState;
+  private defeatedWardenIds: string[] = [];
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
   private pickups: Pickup[] = [];
@@ -434,9 +442,14 @@ export class GameEngine {
     this.summary.spheresVisited = [];
     this.summary.ogdoadReached = false;
     this.summary.archetype = this.archetype;
+    this.defeatedWardenIds = [];
 
-    this.initPlayer();
-    this.goToFloor(config.startingFloor ?? 1);
+    if (config.resumeSnapshot) {
+      this.applyResumeSnapshot(config.resumeSnapshot);
+    } else {
+      this.initPlayer();
+      this.goToFloor(config.startingFloor ?? 1);
+    }
 
     this.running = true;
     this.paused = false;
@@ -454,6 +467,8 @@ export class GameEngine {
     if (p === this.paused) return;
     this.paused = p;
     if (!p) this.lastTime = performance.now();
+    // Auto-save when the player pauses (likely leaving the game)
+    if (p && !this.dead) this.autoSave();
   }
 
   setReducedParticles(r: boolean): void {
@@ -637,6 +652,7 @@ export class GameEngine {
       seenEnding: false,
       ogdoadReached: 0,
     };
+    this.defeatedWardenIds = [];
     this.initPlayer();
   }
 
@@ -728,6 +744,62 @@ export class GameEngine {
     audio.stopAmbience();
     audio.startDungeonAmbience(sph.id);
     audio.sfx('descend');
+    this.autoSave();
+  }
+
+  /** Restore engine state from a saved snapshot. Called from mount() when
+   *  config.resumeSnapshot is provided. Sets the floor, room, player state,
+   *  room clear/open/shrine states, and defeated-warden tracking. */
+  private applyResumeSnapshot(snap: RunSnapshot): void {
+    this.runSeed = snap.runSeed;
+    this.initPlayer();
+
+    // Generate the saved floor from the deterministic seed
+    this.goToFloor(snap.floor);
+
+    // Override room states from the snapshot (goToFloor generates fresh rooms)
+    for (const id of snap.clearedRoomIds) {
+      const r = this.floor.rooms.find((x) => x.id === id);
+      if (r) { r.cleared = true; r.enemiesSpawned = true; }
+    }
+    for (const id of snap.openedChestRoomIds) {
+      const r = this.floor.rooms.find((x) => x.id === id);
+      if (r) r.chestOpened = true;
+    }
+    for (const id of snap.shrineUsedRoomIds) {
+      const r = this.floor.rooms.find((x) => x.id === id);
+      if (r) r.shrineUsed = true;
+    }
+
+    // Override player state
+    this.player.hp = snap.hp;
+    this.player.maxHp = snap.maxHp;
+    this.player.mp = snap.mp;
+    this.player.maxMp = snap.maxMp;
+    this.player.coins = snap.coins;
+    this.player.keys = snap.keys;
+    this.player.weapons = [...snap.weapons];
+    this.player.weaponIdx = 0;
+    this.player.spells = [...snap.spells];
+    this.player.spellIdx = 0;
+    this.player.relics = [...snap.relics];
+
+    // Restore defeated-warden tracking
+    this.defeatedWardenIds = [...snap.defeatedWardenIds];
+
+    // Restore summary counts so the UI shows correct progress
+    this.summary.roomsCleared = snap.clearedRoomIds.length;
+    this.summary.bossesDefeated = snap.defeatedWardenIds.length;
+
+    // Enter the saved room
+    const savedRoom = this.floor.rooms.find((r) => r.id === snap.roomId);
+    if (savedRoom) {
+      this.enterRoom(savedRoom, { x: ROOM_W / 2, y: ROOM_H / 2 });
+    } else {
+      // Fallback: start room
+      const startRoom = this.floor.rooms.find((r) => r.id === this.floor.startRoomId);
+      if (startRoom) this.enterRoom(startRoom, { x: ROOM_W / 2, y: ROOM_H / 2 });
+    }
   }
 
   private enterRoom(room: Room, entryPos: Vec): void {
@@ -1511,6 +1583,7 @@ export class GameEngine {
       this.pickups.push({ id: nid(), pos: { x, y: y + 18 }, kind: 'key', value: 1, life: 22 });
     }
     this.particles.burst(x, y, 30, { colour: PALETTE.gold, life: 1, maxLife: 1, drag: 0.9 });
+    this.autoSave();
   }
 
   private beginShrine(kind: ShrineKind): void {
@@ -1573,6 +1646,7 @@ export class GameEngine {
       this.particles.burst(ROOM_W / 2, ROOM_H / 2 - 16, 36, { colour: PALETTE.teal, life: 1.4, maxLife: 1.4 });
       // Reveal the teaching tied to this Operation.
       this.unlockCodex(`op.${kind}`);
+      this.autoSave();
     }
     this.pendingShrine = null;
   }
@@ -2084,6 +2158,7 @@ export class GameEngine {
       colour: e.isBoss ? '#ffd97a' : '#e23a4a', life: 0.9, maxLife: 0.9,
     });
     if (e.isBoss) {
+      this.defeatedWardenIds.push(e.visualKey);
       this.summary.bossesDefeated += 1;
       audio.sfx('bossDeath');
       audio.stopBossMusic();
@@ -2136,6 +2211,7 @@ export class GameEngine {
           kind: 'essence', value: 3, life: 40,
         });
       }
+      this.autoSave();
     } else {
       audio.sfx('enemyHit');
       this.dropLoot(e);
@@ -2186,6 +2262,7 @@ export class GameEngine {
     if (this.player.relics.includes('crownSpark') && this.randChance(0.25)) {
       this.healPlayer(Math.floor(this.player.maxHp * 0.08));
     }
+    this.autoSave();
   }
 
   private healPlayer(n: number): void {
@@ -2757,6 +2834,35 @@ export class GameEngine {
 
   getSummary(): RunSummary { return this.summary; }
   isDead(): boolean { return this.dead; }
+
+  /** Build a snapshot of the current run state for save/resume. */
+  createRunSnapshot(): RunSnapshot {
+    return {
+      version: RUN_SNAPSHOT_VERSION,
+      archetype: this.archetype.id,
+      runSeed: this.runSeed,
+      floor: this.floor.number,
+      roomId: this.currentRoom.id,
+      hp: this.player.hp,
+      maxHp: this.player.maxHp,
+      mp: this.player.mp,
+      maxMp: this.player.maxMp,
+      coins: this.player.coins,
+      keys: this.player.keys,
+      weapons: [...this.player.weapons],
+      spells: [...this.player.spells],
+      relics: [...this.player.relics],
+      defeatedWardenIds: [...this.defeatedWardenIds],
+      openedChestRoomIds: this.floor.rooms.filter((r) => r.chestOpened).map((r) => r.id),
+      clearedRoomIds: this.floor.rooms.filter((r) => r.cleared).map((r) => r.id),
+      shrineUsedRoomIds: this.floor.rooms.filter((r) => r.shrineUsed).map((r) => r.id),
+    };
+  }
+
+  /** Auto-save: notify the host that a RunSnapshot is available for persisting. */
+  private autoSave(): void {
+    this.cbs.onAutoSave?.(this.createRunSnapshot());
+  }
 
   /** Advance to the next dialogue line. No-op if dialogue is not active. */
   advanceDialogue(): void {

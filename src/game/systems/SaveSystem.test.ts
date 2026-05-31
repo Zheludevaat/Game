@@ -6,12 +6,14 @@ import {
   loadMeta, saveMeta,
   loadLastArchetype, saveLastArchetype,
   loadResume, saveResume,
+  loadRunSnapshot, saveRunSnapshot, clearRunSnapshot,
   resetAllSave,
 } from './SaveSystem';
+import { RUN_SNAPSHOT_VERSION, RunSnapshot } from './runSnapshot';
 
 const STORAGE_KEYS = [
   'sl.settings', 'sl.best', 'sl.essence', 'sl.meta',
-  'sl.lastArchetype', 'sl.gamepadMap', 'sl.resume',
+  'sl.lastArchetype', 'sl.gamepadMap', 'sl.resume', 'sl.runSnapshot',
 ];
 
 beforeEach(() => {
@@ -93,5 +95,62 @@ describe('SaveSystem', () => {
     resetAllSave();
     expect(loadBestFloor()).toBe(0);
     expect(loadEssence()).toBe(0);
+  });
+
+  it('round-trips run snapshot', () => {
+    const snap: RunSnapshot = {
+      version: RUN_SNAPSHOT_VERSION,
+      archetype: 'magus',
+      runSeed: 42,
+      floor: 5,
+      roomId: 3,
+      hp: 20, maxHp: 60,
+      mp: 10, maxMp: 40,
+      coins: 99, keys: 2,
+      weapons: ['tarnishedDagger'],
+      spells: ['sparkBolt'],
+      relics: ['blackSalt'],
+      defeatedWardenIds: ['moon'],
+      openedChestRoomIds: [1],
+      clearedRoomIds: [1, 2],
+      shrineUsedRoomIds: [3],
+    };
+    saveRunSnapshot(snap);
+    const loaded = loadRunSnapshot();
+    expect(loaded).not.toBeNull();
+    expect(loaded!.version).toBe(1);
+    expect(loaded!.archetype).toBe('magus');
+    expect(loaded!.runSeed).toBe(42);
+    expect(loaded!.floor).toBe(5);
+    expect(loaded!.roomId).toBe(3);
+    expect(loaded!.hp).toBe(20);
+    expect(loaded!.maxHp).toBe(60);
+    expect(loaded!.coins).toBe(99);
+    expect(loaded!.weapons).toEqual(['tarnishedDagger']);
+    expect(loaded!.defeatedWardenIds).toEqual(['moon']);
+    expect(loaded!.clearedRoomIds).toEqual([1, 2]);
+  });
+
+  it('loadRunSnapshot returns null for missing data', () => {
+    localStorage.removeItem('sl.runSnapshot');
+    expect(loadRunSnapshot()).toBeNull();
+  });
+
+  it('clearRunSnapshot removes saved data', () => {
+    const snap: RunSnapshot = {
+      version: RUN_SNAPSHOT_VERSION,
+      archetype: 'hermit',
+      runSeed: 0,
+      floor: 1, roomId: 0,
+      hp: 10, maxHp: 50,
+      mp: 5, maxMp: 30,
+      coins: 0, keys: 0,
+      weapons: [], spells: [], relics: [],
+      defeatedWardenIds: [],
+      openedChestRoomIds: [], clearedRoomIds: [], shrineUsedRoomIds: [],
+    };
+    saveRunSnapshot(snap);
+    clearRunSnapshot();
+    expect(loadRunSnapshot()).toBeNull();
   });
 });

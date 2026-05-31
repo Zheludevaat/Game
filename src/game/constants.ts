@@ -18,6 +18,7 @@ export const STORAGE_KEYS = {
   lastArchetype: 'sl.lastArchetype',
   gamepadMap: 'sl.gamepadMap',
   resume: 'sl.resume',
+  runSnapshot: 'sl.runSnapshot',
 } as const;
 
 export const PALETTE = {

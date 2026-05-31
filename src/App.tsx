@@ -4,8 +4,10 @@ import { InputManager } from './game/input/InputManager';
 import { audio } from './game/systems/AudioSystem';
 import {
   loadBestFloor, loadEssence, loadLastArchetype, loadMeta, loadResume, loadSettings,
+  loadRunSnapshot, saveRunSnapshot, clearRunSnapshot,
   resetAllSave, saveBestFloor, saveEssence, saveLastArchetype, saveMeta, saveResume, saveSettings,
 } from './game/systems/SaveSystem';
+import { RunSnapshot } from './game/systems/runSnapshot';
 import { LoadingScreen } from './components/LoadingScreen';
 import { MainMenu } from './components/MainMenu';
 import { ArchetypeSelect } from './components/ArchetypeSelect';
@@ -57,7 +59,7 @@ export function App(): JSX.Element {
   const [hud, setHud] = useState<HudSnapshot | null>(null);
   const [summary, setSummary] = useState<RunSummary | null>(null);
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
-  const [resumeAvailable, setResumeAvailable] = useState<boolean>(() => !!loadResume());
+  const [resumeAvailable, setResumeAvailable] = useState<boolean>(() => !!loadResume() || !!loadRunSnapshot());
   const [isTouchDevice] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(hover: none) and (pointer: coarse)').matches
@@ -201,14 +203,18 @@ export function App(): JSX.Element {
     };
   }, [screen]);
 
-  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number }) => {
+  const startRun = useCallback((archetypeId: ArchetypeId, opts?: { floor?: number; runSeed?: number; resumeSnapshot?: RunSnapshot }) => {
     saveLastArchetype(archetypeId);
     setLastArchetype(archetypeId);
     setSummary(null);
+    // Clear any existing snapshot so stale data doesn't linger.
+    // When resuming, the caller passes resumeSnapshot so this clear
+    // removes any older snapshot before the engine writes a fresh one.
+    clearRunSnapshot();
     // First time ever: gate through "The Gate Opens" cinematic, then
     // resume into the actual run on its onDone. Resume flow (opts.floor
     // > 1) skips the cinematic — that's a continuation, not a new run.
-    const isFirstRun = !meta.seenNewRunCinematic && (opts?.floor ?? 1) === 1;
+    const isFirstRun = !meta.seenNewRunCinematic && !opts?.resumeSnapshot && (opts?.floor ?? 1) === 1;
     if (isFirstRun) {
       setPendingRunStart({ id: archetypeId, floor: opts?.floor, runSeed: opts?.runSeed });
       go('newRunIntro');
@@ -218,8 +224,12 @@ export function App(): JSX.Element {
     // Persist a resume entry — used by Continue button next time
     const runSeed = opts?.runSeed ?? Math.floor(Math.random() * 0xffffffff);
     const startingFloor = opts?.floor ?? 1;
-    saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
-    setResumeAvailable(true);
+    // Only save the old-format resume for non-snapshot starts (fresh runs)
+    // so the Continue button can fall back if the snapshot is missing.
+    if (!opts?.resumeSnapshot) {
+      saveResume({ archetype: archetypeId, floor: startingFloor, seed: runSeed });
+      setResumeAvailable(true);
+    }
     // Wait for React to flush the canvas to the DOM, then mount the engine.
     requestAnimationFrame(() => {
       const canvas = canvasRef.current;
@@ -253,11 +263,12 @@ export function App(): JSX.Element {
           });
           setEssence((e) => { const ne = e + s.essenceCollected; saveEssence(ne); return ne; });
           saveResume(null);
+          clearRunSnapshot();
           setResumeAvailable(false);
           go('gameOver');
         },
         onFloorChange: (n) => {
-          // Update resume floor checkpoint
+          // Update resume floor checkpoint (old-format fallback)
           saveResume({ archetype: archetypeId, floor: n, seed: runSeed });
         },
         onCodexUnlock: (id) => {
@@ -281,6 +292,7 @@ export function App(): JSX.Element {
         },
         onDialogueOpen: (d) => setDialogue(d),
         onDialogueClose: () => setDialogue(null),
+        onAutoSave: (snapshot) => saveRunSnapshot(snapshot),
       });
       engineRef.current = engine;
       audio.unlock();
@@ -291,6 +303,7 @@ export function App(): JSX.Element {
         reducedParticles: settings.reducedParticles,
         startingFloor,
         runSeed,
+        resumeSnapshot: opts?.resumeSnapshot,
       });
     });
   }, [meta, settings.reducedParticles, go]);
@@ -386,6 +399,15 @@ export function App(): JSX.Element {
           onCinematics={() => go('cinematics')}
           onNewRun={() => go('archetype')}
           onContinue={() => {
+            const snapshot = loadRunSnapshot();
+            if (snapshot) {
+              startRun(snapshot.archetype, {
+                floor: snapshot.floor,
+                runSeed: snapshot.runSeed,
+                resumeSnapshot: snapshot,
+              });
+              return;
+            }
             const r = loadResume();
             if (!r) { go('archetype'); return; }
             startRun(r.archetype, { floor: r.floor, runSeed: r.seed });
@@ -441,6 +463,7 @@ export function App(): JSX.Element {
           onQuit={() => {
             stopRun();
             saveResume(null);
+            clearRunSnapshot();
             setResumeAvailable(false);
             go('menu');
           }}
