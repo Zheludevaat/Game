@@ -11,6 +11,7 @@ import { SPELLS, SPELL_LOOT_POOL, STARTER_SPELL } from './data/spells';
 import { WEAPONS, WEAPON_LOOT_POOL, STARTER_WEAPON } from './data/weapons';
 import { CODEX, CODEX_BY_ID } from './data/codex';
 import { SPHERES, SphereId, sphereForFloor, isOgdoadFloor } from './data/spheres';
+import { requiredWardenIdsBeforeOgdoad } from './progression/progressionRules';
 import { BOSSES, BossDef, BossPattern } from './data/bosses';
 import { NPCS, NPC_BY_ID, NpcDef, NpcPassive } from './data/npcs';
 import { generateFloor } from './world/DungeonGenerator';
@@ -626,7 +627,7 @@ export class GameEngine {
     this.enterRoom(startRoom, { x: ROOM_W / 2, y: ROOM_H / 2 });
     const isFirstReach = !this.summary.spheresVisited.includes(sph.id);
     if (isFirstReach) this.summary.spheresVisited.push(sph.id);
-    const cycle = Math.floor((n - 1) / 7); // 0 = first ascent, 1 = second, …
+    const cycle = Math.floor((n - 1) / 8); // 0 = first ascent, 1 = second, …
     const suffix = cycle > 0 ? ` (Cycle ${cycle + 1})` : '';
     const bannerText = this.floor.isBoss
       ? `${sph.name} — Sanctum of the Warden`
@@ -648,7 +649,7 @@ export class GameEngine {
     }
     // Reaching the Eighth Sphere is the climactic moment.
     if (isOgdoadFloor(n)) {
-      const hasSevenLamps = this.summary.bossesDefeated >= 7;
+      const hasSevenLamps = this.summary.bossesDefeated >= requiredWardenIdsBeforeOgdoad().length;
       if (!this.summary.ogdoadReached) {
         this.summary.ogdoadReached = true;
         this.unlockCodex('ogdoad.hymn');

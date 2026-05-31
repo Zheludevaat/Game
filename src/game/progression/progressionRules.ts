@@ -1,32 +1,17 @@
-import { SphereDef, SphereId, SPHERES, SPHERE_BY_ID } from '../data/spheres';
+import { SphereId } from '../data/spheres';
 
-const PLANETARY_SPHERES = SPHERES.filter((s) => s.id !== 'ogdoad');
-
-export function storyCycleIndexForFloor(floor: number): number {
-  if (floor < 1) return 0;
-  return Math.floor((floor - 1) / 8);
+/** 1-based index within the current 8-floor block (1–8). */
+function localFloorIndex(floor: number): number {
+  return ((floor - 1) % 8) + 1;
 }
 
+/** Floors 1–7 in every 8-floor block are planetary Warden floors. */
 export function isPlanetaryWardenFloor(floor: number): boolean {
-  const local = ((floor - 1) % 8) + 1;
-  return local >= 1 && local <= 7;
+  if (floor < 1) return false;
+  return localFloorIndex(floor) <= 7;
 }
 
-export function isOgdoadFloorNumber(floor: number): boolean {
-  return floor >= 1 && ((floor - 1) % 8) + 1 === 8;
-}
-
-export function sphereForProgressionFloor(floor: number): SphereDef {
-  if (floor < 1) return PLANETARY_SPHERES[0]!;
-  if (isOgdoadFloorNumber(floor)) return SPHERE_BY_ID.ogdoad;
-  const local = ((floor - 1) % 8) + 1;
-  return PLANETARY_SPHERES[local - 1]!;
-}
-
-export function requiredWardenIdsBeforeOgdoad(): SphereId[] {
-  return PLANETARY_SPHERES.map((s) => s.id);
-}
-
-export function isSaturnWardenFloor(floor: number): boolean {
-  return sphereForProgressionFloor(floor).id === 'saturn' && isPlanetaryWardenFloor(floor);
+/** The seven planetary sphere IDs the player must defeat before the Ogdoad. */
+export function requiredWardenIdsBeforeOgdoad(): string[] {
+  return ['moon', 'mercury', 'venus', 'sun', 'mars', 'jupiter', 'saturn'];
 }
