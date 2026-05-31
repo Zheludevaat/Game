@@ -240,3 +240,209 @@ export function innerLetterbox(a: ShotArgs, barFrac: number): void {
   a.ctx.fillRect(0, 0, a.width, bar);
   a.ctx.fillRect(0, a.height - bar, a.width, bar);
 }
+
+// ─── God rays — light cones from a point source ─────────────────────
+
+export function godRays(
+  a: ShotArgs,
+  x: number, y: number,
+  radius: number,
+  length: number,
+  colour: string,
+  intensity: number,
+  rayCount = 6,
+): void {
+  a.ctx.save();
+  a.ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < rayCount; i++) {
+    const angle = (i / rayCount) * Math.PI * 2 + a.total * 0.08;
+    const falloff = 0.4 + 0.6 * Math.abs(Math.cos(angle * 0.5 + a.total * 0.03));
+    const g = a.ctx.createLinearGradient(x, y, x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+    g.addColorStop(0, withAlpha(colour, intensity * falloff));
+    g.addColorStop(1, withAlpha(colour, 0));
+    a.ctx.fillStyle = g;
+    a.ctx.beginPath();
+    a.ctx.moveTo(x + Math.cos(angle - 0.04) * radius, y + Math.sin(angle - 0.04) * radius);
+    a.ctx.lineTo(x + Math.cos(angle + 0.04) * radius, y + Math.sin(angle + 0.04) * radius);
+    a.ctx.lineTo(x + Math.cos(angle + 0.04) * (radius + length), y + Math.sin(angle + 0.04) * (radius + length));
+    a.ctx.lineTo(x + Math.cos(angle - 0.04) * (radius + length), y + Math.sin(angle - 0.04) * (radius + length));
+    a.ctx.fill();
+  }
+  a.ctx.restore();
+}
+
+// ─── Volumetric fog — layered-sine fog banks ─────────────────────────
+
+export function volumetricFog(
+  a: ShotArgs,
+  colour: string,
+  density: number,
+  speed = 1,
+  seed = 1,
+): void {
+  const layers = 4;
+  a.ctx.save();
+  a.ctx.globalCompositeOperation = 'lighter';
+  for (let l = 0; l < layers; l++) {
+    const baseY = a.height * (0.55 + l * 0.12);
+    const amplitude = 30 + l * 15;
+    const freq = 0.003 + l * 0.001;
+    for (let x = 0; x < a.width; x += 3) {
+      const wave = Math.sin(x * freq + a.total * speed * (0.3 + l * 0.15) + seed + l) * amplitude;
+      const alpha = density * (0.15 + 0.08 * Math.sin(x * 0.01 + l + a.total * 0.2)) * (1 - l * 0.2);
+      if (alpha <= 0) continue;
+      a.ctx.fillStyle = withAlpha(colour, alpha);
+      a.ctx.fillRect(x, baseY + wave, 3, 24 + l * 8);
+    }
+  }
+  a.ctx.restore();
+}
+
+// ─── Film grain — subtle noise overlay ──────────────────────────────
+
+export function filmGrain(a: ShotArgs, intensity = 0.03, seed = 1): void {
+  const step = 3;
+  a.ctx.save();
+  for (let y = 0; y < a.height; y += step) {
+    for (let x = 0; x < a.width; x += step) {
+      const rx = ((x * 7919 + y * 6271 + seed * 31 + Math.floor(a.total * 60) * 137) % 233280) / 233280;
+      if (rx < intensity) {
+        a.ctx.fillStyle = `rgba(255,255,255,${rx * 0.4})`;
+        a.ctx.fillRect(x, y, step, step);
+      }
+    }
+  }
+  a.ctx.restore();
+}
+
+// ─── Chromatic aberration — RGB offset toward edges ──────────────────
+
+export function chromaticAberration(a: ShotArgs, strength = 2): void {
+  const w = a.width, h = a.height;
+  const src = a.ctx.getImageData(0, 0, w, h);
+  const dst = a.ctx.createImageData(w, h);
+  const cx = w / 2, cy = h / 2;
+  const maxDist = Math.sqrt(cx * cx + cy * cy);
+
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const dx = px - cx, dy = py - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy) / maxDist;
+      const shift = dist * strength;
+      const shiftX = (dx / (dist * maxDist + 1)) * shift;
+      const shiftY = (dy / (dist * maxDist + 1)) * shift;
+
+      const si = (py * w + px) * 4;
+      const ri = clampIdx((py + Math.round(shiftY)) * w + (px + Math.round(shiftX)), w, h);
+      const gi = clampIdx(py * w + px, w, h);
+      const bi = clampIdx((py - Math.round(shiftY)) * w + (px - Math.round(shiftX)), w, h);
+
+      dst.data[si]     = src.data[ri * 4];
+      dst.data[si + 1] = src.data[gi * 4 + 1];
+      dst.data[si + 2] = src.data[bi * 4 + 2];
+      dst.data[si + 3] = src.data[si + 3];
+    }
+  }
+  a.ctx.putImageData(dst, 0, 0);
+}
+
+function clampIdx(idx: number, w: number, h: number): number {
+  return Math.max(0, Math.min(w * h - 1, idx));
+}
+
+// ─── Lens flare — disc → ring → rays → ghost ────────────────────────
+
+export function lensFlare(
+  a: ShotArgs,
+  cx: number, cy: number,
+  colour: string,
+  intensity: number,
+): void {
+  a.ctx.save();
+  a.ctx.globalCompositeOperation = 'lighter';
+
+  // Central disc
+  const disc = a.ctx.createRadialGradient(cx, cy, 0, cx, cy, 28);
+  disc.addColorStop(0, withAlpha(colour, 0.9 * intensity));
+  disc.addColorStop(0.3, withAlpha(colour, 0.5 * intensity));
+  disc.addColorStop(1, withAlpha(colour, 0));
+  a.ctx.fillStyle = disc;
+  a.ctx.fillRect(cx - 28, cy - 28, 56, 56);
+
+  // Inner ring
+  a.ctx.strokeStyle = withAlpha(colour, 0.6 * intensity);
+  a.ctx.lineWidth = 2;
+  a.ctx.beginPath();
+  a.ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+  a.ctx.stroke();
+
+  // Diagonal rays
+  for (let i = 0; i < 4; i++) {
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const g = a.ctx.createLinearGradient(
+      cx, cy,
+      cx + Math.cos(angle) * 80, cy + Math.sin(angle) * 80,
+    );
+    g.addColorStop(0, withAlpha(colour, 0.5 * intensity));
+    g.addColorStop(1, withAlpha(colour, 0));
+    a.ctx.fillStyle = g;
+    a.ctx.fillRect(cx - 40, cy - 1, 80, 2);
+    a.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    a.ctx.translate(cx, cy);
+    a.ctx.rotate(angle);
+    a.ctx.fillRect(0, -1, 80, 2);
+    a.ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  // Ghost reflection opposite
+  const gx = cx + (cx - a.width / 2) * 0.6;
+  const gy = cy + (cy - a.height / 2) * 0.6;
+  const ghost = a.ctx.createRadialGradient(gx, gy, 0, gx, gy, 18);
+  ghost.addColorStop(0, withAlpha(colour, 0.25 * intensity));
+  ghost.addColorStop(1, withAlpha(colour, 0));
+  a.ctx.fillStyle = ghost;
+  a.ctx.fillRect(gx - 18, gy - 18, 36, 36);
+
+  a.ctx.restore();
+}
+
+// ─── Ember particles — rising sparks with life cycle ─────────────────
+
+export function emberParticles(
+  a: ShotArgs,
+  count: number,
+  originX: number,
+  originY: number,
+  spread: number,
+  seed = 1,
+): void {
+  a.ctx.save();
+  a.ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < count; i++) {
+    const life = 1.2 + (i * 0.17);
+    const age = ((a.total + i * 0.43 + seed * 0.1) % life) / life;
+    const sx = ((i * 7919 + seed * 137) % 233280) / 233280 - 0.5;
+    const sy = ((i * 5077 + seed * 313) % 233280) / 233280;
+    const x = originX + sx * spread + Math.sin(a.total * 2 + i) * spread * 0.3;
+    const y = originY - age * 80 + sy * 10;
+    const alpha = age < 0.1 ? age / 0.1 : age > 0.7 ? (1 - age) / 0.3 : 1;
+    if (alpha <= 0) continue;
+    const warm = age < 0.3 ? `rgba(255, ${180 + Math.floor(age * 250)}, 40, ${alpha * 0.8})`
+      : `rgba(${Math.floor(200 - age * 200)}, ${Math.floor(80 - age * 80)}, 20, ${alpha * 0.6})`;
+    a.ctx.fillStyle = warm;
+    a.ctx.beginPath();
+    a.ctx.arc(x, y, 1.5 + (1 - age) * 2, 0, Math.PI * 2);
+    a.ctx.fill();
+  }
+  a.ctx.restore();
+}
+
+// ─── Strobe — brief full-frame flash ─────────────────────────────────
+
+export function strobe(a: ShotArgs, alpha: number, colour = '#ffffff'): void {
+  a.ctx.save();
+  a.ctx.globalCompositeOperation = 'lighter';
+  a.ctx.fillStyle = withAlpha(colour, alpha);
+  a.ctx.fillRect(0, 0, a.width, a.height);
+  a.ctx.restore();
+}

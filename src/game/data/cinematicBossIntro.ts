@@ -12,13 +12,14 @@ import { drawEnemy, getEnemySize } from '../rendering/PixelArt';
 import {
   clamp01, easeIn, easeOut, withAlpha,
   vignette, colorGrade, bloomPoint, starfield, motes,
-  nebula, applyShake, cinemaText, StarLayer,
+  nebula, applyShake, cinemaText,
 } from '../rendering/cinemaHelpers';
+import { STAR_PRESETS } from '../rendering/artBible';
 import { SPHERE_BY_ID, SphereId, SphereDef } from './spheres';
 import { BOSS_INTROS } from './cutscenes';
 
-const FAR_STARS: StarLayer  = { count: 100, speed: 1.8, parallaxY: 0.6, hue: '244, 210, 122', size: 1 };
-const MID_STARS: StarLayer  = { count: 50,  speed: 4,   parallaxY: 1.4, hue: '255, 247, 214', size: 1.2 };
+const FAR_STARS = { ...STAR_PRESETS.far, count: 100, speed: 1.8, parallaxY: 0.6 };
+const MID_STARS = { ...STAR_PRESETS.mid, count: 50, speed: 4, parallaxY: 1.4, size: 1.2 };
 
 // ─── Shot 1 — The Sphere approaches ──────────────────────────────────
 // Wide cosmic shot. Sphere's glyph drifts into centre, pulses; ringed

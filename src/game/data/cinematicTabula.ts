@@ -15,14 +15,15 @@ import {
   clamp01, easeIn, easeOut, easeInOut, withAlpha,
   vignette, colorGrade, bloomPoint, starfield, motes,
   nebula, groundMist, brokenColumn, cinemaText, applyShake,
-  StarLayer,
+  godRays, filmGrain, chromaticAberration, emberParticles,
 } from '../rendering/cinemaHelpers';
+import { SPHERE_COLOURS, STAR_PRESETS } from '../rendering/artBible';
 
-// ─── shared starfield layers ─────────────────────────────────────────
+// ─── shared starfield layers (tuned from presets) ───────────────────
 
-const FAR_STARS: StarLayer = { count: 120, speed: 2, parallaxY: 1, hue: '244, 210, 122', size: 1 };
-const MID_STARS: StarLayer = { count: 60,  speed: 6, parallaxY: 3, hue: '255, 247, 214', size: 1.3 };
-const NEAR_STARS: StarLayer = { count: 30, speed: 16, parallaxY: 8, hue: '255, 247, 214', size: 2 };
+const FAR_STARS  = { ...STAR_PRESETS.far };
+const MID_STARS  = { ...STAR_PRESETS.mid };
+const NEAR_STARS = { ...STAR_PRESETS.near };
 
 // ─── SHOT 1 — Cosmic push-in toward the One ──────────────────────────
 
@@ -145,20 +146,19 @@ function shotFracture(a: ShotArgs): void {
     a.ctx.fillRect(0, 0, a.width, a.height);
   }
 
+  // Chromatic aberration during the pre-flash tremble
+  if (buildup > 0.6 && flash < 0.3) {
+    chromaticAberration(a, 2 + buildup * 2);
+  }
+  // Film grain at flash peak for texture
+  if (flash > 0.5) {
+    filmGrain(a, flash * 0.4, 2);
+  }
+
   vignette(a, 0.4);
 }
 
 // ─── SHOT 3 — Seven rings draw outward; lamps ignite ────────────────
-
-export const SPHERE_COLOURS = [
-  { ring: '#cdd6dc', lamp: '#ffe6a3' },
-  { ring: '#6cf6e5', lamp: '#a4faf0' },
-  { ring: '#ff9bc1', lamp: '#ffd0e3' },
-  { ring: '#f4d27a', lamp: '#fff7d6' },
-  { ring: '#e23a4a', lamp: '#ff9978' },
-  { ring: '#c8983f', lamp: '#f4d27a' },
-  { ring: '#5b3a86', lamp: '#9b6cff' },
-];
 
 function shotRings(a: ShotArgs): void {
   a.ctx.fillStyle = '#02010a';
@@ -219,6 +219,9 @@ function shotRings(a: ShotArgs): void {
       a.ctx.fillRect(lx - 1.5, ly - 1.5, 3, 3);
     }
   }
+
+  // Faint god rays from the cosmic centre as rings form
+  godRays(a, cx, cy, 8, a.height * 0.45, '#ffe6a3', 0.06 * dim, 8);
 
   colorGrade(a, '#1f1142', 0.10);
   vignette(a, 0.5);
@@ -283,6 +286,10 @@ function shotWalk(a: ShotArgs): void {
     const flick = 0.8 + Math.sin(a.total * 3 + i) * 0.2;
     if (lit > 0) bloomPoint(a, x, y - 2, 24, '#f4d27a', lit * flick * 0.6);
     drawDistantLamp(a.ctx, x, y, lit, flick);
+    // Embers rise from each lamp as it extinguishes
+    if (lit < 0.5 && lit > 0) {
+      emberParticles(a, 3, x, y, 12, 2 + i);
+    }
   }
 
   // Foreground left silhouette — broken column. Parallax: doesn't move with the
@@ -382,6 +389,13 @@ function shotTitle(a: ShotArgs): void {
     a.ctx.fill();
   }
 
+  // Faint god rays from each lamp through the title
+  for (let i = 0; i < 7; i++) {
+    const lx = cx + (i - 3) * spacing;
+    const alpha = clamp01(p * 1.5 - i * 0.05) * 0.85;
+    if (alpha > 0) godRays(a, lx, cy, 6, a.height * 0.4, '#ffe6a3', alpha * 0.06, 4);
+  }
+
   // Title — gold serif, with an underline gilt bar
   cinemaText(a, 'ABYSS OF THE', cx, titleY, 34, titleAlpha);
   cinemaText(a, 'SEVEN LAMPS', cx, titleY + 40, 34, titleAlpha);
@@ -427,6 +441,7 @@ export const TABULA_CINEMATIC: Shot[] = [
     render: shotFracture,
     subtitle: 'That which is below is like that which is above.',
     source: 'Tabula Smaragdina · Newton',
+    transition: { type: 'dipToBlack', duration: 300 },
   },
   {
     duration: 5.4,

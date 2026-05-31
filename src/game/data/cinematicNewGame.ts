@@ -7,19 +7,19 @@
 
 import { Shot, ShotArgs } from '../../components/CinematicShort';
 import {
-  drawInitiateProfile, drawInitiateFace, drawInitiateHeroic,
+  drawInitiateProfile, drawInitiateHeroic, drawInitiateLookingUp,
   drawHandsDagger, drawInitiateFalling, drawDistantLamp,
-  drawStoneArch,
+  drawStoneArch, drawOgdoadGlyph,
 } from '../rendering/cinematicSprites';
 import {
-  clamp01, easeIn, easeOut, easeInOut, withAlpha,
+  clamp01, easeOut,
   vignette, colorGrade, bloomPoint, starfield, motes,
   nebula, groundMist, cinemaText, applyShake,
-  StarLayer,
 } from '../rendering/cinemaHelpers';
+import { STAR_PRESETS } from '../rendering/artBible';
 
-const FAR_STARS: StarLayer = { count: 110, speed: 1.5, parallaxY: 0.5, hue: '244, 210, 122', size: 1 };
-const MID_STARS: StarLayer = { count: 60, speed: 3, parallaxY: 1, hue: '255, 247, 214', size: 1.2 };
+const FAR_STARS = { ...STAR_PRESETS.far, count: 110, speed: 1.5, parallaxY: 0.5 };
+const MID_STARS = { ...STAR_PRESETS.mid, count: 60, speed: 3, parallaxY: 1, size: 1.2 };
 
 // ─── SHOT 1 — Wide. Initiate approaches the stone arch ─────────────
 
@@ -35,15 +35,7 @@ function shotApproach(a: ShotArgs): void {
   const ogX = a.width / 2;
   const ogY = a.height * 0.18;
   bloomPoint(a, ogX, ogY, 70, '#ffe6a3', 0.6);
-  a.ctx.save();
-  a.ctx.translate(ogX, ogY);
-  a.ctx.fillStyle = 'rgba(255, 247, 214, 0.85)';
-  a.ctx.fillRect(-1, -16, 2, 32);
-  a.ctx.fillRect(-16, -1, 32, 2);
-  a.ctx.rotate(Math.PI / 4);
-  a.ctx.fillRect(-1, -12, 2, 24);
-  a.ctx.fillRect(-12, -1, 24, 2);
-  a.ctx.restore();
+  drawOgdoadGlyph(a.ctx, ogX, ogY, 1, 0.85, 0);
 
   // Ground far in the distance — flat, then receding
   const horizonY = a.height * 0.62;
@@ -52,8 +44,8 @@ function shotApproach(a: ShotArgs): void {
   groundMist(a, horizonY, 100);
 
   // The Stone Arch — centered, large, the destination
-  const archScale = a.height * 0.5;
-  drawStoneArch(a.ctx, a.width / 2, horizonY + 4, archScale * 0.6, archScale, '#3b265c', '#1a0f2c');
+  const archScale = a.height * 0.018;
+  drawStoneArch(a.ctx, a.width / 2, horizonY + 4, archScale, 'purple');
 
   // Cracked-stone steps leading up to it
   for (let i = 0; i < 3; i++) {
@@ -137,13 +129,7 @@ function shotLookUp(a: ShotArgs): void {
     if (ember > 0.05) {
       bloomPoint(a, x, cy, 16, '#5b3a86', ember * flick * 0.6);
     }
-    // Bracket — visible as dark silhouette
-    a.ctx.fillStyle = '#1a0f2c';
-    a.ctx.fillRect(x - 1, cy + 2, 2, 8);
-    a.ctx.fillRect(x - 4, cy + 9, 8, 2);
-    // Faint cold smoke wisp
-    a.ctx.fillStyle = `rgba(91, 58, 134, ${0.2 * (1 - p)})`;
-    a.ctx.fillRect(x - 1, cy - 6 - i * 0.5, 2, 6 - p * 4);
+    drawDistantLamp(a.ctx, x - 5, cy - 2, ember, flick);
   }
 
   // Stone columns flanking — silhouetted, very tall (we are looking up)
@@ -159,12 +145,12 @@ function shotLookUp(a: ShotArgs): void {
   a.ctx.fillRect(24, 0, 44, a.height);
   a.ctx.fillRect(a.width - 66, 0, 44, a.height);
 
-  // The Initiate at the bottom of frame, looking up — heroic sprite (full body)
+  // The Initiate at the bottom of frame, looking up — face/upper-body sprite
   const baseY = a.height * 0.98;
   const scale = Math.min(7, Math.max(4, a.height / 110));
-  const ix = a.width / 2 - 11 * scale;
-  const iy = baseY - 28 * scale;
-  drawInitiateHeroic(a.ctx, ix, iy, scale, 0.4 + p * 0.5);
+  const ix = a.width / 2 - 7 * scale;
+  const iy = baseY - 22 * scale;
+  drawInitiateLookingUp(a.ctx, ix, iy, scale, 0.4 + p * 0.5, 'brazier');
 
   // Cone of light radiating UP from below (campfire / pit) onto the Initiate
   const coneG = a.ctx.createRadialGradient(a.width / 2, baseY, 12, a.width / 2, baseY, a.height * 0.4);
@@ -225,7 +211,7 @@ function shotStep(a: ShotArgs): void {
   const scale = Math.min(6, Math.max(4, a.height / 130));
   const ix = cx - 11 * scale + stepOff * 8;
   const iy = baseY - 28 * scale - stepOff * 6;
-  drawInitiateHeroic(a.ctx, ix, iy, scale, 0.6 + p * 0.4);
+  drawInitiateHeroic(a.ctx, ix, iy, scale, 0.6 + p * 0.4, 'abyss');
 
   // Cold uplight from the abyss below the dais
   if (irisP > 0.1) {
@@ -295,7 +281,7 @@ function shotFall(a: ShotArgs): void {
   // Slight drift over time
   const driftX = Math.sin(a.total * 1.2) * 12;
   const spin = a.total * 0.5;
-  drawInitiateFalling(a.ctx, cx + driftX - 7 * scale, cy - 11 * scale, scale, spin);
+  drawInitiateFalling(a.ctx, cx + driftX - 7 * scale, cy - 11 * scale, scale, spin, 'abyss');
 
   // Faint trail of falling cloak motes
   for (let i = 0; i < 8; i++) {

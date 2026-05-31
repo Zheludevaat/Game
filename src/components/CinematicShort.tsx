@@ -13,6 +13,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGamepadButtons } from './useGamepadButtons';
 import { audio, CinematicMood } from '../game/systems/AudioSystem';
+import { renderTransition, TransitionDef } from '../game/rendering/cinemaTransitions';
+
+function clamp01(v: number): number { return v < 0 ? 0 : v > 1 ? 1 : v; }
 
 export interface ShotArgs {
   ctx: CanvasRenderingContext2D;
@@ -42,6 +45,8 @@ export interface Shot {
   holdSubtitle?: boolean;
   /** Small attribution under the subtitle, optional. */
   source?: string;
+  /** Optional out-transition. If omitted, uses default cross-fade. */
+  transition?: TransitionDef;
 }
 
 export interface CinematicShortProps {
@@ -157,10 +162,18 @@ export function CinematicShort(p: CinematicShortProps): JSX.Element {
       } catch { /* don't crash the film */ }
       ctx.restore();
 
-      // Black overlay for cross-cuts
+      // Black overlay for cross-cuts (or custom transition)
       if (overlay > 0) {
-        ctx.fillStyle = `rgba(0,0,0,${overlay})`;
-        ctx.fillRect(0, 0, W, H);
+        if (shot?.transition) {
+          const transProgress = 1 - outAlpha;
+          const dur = shot.transition.duration ?? 400;
+          const durSec = dur / 1000;
+          const shotOverlay = 1 - Math.min(fadeIn, Math.min(1, Math.max(0, (dur - tShot) / durSec)));
+          renderTransition(ctx, W, H, letterbox, shot.transition, clamp01(shotOverlay));
+        } else {
+          ctx.fillStyle = `rgba(0,0,0,${overlay})`;
+          ctx.fillRect(0, 0, W, H);
+        }
       }
 
       raf = requestAnimationFrame(tick);

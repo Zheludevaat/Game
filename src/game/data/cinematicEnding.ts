@@ -6,31 +6,17 @@
 // seven planetary rings and the apotheosis into the Eighth Nature.
 
 import { Shot, ShotArgs } from '../../components/CinematicShort';
-import { drawInitiateHeroic } from '../rendering/cinematicSprites';
+import { drawInitiateHeroic, drawOgdoadGlyph } from '../rendering/cinematicSprites';
 import {
   clamp01, easeIn, easeOut, easeInOut, withAlpha,
   vignette, colorGrade, bloomPoint, starfield, motes,
-  nebula, cinemaText, applyShake, StarLayer,
+  nebula, cinemaText, applyShake,
+  chromaticAberration, filmGrain, strobe, godRays,
 } from '../rendering/cinemaHelpers';
-import { SPHERE_COLOURS } from './cinematicTabula';
+import { SPHERE_COLOURS, STAR_PRESETS } from '../rendering/artBible';
 
-const FAR_STARS: StarLayer = { count: 130, speed: 1.5, parallaxY: 0.5, hue: '244, 210, 122', size: 1 };
-const MID_STARS: StarLayer = { count: 70, speed: 4, parallaxY: 1, hue: '255, 247, 214', size: 1.2 };
-
-function drawOgdoadGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, scale: number, alpha: number, rotate = 0): void {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(rotate);
-  ctx.fillStyle = `rgba(255, 247, 214, ${alpha})`;
-  // Cardinal rays
-  ctx.fillRect(-1, -16 * scale, 2, 32 * scale);
-  ctx.fillRect(-16 * scale, -1, 32 * scale, 2);
-  // Diagonal rays
-  ctx.rotate(Math.PI / 4);
-  ctx.fillRect(-1, -12 * scale, 2, 24 * scale);
-  ctx.fillRect(-12 * scale, -1, 24 * scale, 2);
-  ctx.restore();
-}
+const FAR_STARS = { ...STAR_PRESETS.far, count: 130, speed: 1.5, parallaxY: 0.5 };
+const MID_STARS = { ...STAR_PRESETS.mid, count: 70, speed: 4, parallaxY: 1, size: 1.2 };
 
 // ─── Shot 1 — The seventh lamp lights ────────────────────────────────
 // We linger on the moment after Saturn falls. Seven lamps ghost above
@@ -169,6 +155,8 @@ function shotRingCollapse(a: ShotArgs): void {
     }
     // Camera shake increases with rotation speed
     if (rotP > 0.3) applyShake(a, { magnitude: 1 + rotP * 4, freq: 32 });
+    // Chromatic aberration during peak rotation
+    if (rotP > 0.6) chromaticAberration(a, (rotP - 0.6) * 4);
   }
 
   // Phase 3: Explosion outward
@@ -196,6 +184,10 @@ function shotRingCollapse(a: ShotArgs): void {
       a.ctx.fillRect(0, 0, a.width, a.height);
     }
     applyShake(a, { magnitude: 3 * (1 - explP), freq: 36 });
+    // Strobe at the very start of explosion
+    if (explP < 0.15) strobe(a, 0.5 * (1 - explP / 0.15));
+    // Film grain during the explosion for texture
+    filmGrain(a, 0.15 * (1 - explP), 3);
   }
 
   // Phase 4: One bright pinprick at centre (the Eighth approaches)
@@ -290,6 +282,9 @@ function shotHymn(a: ShotArgs): void {
   // Eight-pointed star pulsing in the centre
   const pulse = 0.85 + 0.15 * Math.sin(a.total * 1.4);
   drawOgdoadGlyph(a.ctx, cx, cy, 6 + lift * 2, pulse, a.total * 0.04);
+
+  // God rays radiating from the Ogdoad glyph
+  if (lift > 0.2) godRays(a, cx, cy, 10, a.height * 0.8, '#fff7d6', lift * 0.1, 12);
 
   // Initiate silhouette in front of star — outline only
   const scale = Math.min(8, Math.max(5, a.height / 70));

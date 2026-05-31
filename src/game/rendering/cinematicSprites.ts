@@ -10,8 +10,36 @@
 
 import { drawSprite, PixelMatrix } from './PixelArt';
 
+// ─── Shared colour utilities ──────────────────────────────────────────
+
+export type LightingMood = 'cosmic' | 'brazier' | 'abyss';
+
+const LIGHTING_TARGETS: Record<LightingMood, [number, number, number]> = {
+  cosmic: [244, 210, 122],
+  brazier: [244, 130, 60],
+  abyss:  [108, 246, 229],
+};
+
+function parseHexRgb(hex: string): [number, number, number] | null {
+  if (!hex || hex[0] !== '#' || hex.length !== 7) return null;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+  return [r, g, b];
+}
+
+function mixHexToward(hex: string, target: [number, number, number], t: number): string {
+  const rgb = parseHexRgb(hex);
+  if (!rgb) return hex;
+  const r = Math.round(rgb[0] * (1 - t) + target[0] * t);
+  const g = Math.round(rgb[1] * (1 - t) + target[1] * t);
+  const b = Math.round(rgb[2] * (1 - t) + target[2] * t);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
 // ─── Initiate, side-profile, walking ──────────────────────────────────
-// 14 × 22. The hood projects forward (right), the cloak trails left.
+// 16 × 26. The hood projects forward (left), the cloak trails right.
 // Two frames for a walking cycle.
 
 const initiateProfilePalette: Record<string, string | null> = {
@@ -97,17 +125,97 @@ const initiateProfileFrameB: PixelMatrix = [
   '................',
 ];
 
+const initiateProfileFrameC: PixelMatrix = [
+  '.....ooo........',
+  '....oHhho.......',
+  '...oHhhhho......',
+  '..oHhhhhhHo.....',
+  '.oHhfffhhhHo....',
+  '.oHhefffhhho....',
+  '.oHhfffhhhho....',
+  '.oHhhhhhhhho....',
+  '..ohhhrrrhho....',
+  '.oorrrrrCCCo....',
+  '.orrrrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '.orrgrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '..orrrrrCCCo....',
+  '..orrrrrCCCo....',
+  '..orrrrrCCco....',
+  '..orrrrrcco.....',
+  '...orrrrCCco....',
+  '...orrrcco......',
+  '...orr..........',
+  '...orr..........',
+  '...obb..........',
+  '...oo...........',
+  '................',
+  '................',
+];
+
+const initiateProfileFrameD: PixelMatrix = [
+  '.....ooo........',
+  '....oHhho.......',
+  '...oHhhhho......',
+  '..oHhhhhhHo.....',
+  '.oHhfffhhhHo....',
+  '.oHhefffhhho....',
+  '.oHhfffhhhho....',
+  '.oHhhhhhhhho....',
+  '..ohhhrrrhho....',
+  '..orrrrrCCCo....',
+  '.orrrrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '.orrgrrCCCCCo...',
+  '.orrrrrCCCCCo...',
+  '..orrrrrCCCo....',
+  '..orrrrCCCCo....',
+  '..orrrrCCCCo....',
+  '..orrrrrCCCco....',
+  '..orrrrCCCco.....',
+  '...orrrrCco......',
+  '...orrrr.........',
+  '....orr..........',
+  '....obb..........',
+  '....oo...........',
+  '................',
+  '................',
+];
+
+const PROFILE_FRAMES = [initiateProfileFrameA, initiateProfileFrameB, initiateProfileFrameC, initiateProfileFrameD];
+
 export function drawInitiateProfile(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
   scale: number,
   walkPhase: number,
   facingRight = false,
+  lighting: LightingMood = 'cosmic',
 ): void {
-  const frame = Math.floor(walkPhase) % 2 === 0 ? initiateProfileFrameA : initiateProfileFrameB;
-  // Vertical bob with walking
-  const bob = Math.floor(Math.abs(Math.sin(walkPhase * Math.PI)) * 1);
-  drawSprite(ctx, frame, initiateProfilePalette, Math.floor(x), Math.floor(y - bob * scale), scale, facingRight);
+  const frame = PROFILE_FRAMES[Math.floor(walkPhase) % 4];
+  const raw = Math.abs(Math.sin(walkPhase * Math.PI * 0.5));
+  const bob = Math.floor(raw * 1.5);
+  const pal = modulateProfile(lighting);
+  drawSprite(ctx, frame, pal, Math.floor(x), Math.floor(y - bob * scale), scale, facingRight);
+}
+
+function modulateProfile(lighting: LightingMood): Record<string, string | null> {
+  if (lighting === 'cosmic') return initiateProfilePalette;
+  const target = LIGHTING_TARGETS[lighting];
+  const pal = { ...initiateProfilePalette };
+  if (lighting === 'brazier') {
+    pal.H = mixHexToward(pal.H!, target, 0.30);
+    pal.C = mixHexToward(pal.C!, target, 0.30);
+    pal.R = mixHexToward(pal.R!, target, 0.30);
+    pal.g = mixHexToward(pal.g!, target, 0.25);
+  } else {
+    pal.H = mixHexToward(pal.H!, target, 0.30);
+    pal.C = mixHexToward(pal.C!, target, 0.20);
+    pal.R = mixHexToward(pal.R!, target, 0.28);
+    pal.g = mixHexToward(pal.g!, target, 0.30);
+  }
+  return pal;
 }
 
 // ─── Initiate face — hero close-up ────────────────────────────────────
@@ -140,9 +248,9 @@ const initiateFace: PixelMatrix = [
   '...oHhhhhssfffffsshhhhho....',
   '...oHhhssffffffffssshhho....',
   '..oHhhssffffffffffssshhho...',
-  '..oHhhsffffeefefffffshhho...',
-  '..oHhhsfffeEefffEefffshho...',
-  '..oHhhsffffeefefffffshhho...',
+  '..oHhhsfffeefffeefffshho....',
+  '..oHhhsffeEefffeEeeffshho...',
+  '..oHhhsfffeefffeefffshho....',
   '..oHhhssfffffcfffffsshhho...',
   '..oHhhhsfffffffffffshhhho...',
   '..oHhhhhsffffffffshhhhhho...',
@@ -166,6 +274,7 @@ export function drawInitiateFace(
   x: number, y: number,
   scale: number,
   eyeGlow: number, // 0..1
+  lighting: LightingMood = 'cosmic',
 ): void {
   const pal = { ...initiateFacePalette };
   // Modulate eye brightness
@@ -175,59 +284,139 @@ export function drawInitiateFace(
   const b = Math.round(229 + (240 - 229) * t);
   pal.e = `rgb(${e}, ${g}, ${b})`;
   pal.E = `rgba(255, 255, 255, ${0.6 + 0.4 * t})`;
+  // Mood-based palette shift
+  if (lighting !== 'cosmic') {
+    const target = LIGHTING_TARGETS[lighting];
+    if (lighting === 'brazier') {
+      pal.H = mixHexToward(pal.H!, target, 0.30);
+      pal.c = mixHexToward(pal.c!, target, 0.20);
+      pal.R = mixHexToward(pal.R!, target, 0.20);
+      pal.g = mixHexToward(pal.g!, target, 0.25);
+    } else {
+      pal.H = mixHexToward(pal.H!, target, 0.30);
+      pal.c = mixHexToward(pal.c!, target, 0.20);
+      pal.R = mixHexToward(pal.R!, target, 0.28);
+      pal.g = mixHexToward(pal.g!, target, 0.30);
+    }
+  }
   drawSprite(ctx, initiateFace, pal, Math.floor(x), Math.floor(y), scale, false);
 }
 
 // ─── Stone arch — gate seen in elevation ──────────────────────────────
-// Drawn as a tall arched doorway, viewed straight on, suitable for a
-// "the Initiate walks through the threshold" silhouette shot.
+// 28 × 36 pixel matrix. Pointed (Gothic) arch viewed straight on, with
+// a dark void interior, stone columns, and a gold keystone at the apex.
+
+const STONE_ARCH_W = 28;
+const STONE_ARCH_H = 36;
+
+const stoneArchMatrix: PixelMatrix = [
+  '............oGoo............',
+  '.........oooGGGooo.........',
+  '.......ooMMMgggMMMoo......',
+  '......oMMMMMooMMMMMo......',
+  '.....oMMMMovvvvMMMMo.....',
+  '....oMMMMovvvvvvvMMMo....',
+  '...oMMMMovvvvvvvvvMMMo...',
+  '..oMMMMovvvvvvvvvvvMMMo..',
+  '..oMMM movvvvvvvvvvMMMo..',
+  '.oMMM  ovvvvvvvvvvvvMMMo.',
+  '.oMMM  ovvvvvvvvvvvvMMMo.',
+  'oMMM    ovvvvvvvvvvvvMMMo',
+  'oMMM    ovvvvvvvvvvvvMMMo',
+  'oMMM    ovvvvvvvvvvvvMMMo',
+  'oMMM    ovvvvvvvvvvvvMMMo',
+  'oMMM    ovvvvvvvvvvvvMMMo',
+  '.oMMM   ovvvvvvvvvvvvMMMo.',
+  '.oMMM   ovvvvvvvvvvvvMMMo.',
+  '..oMMM  ovvvvvvvvvvMMMo..',
+  '..oMMMM ovvvvvvvvvvMMMo..',
+  '...oMMMMovvvvvvvvvMMMo...',
+  '....oMMMMovvvvvvvMMMo....',
+  '.....oMMMMovvvvvMMMMo.....',
+  '......oMMMMooooMMMMo......',
+  '.......oMMMMMMMMMMo.......',
+  '........oMMMMMMMMo........',
+  '.........oMMMMMMo.........',
+  '..........oooooo..........',
+  '.......oooooooooooo.......',
+  '......osssssssssso......',
+  '.....osssssssssssso.....',
+  '....osss..sssss..ssso....',
+  '...osss....sss....ssso...',
+  '..osss.....sss.....ssso..',
+  '.osss......sss......ssso.',
+  '.oss.......ooo.......sso.',
+];
+
+const stoneArchPurple: Record<string, string | null> = {
+  '.': null,
+  o: '#04020a',   // outline
+  s: '#1a0f2c',   // shadow
+  S: '#2a1656',   // shadow mid
+  m: '#3b265c',   // mid stone
+  M: '#5b3a86',   // highlight stone
+  g: '#c8983f',   // gold keystone
+  G: '#f4d27a',   // gold keystone glint
+  v: '#000000',   // void (arch interior)
+};
+
+const stoneArchGold: Record<string, string | null> = {
+  '.': null,
+  o: '#04020a',
+  s: '#1a0f2c',
+  S: '#3a2410',
+  m: '#7a5a1a',
+  M: '#c8983f',
+  g: '#f4d27a',
+  G: '#ffe6a3',
+  v: '#000000',
+};
 
 export function drawStoneArch(
   ctx: CanvasRenderingContext2D,
-  cx: number, cy: number,   // centred on cx, cy
-  width: number, height: number,
-  colour: string = '#3b265c',
-  shadow: string = '#1a0f2c',
+  cx: number, cy: number,
+  scale: number,
+  variant: 'purple' | 'gold' = 'purple',
 ): void {
-  const halfW = width / 2;
-  // Columns (left + right)
-  const colW = width * 0.13;
-  ctx.fillStyle = shadow;
-  ctx.fillRect(cx - halfW, cy - height / 2, colW, height);
-  ctx.fillRect(cx + halfW - colW, cy - height / 2, colW, height);
-  ctx.fillStyle = colour;
-  ctx.fillRect(cx - halfW + 2, cy - height / 2 + 2, colW - 4, height - 4);
-  ctx.fillRect(cx + halfW - colW + 2, cy - height / 2 + 2, colW - 4, height - 4);
-  // Base
-  ctx.fillStyle = shadow;
-  ctx.fillRect(cx - halfW - 4, cy + height / 2 - 8, width + 8, 10);
-  // Lintel — flat block above the arch span
-  ctx.fillRect(cx - halfW, cy - height / 2, width, height * 0.08);
-  // Arched opening (pointed)
-  ctx.save();
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  const archTop = cy - height / 2 + height * 0.18;
-  const archBot = cy + height / 2 - 8;
-  const innerL = cx - halfW + colW;
-  const innerR = cx + halfW - colW;
-  const peakY = archTop;
-  const peakX = cx;
-  ctx.moveTo(innerL, archBot);
-  ctx.lineTo(innerL, peakY + (innerR - innerL) * 0.1);
-  ctx.quadraticCurveTo(peakX, peakY - height * 0.06, innerR, peakY + (innerR - innerL) * 0.1);
-  ctx.lineTo(innerR, archBot);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-  // Keystone glint
-  ctx.fillStyle = '#f4d27a';
-  ctx.fillRect(cx - 2, archTop - 4, 4, 4);
+  const pal = variant === 'gold' ? stoneArchGold : stoneArchPurple;
+  drawSprite(
+    ctx, stoneArchMatrix, pal,
+    Math.floor(cx - (STONE_ARCH_W * scale) / 2),
+    Math.floor(cy - (STONE_ARCH_H * scale) / 2),
+    scale, false,
+  );
 }
 
 // ─── Distant lamp on bracket (elevation view) ─────────────────────────
 // Used as background distant lights — small lamps hanging at the
-// horizon line, viewed from in front.
+// horizon line, viewed from in front. The lamp body is a pixel matrix;
+// the glow halo remains procedural for per-call dynamic modulation.
+
+const distantLampMatrix: PixelMatrix = [
+  '..........',
+  '....ww....',
+  '...wFFw...',
+  '...fFFf...',
+  '...ffff...',
+  '...ffff...',
+  '...bbbb...',
+  '...bbbb...',
+  '..bbbbbb..',
+  '..bBBBBb..',
+  '..bbbbbb..',
+  '...bbb....',
+  '..........',
+  '..........',
+];
+
+const distantLampPalette: Record<string, string | null> = {
+  '.': null,
+  b: '#1a0f2c',   // bracket dark
+  B: '#3b265c',   // bracket highlight
+  f: '#c8983f',   // flame mid
+  F: '#f4d27a',   // flame bright
+  w: '#ffe6a3',   // flame core
+};
 
 export function drawDistantLamp(
   ctx: CanvasRenderingContext2D,
@@ -236,23 +425,20 @@ export function drawDistantLamp(
   flick: number,
 ): void {
   if (alpha <= 0) return;
-  // Halo
+  // Dynamic glow halo (procedural — varies per call)
   const halo = ctx.createRadialGradient(x, y, 1, x, y, 14);
   halo.addColorStop(0, `rgba(255, 230, 163, ${0.7 * alpha * flick})`);
   halo.addColorStop(1, 'rgba(244, 210, 122, 0)');
   ctx.fillStyle = halo;
   ctx.beginPath(); ctx.arc(x, y, 14, 0, Math.PI * 2); ctx.fill();
-  // Bracket
-  ctx.fillStyle = `rgba(40, 22, 70, ${alpha})`;
-  ctx.fillRect(x - 1, y + 2, 2, 5);
-  ctx.fillRect(x - 3, y + 6, 6, 1);
-  // Flame
-  ctx.fillStyle = `rgba(244, 210, 122, ${0.9 * alpha * flick})`;
-  ctx.beginPath();
-  ctx.ellipse(x, y - 1, 2.2, 3.5 + Math.sin(flick * 8) * 0.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = `rgba(255, 247, 214, ${alpha})`;
-  ctx.fillRect(x, y - 2, 1, 1);
+
+  // Pixel lamp body with flame dimmed by alpha/flick
+  const pal = { ...distantLampPalette };
+  const flameAlpha = Math.min(1, alpha * (0.8 + 0.2 * flick));
+  pal.w = `rgba(255, 247, 214, ${flameAlpha})`;
+  pal.F = `rgba(244, 210, 122, ${flameAlpha * 0.9})`;
+  pal.f = `rgba(200, 150, 50, ${flameAlpha * 0.8})`;
+  drawSprite(ctx, distantLampMatrix, pal, Math.floor(x - 5), Math.floor(y - 7), 1, false);
 }
 
 // ─── Initiate, worm's-eye / heroic from below ─────────────────────────
@@ -272,6 +458,7 @@ const initiateHeroicPalette: Record<string, string | null> = {
   C: '#2a1656',
   r: '#3d2273',
   R: '#5b3a86',
+  d: '#4b2f76',
   g: '#f4d27a',
   G: '#ffe6a3',
   b: '#1a0824',
@@ -291,15 +478,15 @@ const initiateHeroicFromBelow: PixelMatrix = [
   '...oHhhhffffhhho......',
   '....ohhhhhhhhho.......',
   '.....oiiiiiiio........',
-  '....orrRRRRRrro.......',
-  '...orrRRRRRRRrro......',
+  '....odrRRRRdRro.......',
+  '...oRdRRRRRRRdro......',
   '..orrRRgGGgRRrrro.....',
   '..orrRRRRRRRRrrro.....',
   '.orrRRRRRRRRRRrrro....',
   '.orRRRRRRRRRRRRRro....',
   '.orRRRRRRRRRRRRRro....',
-  '..orrRRRRRRRRrrro.....',
-  '..orrRRRRRRRRrrro.....',
+  '..ordRRRRRRRdRrro.....',
+  '..ordRRRRRRRdRrro.....',
   '...orrRRrRRrRrro......',
   '....orrr...rrro.......',
   '....orr.....rro.......',
@@ -313,10 +500,29 @@ export function drawInitiateHeroic(
   x: number, y: number,
   scale: number,
   eyeGlow: number,
+  lighting: LightingMood = 'cosmic',
 ): void {
   const pal = { ...initiateHeroicPalette };
   const t = Math.max(0, Math.min(1, eyeGlow));
   pal.e = `rgb(${Math.round(108 + 56 * t)}, 246, ${Math.round(229 + 11 * t)})`;
+  if (lighting !== 'cosmic') {
+    const target = LIGHTING_TARGETS[lighting];
+    if (lighting === 'brazier') {
+      pal.H = mixHexToward(pal.H!, target, 0.35);
+      pal.i = mixHexToward(pal.i!, target, 0.30);
+      pal.R = mixHexToward(pal.R!, target, 0.25);
+      pal.d = mixHexToward(pal.d!, target, 0.30);
+      pal.g = mixHexToward(pal.g!, target, 0.30);
+      pal.G = mixHexToward(pal.G!, target, 0.25);
+    } else {
+      pal.H = mixHexToward(pal.H!, target, 0.35);
+      pal.i = mixHexToward(pal.i!, target, 0.25);
+      pal.R = mixHexToward(pal.R!, target, 0.30);
+      pal.d = mixHexToward(pal.d!, target, 0.25);
+      pal.g = mixHexToward(pal.g!, target, 0.35);
+      pal.G = mixHexToward(pal.G!, target, 0.25);
+    }
+  }
   drawSprite(ctx, initiateHeroicFromBelow, pal, Math.floor(x), Math.floor(y), scale, false);
 }
 
@@ -374,7 +580,10 @@ const initiateFallingPalette: Record<string, string | null> = {
   g: '#f4d27a',
 };
 
-const initiateFalling: PixelMatrix = [
+// Three cape frames for flutter during the tumble. Hood (rows 0-4)
+// identical in all frames; cape (rows 5-19) shifts left/centre/right.
+
+const initiateFallingFrameA: PixelMatrix = [
   '.....oooo.....',
   '....oHHHHo....',
   '...oHhhhhHo...',
@@ -399,15 +608,195 @@ const initiateFalling: PixelMatrix = [
   '..............',
 ];
 
+const initiateFallingFrameB: PixelMatrix = [
+  '.....oooo.....',
+  '....oHHHHo....',
+  '...oHhhhhHo...',
+  '..oHhhhhhhHo..',
+  '..ohhhhhhhho..',
+  '..occccccco...',
+  '.occcccccco...',
+  'occcCCCCCcco..',
+  'occcccCCCCcco.',
+  'occcccCCCCcco.',
+  'occccgCggCcco.',
+  'occcccCCCCcco.',
+  '.occcCCCCccco.',
+  '.occcccccccco.',
+  '..occcccccco..',
+  '..occcccccco..',
+  '...occccccc...',
+  '....occcco....',
+  '....occcco....',
+  '.....occo.....',
+  '..............',
+  '..............',
+];
+
+const initiateFallingFrameC: PixelMatrix = [
+  '.....oooo.....',
+  '....oHHHHo....',
+  '...oHhhhhHo...',
+  '..oHhhhhhhHo..',
+  '..ohhhhhhhho..',
+  '...occccccco..',
+  '...occcccccco.',
+  '..occCCCCCCcco',
+  '.ocCCCCCCcccc.',
+  '.ocCCCCCCcccc.',
+  '.ocCggCgccccoc',
+  '.ocCCCCCCcccc.',
+  '.occcCCCCccco.',
+  '.occcccccccco.',
+  '..occcccccco..',
+  '..occcccccco..',
+  '...occccccc...',
+  '....occcco....',
+  '....occcco....',
+  '.....occo.....',
+  '..............',
+  '..............',
+];
+
+const FALLING_FRAMES = [initiateFallingFrameA, initiateFallingFrameB, initiateFallingFrameC];
+
+function modulateFalling(lighting: LightingMood): Record<string, string | null> {
+  if (lighting === 'cosmic') return initiateFallingPalette;
+  const target = LIGHTING_TARGETS[lighting];
+  const pal = { ...initiateFallingPalette };
+  if (lighting === 'brazier') {
+    pal.H = mixHexToward(pal.H!, target, 0.25);
+    pal.C = mixHexToward(pal.C!, target, 0.25);
+    pal.c = mixHexToward(pal.c!, target, 0.18);
+    pal.g = mixHexToward(pal.g!, target, 0.22);
+  } else {
+    pal.H = mixHexToward(pal.H!, target, 0.28);
+    pal.C = mixHexToward(pal.C!, target, 0.28);
+    pal.c = mixHexToward(pal.c!, target, 0.22);
+    pal.g = mixHexToward(pal.g!, target, 0.28);
+  }
+  return pal;
+}
+
 export function drawInitiateFalling(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
   scale: number,
   spin: number,
+  lighting: LightingMood = 'cosmic',
 ): void {
   ctx.save();
   ctx.translate(Math.floor(x + 7 * scale), Math.floor(y + 11 * scale));
   ctx.rotate(spin);
-  drawSprite(ctx, initiateFalling, initiateFallingPalette, -7 * scale, -11 * scale, scale, false);
+  const frameIndex = Math.floor(Math.abs(spin) / (Math.PI * 2 / 3)) % 3;
+  const frame = FALLING_FRAMES[frameIndex];
+  const pal = modulateFalling(lighting);
+  drawSprite(ctx, frame, pal, Math.floor(-7 * scale), Math.floor(-11 * scale), scale, false);
   ctx.restore();
+}
+
+// ─── Ogdoad Glyph — eight-pointed star ──────────────────────────────
+// Simple eight-pointed star glyph. No halo — callers add bloomPoint
+// separately for the atmospheric glow.
+
+export function drawOgdoadGlyph(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  scale: number,
+  alpha: number,
+  rotation = 0,
+): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rotation);
+  ctx.fillStyle = `rgba(255, 247, 214, ${alpha})`;
+  // Cardinal rays (NSEW)
+  ctx.fillRect(-1, -16 * scale, 2, 32 * scale);
+  ctx.fillRect(-16 * scale, -1, 32 * scale, 2);
+  // Diagonal rays
+  ctx.rotate(Math.PI / 4);
+  ctx.fillRect(-1, -12 * scale, 2, 24 * scale);
+  ctx.fillRect(-12 * scale, -1, 24 * scale, 2);
+  ctx.restore();
+}
+
+// ─── Initiate Looking Up — silhouette from below ────────────────────
+// 15 × 22 pixel matrix. Low-angle view: the Initiate's hood falls
+// back slightly, face visible as a rim-lit silhouette looking upward.
+
+const initiateLookingUp: PixelMatrix = [
+  '.....oooo......',
+  '....occcccoo...',
+  '...oclllllcco..',
+  '..ocllvvvllcco.',
+  '.ocllvvvvvllco.',
+  '.ocllvvvvvllco.',
+  '..ocllvvvllco..',
+  '...ocllllcco...',
+  '....oocccoo....',
+  '.....ooooo.....',
+  '.....ooooo.....',
+  '.....ooooo.....',
+  '....oocccoo....',
+  '....oclcclo....',
+  '....oocgcoo....',
+  '....oclcclo....',
+  '....occccco....',
+  '....oocccoo....',
+  '....ooocooo....',
+  '....ooocooo....',
+  '.....ooooo.....',
+  '.....ooooo.....',
+];
+
+const initiateLookingUpPalette: Record<string, string | null> = {
+  '.': null,
+  o: '#04020a', // outline
+  c: '#1a0f2c', // cloak mid — hood draping
+  l: '#5b3a86', // rim-light — distant lamp catches the edge
+  v: '#7a559e', // face highlight — bridge of nose, cheekbone rim
+  g: '#f4d27a', // gold pendant glint
+};
+
+export function drawInitiateLookingUp(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  scale: number,
+  eyeGlow: number,
+  lighting: LightingMood = 'cosmic',
+): void {
+  ctx.save();
+  const pal = modulateLookingUp(lighting);
+  drawSprite(ctx, initiateLookingUp, pal, Math.floor(x), Math.floor(y), scale, false);
+
+  // Eye glow — two teal pinpricks visible under the hood
+  if (eyeGlow > 0) {
+    const ex = x + 7 * scale;
+    const ey = y + 5 * scale;
+    const glow = ctx.createRadialGradient(ex, ey, 0, ex, ey, scale * 3);
+    glow.addColorStop(0, `rgba(108, 246, 229, ${0.9 * eyeGlow})`);
+    glow.addColorStop(1, 'rgba(108, 246, 229, 0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(ex - scale * 3, ey - scale * 3, scale * 6, scale * 6);
+    ctx.fillStyle = `rgba(108, 246, 229, ${eyeGlow})`;
+    ctx.fillRect(ex - 1, ey - 0.5, 2, 1);
+  }
+
+  ctx.restore();
+}
+
+function modulateLookingUp(lighting: LightingMood): Record<string, string | null> {
+  if (lighting === 'cosmic') return initiateLookingUpPalette;
+  const target = LIGHTING_TARGETS[lighting];
+  const pal = { ...initiateLookingUpPalette };
+  if (lighting === 'brazier') {
+    pal.l = mixHexToward(pal.l!, target, 0.30);
+    pal.v = mixHexToward(pal.v!, target, 0.25);
+    pal.g = mixHexToward(pal.g!, target, 0.25);
+  } else {
+    pal.l = mixHexToward(pal.l!, target, 0.35);
+    pal.v = mixHexToward(pal.v!, target, 0.30);
+    pal.g = mixHexToward(pal.g!, target, 0.25);
+  }
+  return pal;
 }
