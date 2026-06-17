@@ -23,11 +23,11 @@
 ---
 
 ## Constraints
-
 - **Read-only audit** — no source code modifications in this branch
-- **No GitHub MCP or tokens used** — all work via public repo access
-- **No push to remote** — commit is local-only until approved
-- **Do not touch `Zheludevaat/Game` remote** — this branch stays local
+- **No game runtime changes** — documentation and tooling only
+- **No secrets committed** — secret scan passed before push
+- **Review-only PR** — do not merge until Alexander explicitly approves
+- **GitHub browser UI avoided where possible** — PR creation/review handled through ChatGPT GitHub connector
 
 ---
 
